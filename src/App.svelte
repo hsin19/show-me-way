@@ -48,6 +48,26 @@ let showSettings = $state(false);
 let yamlInput = $state("");
 let validationError = $state<string | null>(null);
 
+// Scroll & Header Collapse States
+let isHeaderCollapsed = $state(false);
+let lastScrollTop = 0;
+
+function handleWindowScroll() {
+    const scrollTop = window.scrollY || document.documentElement.scrollTop;
+    if (scrollTop > lastScrollTop && scrollTop > 30) {
+        isHeaderCollapsed = true;
+    } else if (scrollTop < lastScrollTop) {
+        isHeaderCollapsed = false;
+    }
+    lastScrollTop = scrollTop;
+}
+
+$effect(() => {
+    if (activeTab) {
+        isHeaderCollapsed = false;
+    }
+});
+
 // Derived values for current active day (with date formatted for display)
 let activeDayData = $derived.by(() => {
     if (!tripData) return null;
@@ -83,6 +103,7 @@ async function loadTripData() {
 
             if (matchingDay) {
                 currentDay = matchingDay.day;
+                console.log(`[App] Automatically selected Day ${currentDay} matching today (${todayStr})`);
             } else {
                 // Default to Day 1 if before start, or last Day if after end
                 const today = new Date();
@@ -220,46 +241,67 @@ function triggerToast(msg: string) {
         isToastVisible = false;
     }, 2500);
 }
+
+// Select all text in the YAML editor
+function selectAllYaml() {
+    const textarea = document.getElementById("yaml-editor") as HTMLTextAreaElement | null;
+    if (textarea) {
+        textarea.focus();
+        textarea.select();
+        triggerToast("已全選編輯器內容");
+    }
+}
+
+// Clear all text in the YAML editor
+function clearYaml() {
+    yamlInput = "";
+    triggerToast("已清空編輯器內容");
+}
 </script>
 
-<div class="flex flex-col max-w-[480px] mx-auto min-h-screen bg-[#0b0c13] shadow-[0_0_50px_rgba(0,0,0,0.8)] relative pb-[calc(75px+var(--safe-bottom))] md:h-[850px] md:my-5 md:border-[6px] md:border-[#1c1e2d] md:rounded-[32px] md:overflow-hidden animate-fade-in">
+<svelte:window onscroll={handleWindowScroll} />
+
+<div class="flex flex-col min-h-screen bg-[#0b0c13] text-text-primary pb-[calc(80px+var(--safe-bottom))] animate-fade-in">
     <!-- App Header -->
-    <header class="sticky top-0 z-[100] bg-[#0d0e15]/85 backdrop-blur-xl border-b border-white/5 pt-[calc(15px+var(--safe-top))] pb-3 px-5">
-        <div class="flex justify-between items-center mb-3">
-            <div class="flex items-center gap-3">
-                <span class="text-3xl animate-pulse-flag">🧭</span>
-                <div>
-                    <h1 class="text-lg font-black bg-gradient-to-r from-white to-[#cbd5e1] bg-clip-text text-transparent tracking-tight">
-                        {tripData ? tripData.trip.name : "ShowMeWay"}
-                    </h1>
-                    <p class="text-[11px] text-text-secondary font-medium tracking-wide">
-                        {tripData ? formatDateRange(tripData.trip.start, tripData.trip.end) : "旅行規劃小助手"}
-                    </p>
+    <header class="sticky top-0 z-[100] bg-[#0d0e15]/85 backdrop-blur-xl border-b border-white/5 pt-[calc(15px+var(--safe-top))] px-5 transition-all duration-300 {isHeaderCollapsed ? 'pb-2' : 'pb-3'}">
+        <div class="max-w-3xl mx-auto w-full">
+            <div class="transition-all duration-300 ease-in-out overflow-hidden {isHeaderCollapsed ? 'max-h-0 opacity-0 mb-0 scale-95 pointer-events-none' : 'max-h-[80px] opacity-100 mb-3'}">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <div>
+                            <h1 class="text-lg font-black bg-gradient-to-r from-white to-[#cbd5e1] bg-clip-text text-transparent tracking-tight">
+                                {tripData ? tripData.trip.name : "ShowMeWay"}
+                            </h1>
+                            <p class="text-[11px] text-text-secondary font-medium tracking-wide">
+                                {tripData ? formatDateRange(tripData.trip.start, tripData.trip.end) : "旅行規劃小助手"}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <div class="bg-neon-pink/12 border border-neon-pink/30 text-neon-pink text-[11px] font-bold px-3 py-1.5 rounded-full shadow-[0_0_15px_rgba(255,42,116,0.25)] text-shadow-[0_0_4px_rgba(255,42,116,0.3)]">
+                            {countdownText}
+                        </div>
+                        <button
+                            onclick={openSettings}
+                            class="p-2 border border-card-border text-text-secondary rounded-xl hover:bg-white/5 hover:text-text-primary transition cursor-pointer"
+                            title="開啟 YAML 設定"
+                        >
+                            <Settings size={16} />
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            <div class="flex items-center gap-2">
-                <div class="bg-neon-pink/12 border border-neon-pink/30 text-neon-pink text-[11px] font-bold px-3 py-1.5 rounded-full shadow-[0_0_15px_rgba(255,42,116,0.25)] text-shadow-[0_0_4px_rgba(255,42,116,0.3)]">
-                    {countdownText}
-                </div>
-                <button
-                    onclick={openSettings}
-                    class="p-2 border border-card-border text-text-secondary rounded-xl hover:bg-white/5 hover:text-text-primary transition cursor-pointer"
-                    title="開啟 YAML 設定"
-                >
-                    <Settings size={16} />
-                </button>
-            </div>
+            {#if tripData && activeTab === "itinerary"}
+                <!-- Day Switcher component (Formats ISO dates to MM/DD(W) dynamically) -->
+                <DaySwitcher days={tripData.days.map(d => ({ day: d.day, date: formatDayDate(d.date) }))} bind:currentDay />
+            {/if}
         </div>
-
-        {#if tripData && activeTab === "itinerary"}
-            <!-- Day Switcher component (Formats ISO dates to MM/DD(W) dynamically) -->
-            <DaySwitcher days={tripData.days.map(d => ({ day: d.day, date: formatDayDate(d.date) }))} bind:currentDay />
-        {/if}
     </header>
 
     <!-- Main Content Area -->
-    <main class="flex-1 p-5 overflow-y-auto">
+    <main class="flex-1 p-5 max-w-3xl mx-auto w-full">
         {#if isLoading}
             <div class="flex flex-col items-center justify-center py-20 gap-3">
                 <Loader2 class="animate-spin text-neon-blue" size={36} />
@@ -312,35 +354,37 @@ function triggerToast(msg: string) {
     </main>
 
     <!-- Bottom Tab Navigation -->
-    <nav class="absolute bottom-0 left-0 right-0 h-[calc(64px+var(--safe-bottom))] bg-[#0d0e15]/88 backdrop-blur-2xl border-t border-white/5 flex justify-around items-center pb-[var(--safe-bottom)] z-[100]">
-        <button
-            onclick={() => (activeTab = "itinerary")}
-            class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'itinerary' ? 'text-neon-blue' : ''}"
-        >
-            <Calendar size={20} class={activeTab === "itinerary" ? "stroke-neon-blue filter drop-shadow-[0_0_4px_rgba(0,240,255,0.4)]" : ""} />
-            <span class="text-[10px] font-semibold mt-1">行程</span>
-        </button>
-        <button
-            onclick={() => (activeTab = "todo")}
-            class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'todo' ? 'text-neon-blue' : ''}"
-        >
-            <CheckSquare size={20} class={activeTab === "todo" ? "stroke-neon-blue filter drop-shadow-[0_0_4px_rgba(0,240,255,0.4)]" : ""} />
-            <span class="text-[10px] font-semibold mt-1">準備</span>
-        </button>
-        <button
-            onclick={() => (activeTab = "taxi")}
-            class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'taxi' ? 'text-neon-blue' : ''}"
-        >
-            <Compass size={20} class={activeTab === "taxi" ? "stroke-neon-blue filter drop-shadow-[0_0_4px_rgba(0,240,255,0.4)]" : ""} />
-            <span class="text-[10px] font-semibold mt-1">助手</span>
-        </button>
-        <button
-            onclick={() => (activeTab = "calc")}
-            class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'calc' ? 'text-neon-blue' : ''}"
-        >
-            <DollarSign size={20} class={activeTab === "calc" ? "stroke-neon-blue filter drop-shadow-[0_0_4px_rgba(0,240,255,0.4)]" : ""} />
-            <span class="text-[10px] font-semibold mt-1">記帳</span>
-        </button>
+    <nav class="fixed bottom-0 left-0 right-0 h-[calc(64px+var(--safe-bottom))] bg-[#0d0e15]/88 backdrop-blur-2xl border-t border-white/5 z-[100]">
+        <div class="max-w-3xl mx-auto w-full h-full flex justify-around items-center pb-[var(--safe-bottom)]">
+            <button
+                onclick={() => (activeTab = "itinerary")}
+                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'itinerary' ? 'text-neon-blue' : ''}"
+            >
+                <Calendar size={20} class={activeTab === "itinerary" ? "stroke-neon-blue filter drop-shadow-[0_0_4px_rgba(0,240,255,0.4)]" : ""} />
+                <span class="text-[10px] font-semibold mt-1">行程</span>
+            </button>
+            <button
+                onclick={() => (activeTab = "todo")}
+                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'todo' ? 'text-neon-blue' : ''}"
+            >
+                <CheckSquare size={20} class={activeTab === "todo" ? "stroke-neon-blue filter drop-shadow-[0_0_4px_rgba(0,240,255,0.4)]" : ""} />
+                <span class="text-[10px] font-semibold mt-1">準備</span>
+            </button>
+            <button
+                onclick={() => (activeTab = "taxi")}
+                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'taxi' ? 'text-neon-blue' : ''}"
+            >
+                <Compass size={20} class={activeTab === "taxi" ? "stroke-neon-blue filter drop-shadow-[0_0_4px_rgba(0,240,255,0.4)]" : ""} />
+                <span class="text-[10px] font-semibold mt-1">助手</span>
+            </button>
+            <button
+                onclick={() => (activeTab = "calc")}
+                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'calc' ? 'text-neon-blue' : ''}"
+            >
+                <DollarSign size={20} class={activeTab === "calc" ? "stroke-neon-blue filter drop-shadow-[0_0_4px_rgba(0,240,255,0.4)]" : ""} />
+                <span class="text-[10px] font-semibold mt-1">記帳</span>
+            </button>
+        </div>
     </nav>
 
     <!-- Global Toast Notification -->
@@ -391,12 +435,28 @@ function triggerToast(msg: string) {
                 <div class="flex flex-col gap-1.5">
                     <div class="flex justify-between items-center">
                         <label for="yaml-editor" class="font-bold text-text-primary">編輯行程資料 (YAML 格式)：</label>
-                        <button
-                            onclick={() => handleCopy(yamlInput, "已複製編輯器中的 YAML")}
-                            class="text-[10px] text-text-secondary hover:text-neon-blue flex items-center gap-1 cursor-pointer"
-                        >
-                            <Copy size={10} /> 複製全部
-                        </button>
+                        <div class="flex items-center gap-2.5">
+                            <button
+                                onclick={selectAllYaml}
+                                class="text-[10px] text-text-secondary hover:text-neon-blue flex items-center gap-0.5 cursor-pointer font-medium transition"
+                            >
+                                全選
+                            </button>
+                            <span class="text-[9px] text-white/10 select-none">|</span>
+                            <button
+                                onclick={clearYaml}
+                                class="text-[10px] text-text-secondary hover:text-neon-pink flex items-center gap-0.5 cursor-pointer font-medium transition"
+                            >
+                                清空
+                            </button>
+                            <span class="text-[9px] text-white/10 select-none">|</span>
+                            <button
+                                onclick={() => handleCopy(yamlInput, "已複製編輯器中的 YAML")}
+                                class="text-[10px] text-text-secondary hover:text-neon-blue flex items-center gap-1 cursor-pointer font-medium transition"
+                            >
+                                <Copy size={10} /> 複製
+                            </button>
+                        </div>
                     </div>
                     <textarea
                         id="yaml-editor"
@@ -416,7 +476,7 @@ function triggerToast(msg: string) {
                 <div class="text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2">
                     💡 <strong>貼心提示：</strong><br>
                     1. 建議在 VS Code 中編輯好你的 <code>itinerary.yaml</code> 後，全選複製貼上到此處。<br>
-                    2. 若清空並儲存，將會自動載入專案預設的 [public/itinerary.yaml](file:///Users/eric.yeh/repos/github/hsin19/show-me-way/public/itinerary.yaml)。
+                    2. 若清空並儲存，將會自動載入專案預設的 <a href="https://raw.githubusercontent.com/hsin19/show-me-way/refs/heads/main/public/itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-neon-blue underline hover:text-white transition">itinerary.yaml</a>。
                 </div>
             </div>
 

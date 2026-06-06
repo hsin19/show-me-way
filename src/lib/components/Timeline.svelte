@@ -49,13 +49,13 @@ const hotelText = $derived.by(() => {
 </div>
 
 <!-- Timeline List -->
-<div class="relative pl-5 before:content-[''] before:absolute before:top-2 before:left-1.5 before:w-[2px] before:h-[calc(100%-16px)] before:bg-gradient-to-b before:from-neon-blue/40 before:to-neon-pink/40">
+<div class="relative pl-6 before:content-[''] before:absolute before:top-2 before:left-[7px] before:w-[2px] before:h-[calc(100%-16px)] before:bg-gradient-to-b before:from-neon-blue/40 before:to-neon-pink/40">
     {#each dayData.timeline as event (event.time + event.title)}
         <div class="relative mb-6">
             <!-- Timeline Node Badge -->
             <div
                 class="
-                    absolute -left-5 top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 z-10 transition-all duration-300 -translate-x-[5px]
+                    absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 z-10 transition-all duration-300
                     {event.type === 'booked' ? 'border-neon-orange shadow-[0_0_8px_var(--color-neon-orange)]' : ''}
                     {event.type === 'must-go' ? 'border-neon-pink shadow-[0_0_8px_var(--color-neon-pink)]' : ''}
                     {event.type === 'option' ? 'border-neon-purple shadow-[0_0_8px_var(--color-neon-purple)]' : ''}
@@ -66,20 +66,18 @@ const hotelText = $derived.by(() => {
 
             <!-- Event Card (Glassmorphic) -->
             <div class="glass-panel rounded-2xl p-4 ml-2.5 transition-transform duration-200 active:scale-[0.98]">
-                <span
-                    class="
-                        text-xs font-bold px-2 py-0.5 rounded-lg border inline-block mb-2
-                        {event.type === 'booked' ? 'text-neon-orange bg-neon-orange/8 border-neon-orange/15' : ''}
-                        {event.type === 'must-go' ? 'text-neon-pink bg-neon-pink/8 border-neon-pink/15' : ''}
-                        {event.type === 'option' ? 'text-neon-purple bg-neon-purple/8 border-neon-purple/15' : ''}
-                        {event.type === 'standard' ? 'text-neon-blue bg-neon-blue/8 border-neon-blue/15' : ''}
-                    "
-                >
-                    {event.time}
-                </span>
-
-                <div class="flex justify-between items-center mb-1.5">
-                    <span class="text-[15px] font-bold text-text-primary">{event.title}</span>
+                <div class="flex justify-between items-center mb-2">
+                    <span
+                        class="
+                            text-xs font-bold px-2 py-0.5 rounded-lg border
+                            {event.type === 'booked' ? 'text-neon-orange bg-neon-orange/8 border-neon-orange/15' : ''}
+                            {event.type === 'must-go' ? 'text-neon-pink bg-neon-pink/8 border-neon-pink/15' : ''}
+                            {event.type === 'option' ? 'text-neon-purple bg-neon-purple/8 border-neon-purple/15' : ''}
+                            {event.type === 'standard' ? 'text-neon-blue bg-neon-blue/8 border-neon-blue/15' : ''}
+                        "
+                    >
+                        {event.time}
+                    </span>
                     {#if event.type === "booked"}
                         <span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-neon-orange/15 text-neon-orange border border-neon-orange/30">📅 預訂</span>
                     {:else if event.type === "must-go"}
@@ -87,6 +85,10 @@ const hotelText = $derived.by(() => {
                     {:else if event.type === "option"}
                         <span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-neon-purple/15 text-neon-purple border border-neon-purple/30">📝 備選</span>
                     {/if}
+                </div>
+
+                <div class="mb-1.5">
+                    <span class="text-[15px] font-bold text-text-primary">{event.title}</span>
                 </div>
 
                 <p class="text-xs text-text-secondary leading-relaxed">{event.desc}</p>
