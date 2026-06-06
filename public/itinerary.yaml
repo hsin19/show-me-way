@@ -1,0 +1,79 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/hsin19/show-me-way/refs/heads/main/showmeway-schema.json
+trip:
+  name: '我的探索之旅 (範本)'
+  start: '2026-10-01'
+  end: '2026-10-03'
+  departure: '2026-10-01T08:00:00+08:00'
+  hotels:
+    - name: '極簡設計精選飯店'
+      station: '新宿站步行 3 分鐘'
+      address: '東京都新宿區西新宿 1-1-1'
+      checkIn: '2026-10-01'
+      checkOut: '2026-10-03'
+
+todo:
+  - id: 'todo_passport'
+    text: '確認護照效期大於 6 個月'
+  - id: 'todo_currency'
+    text: '兌換當地現金備用'
+
+packing:
+  - id: 'pack_clothes'
+    text: '更換衣物與常備藥品'
+
+phrases:
+  - zh: '謝謝'
+    text: 'Arigato'
+    rom: 'A-ri-ga-to-'
+  - zh: '你好'
+    text: 'Konnichiwa'
+    rom: 'Kon-ni-chi-wa'
+
+days:
+  - day: 1
+    date: '2026-10-01'
+    region: '經典商圈漫步'
+    pace: '輕鬆漫遊'
+    transport: '地鐵 & 步行'
+    timeline:
+      - time: '08:00'
+        title: '✈️ 前往目的地'
+        type: 'booked'
+        desc: '搭乘班機前往你的夢想城市。'
+      - time: '14:00'
+        title: '🏨 飯店 Check-in'
+        type: 'standard'
+        desc: '抵達飯店辦理入住手續並放置行李。'
+      - time: '18:00'
+        title: '🍜 晚餐探店'
+        type: 'must-go'
+        desc: '造訪當地熱門名店，開啟美食之旅。'
+        naverSearch: '拉麵'
+
+  - day: 2
+    date: '2026-10-02'
+    region: '市區潮流探險'
+    pace: '腳步略快，行程豐富'
+    timeline:
+      - time: '10:00'
+        title: '🛍️ 潮流街區探店'
+        type: 'standard'
+        desc: '探訪當地獨立設計師品牌與熱門快閃店。'
+      - time: '14:00'
+        title: '☕ 下午茶時光'
+        type: 'option'
+        desc: '在網紅咖啡廳點杯咖啡與招牌甜點，稍作休息。'
+
+  - day: 3
+    date: '2026-10-03'
+    region: '伴手禮採購與回程'
+    pace: '收尾行程，不排太滿'
+    timeline:
+      - time: '10:00'
+        title: '🎁 最後採購與打包'
+        type: 'standard'
+        desc: '到當地商場或免稅店補齊伴手禮，回飯店整理行李。'
+      - time: '15:00'
+        title: '✈️ 搭機回國'
+        type: 'booked'
+        desc: '帶著滿滿的回憶搭乘回程班機。'

@@ -1,0 +1,197 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ShowMeWay Itinerary Schema",
+  "type": "object",
+  "required": ["trip", "days", "phrases"],
+  "properties": {
+    "trip": {
+      "type": "object",
+      "required": ["name", "start", "end", "departure", "hotels"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "行程名稱"
+        },
+        "start": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "出發日期 (YYYY-MM-DD 格式，例如: 2026-06-11)"
+        },
+        "end": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "回程日期 (YYYY-MM-DD 格式，例如: 2026-06-16)"
+        },
+        "departure": {
+          "type": "string",
+          "description": "去程班機起飛時間，ISO 8601 格式，例如: 2026-06-11T14:00:00+08:00 (用於首頁倒數計時)"
+        },
+        "hotels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "station", "address", "checkIn", "checkOut"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "飯店/旅宿名稱"
+              },
+              "station": {
+                "type": "string",
+                "description": "鄰近捷運站與步行距離描述"
+              },
+              "address": {
+                "type": "string",
+                "description": "飯店韓文/外文地址 (供計程車司機觀看/複製)"
+              },
+              "checkIn": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "description": "入住日期 (YYYY-MM-DD)"
+              },
+              "checkOut": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "description": "退房日期 (YYYY-MM-DD)"
+              }
+            }
+          }
+        }
+      }
+    },
+    "todo": {
+      "type": "array",
+      "description": "行前待辦清單",
+      "items": {
+        "type": "object",
+        "required": ["id", "text"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "唯一的 ID (如 todo_wowpass)，用於在手機中記錄勾選狀態"
+          },
+          "text": {
+            "type": "string",
+            "description": "待辦事項文字"
+          },
+          "checked": {
+            "type": "boolean",
+            "description": "預設是否已勾選 (選填，預設 false)"
+          }
+        }
+      }
+    },
+    "packing": {
+      "type": "array",
+      "description": "隨身行李與打包清單",
+      "items": {
+        "type": "object",
+        "required": ["id", "text"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "唯一的 ID (如 pack_passport)"
+          },
+          "text": {
+            "type": "string",
+            "description": "打包物品描述"
+          },
+          "checked": {
+            "type": "boolean",
+            "description": "預設是否已勾選 (選填，預設 false)"
+          }
+        }
+      }
+    },
+    "phrases": {
+      "type": "array",
+      "description": "日常實用常用語",
+      "items": {
+        "type": "object",
+        "required": ["zh", "text", "rom"],
+        "properties": {
+          "zh": {
+            "type": "string",
+            "description": "中文翻譯"
+          },
+          "text": {
+            "type": "string",
+            "description": "外文原文 (例如韓文/日文)"
+          },
+          "rom": {
+            "type": "string",
+            "description": "發音/拼音"
+          }
+        }
+      }
+    },
+    "days": {
+      "type": "array",
+      "description": "每日行程細節列表",
+      "items": {
+        "type": "object",
+        "required": ["day", "date", "region", "pace", "timeline"],
+        "properties": {
+          "day": {
+            "type": "integer",
+            "description": "第幾天，例如 1"
+          },
+          "date": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "當天日期 (YYYY-MM-DD)"
+          },
+          "region": {
+            "type": "string",
+            "description": "主要活動區域/景點，例如: 明洞 · 乙支路"
+          },
+          "pace": {
+            "type": "string",
+            "description": "今日行程節奏描述，例如: 慢活、需要早起"
+          },
+          "transport": {
+            "type": "string",
+            "description": "當日主要交通工具 (選填，未填預設為 步行 & 捷運)"
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["time", "title", "type", "desc"],
+              "properties": {
+                "time": {
+                  "type": "string",
+                  "description": "時間區間，例如: 14:00 - 15:30"
+                },
+                "title": {
+                  "type": "string",
+                  "description": "行程或事件標題"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["booked", "must-go", "standard", "option"],
+                  "description": "事件類型：booked(預訂/橘色), must-go(必訪/粉色), standard(一般/藍色), option(備選/紫色)"
+                },
+                "desc": {
+                  "type": "string",
+                  "description": "詳細說明描述"
+                },
+                "bullets": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "備註條列式項目 (支援 HTML 標籤如 <i>)"
+                },
+                "naverSearch": {
+                  "type": "string",
+                  "description": "NAVER Map 搜尋關鍵字 (點擊按鈕直接開啟/複製)"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

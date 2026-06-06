@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+/* Tailwind v4 Custom Theme Configurations */
+@theme {
+    --color-neon-pink: #ff2a74;
+    --color-neon-blue: #00f0ff;
+    --color-neon-purple: #9d4edd;
+    --color-neon-orange: #ff7b00;
+    --color-bg-main: #0a0b10;
+    --color-card-bg: rgba(26, 28, 43, 0.65);
+    --color-card-border: rgba(255, 255, 255, 0.07);
+    --color-text-primary: #f8f9fa;
+    --color-text-secondary: #a0a5c0;
+    --color-text-muted: #626784;
+    --color-accent-green: #00f5d4;
+
+    --animate-pulse-flag: pulseFlag 3s infinite ease-in-out;
+    --animate-fade-in: fadeIn 0.4s ease-out;
+
+    @keyframes pulseFlag {
+        0%, 100% {
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.1);
+        }
+    }
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+}
+
+/* Base Styles */
+:root {
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-top: env(safe-area-inset-top, 0px);
+}
+
+body {
+    background-color: var(--color-bg-main);
+    background-image: linear-gradient(135deg, #090a0f 0%, #121420 100%);
+    color: var(--color-text-primary);
+    font-family: "Plus Jakarta Sans", "Noto Sans TC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+    overflow-x: hidden;
+    line-height: 1.5;
+}
+
+/* Glassmorphism Common Utilities */
+.glass-panel {
+    background: var(--color-card-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--color-card-border);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
