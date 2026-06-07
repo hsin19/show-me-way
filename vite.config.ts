@@ -28,6 +28,11 @@ export default defineConfig({
             workbox: {
                 globPatterns: ["**/*.{js,css,html,svg,png,ico,webp}"],
                 cleanupOutdatedCaches: true,
+                // The SPA navigation fallback (navigateFallback defaults to
+                // index.html) otherwise hijacks navigations to raw data files
+                // and serves the app shell instead. Let .yaml/.json navigations
+                // hit the network so they can be opened directly in the browser.
+                navigateFallbackDenylist: [/\.ya?ml$/i, /\.json$/i],
             },
             devOptions: {
                 enabled: false,
