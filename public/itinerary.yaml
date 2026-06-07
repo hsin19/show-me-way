@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=./showmeway-schema.json
+# yaml-language-server: $schema=https://hsin19.github.io/show-me-way/showmeway-schema.json
 trip:
   name: 我的探索之旅 (範本)
   start: '2026-10-01'

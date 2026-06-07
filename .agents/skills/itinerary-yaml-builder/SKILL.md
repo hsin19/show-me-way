@@ -7,7 +7,7 @@ description: Turn freeform trip notes (scattered Traditional Chinese text, jotte
 
 Convert messy trip notes into a schema-valid `public/itinerary.local.yaml` for the ShowMeWay PWA.
 
-The source of truth for structure is `showmeway-schema.json` at the repo root. The quick reference below mirrors it — if the schema and this file ever disagree, re-read the schema and trust it.
+The source of truth for structure is `public/showmeway-schema.json`. The quick reference below mirrors it — if the schema and this file ever disagree, re-read the schema and trust it.
 
 ## Workflow
 
@@ -63,7 +63,7 @@ Top-level keys: `trip` (required), `days` (required), and optional `todo`, `pack
 
 - Write to the chosen target file path.
 - **Line 1 must be the schema modeline**, preserving whatever the file already uses. The repo default is:
-  `# yaml-language-server: $schema=https://raw.githubusercontent.com/hsin19/show-me-way/refs/heads/main/showmeway-schema.json`
+  `# yaml-language-server: $schema=https://hsin19.github.io/show-me-way/showmeway-schema.json`
 - YAML style follows 2-space indentation and single quotes for strings. If the output path is inside the repository, format it using `pnpm exec dprint fmt <path>` after writing (or `pnpm run format`).
 
 ## Verification
@@ -75,7 +75,7 @@ deps from the inline PEP 723 block, no project setup needed) on the generated ta
 uv run .agents/skills/itinerary-yaml-builder/scripts/validate_itinerary.py <path_to_generated_yaml>
 ```
 
-The script validates against `showmeway-schema.json` (either loaded locally, via the modeline `$schema` URL, or default raw GitHub fallback) and reports the exact path of any violation; it exits non-zero on failure.
+The script validates against `showmeway-schema.json` (either loaded locally, via the modeline `$schema` URL, or the deployed site fallback) and reports the exact path of any violation; it exits non-zero on failure.
 
 Then also confirm by eye:
 

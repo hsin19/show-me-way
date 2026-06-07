@@ -678,7 +678,7 @@ function clearYaml() {
                     💡 行程僅存於本機、不會上傳。
                     <ul class="list-disc pl-4 mt-1 space-y-1.5">
                         <li>貼上 YAML 行程內容，或他人的分享連結，按下方儲存即可。</li>
-                        <li>清空並儲存會還原為預設的 <a href="https://raw.githubusercontent.com/hsin19/show-me-way/refs/heads/main/public/itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-neon-blue underline hover:text-white transition">itinerary.yaml</a>。</li>
+                        <li>清空並儲存會還原為預設的 <a href="./itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-neon-blue underline hover:text-white transition">itinerary.yaml</a>。</li>
                         <li>
                             可用此指令安裝行程小幫手 Skill：
                             <div class="bg-black/60 border border-white/5 rounded px-2 py-1 mt-1 font-mono text-[9px] select-all break-all text-text-primary">

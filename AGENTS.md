@@ -43,7 +43,7 @@ Itinerary data is YAML. Loading priority:
 2. `public/itinerary.local.yaml` for personal local data. This should remain untracked.
 3. `public/itinerary.yaml` as the default template.
 
-The schema lives at `showmeway-schema.json`. Keep TypeScript interfaces in `src/lib/api.ts`, schema fields, and example YAML aligned when changing itinerary structure.
+The schema lives at `public/showmeway-schema.json` (served with the site so the modeline `$schema` URL resolves). Keep TypeScript interfaces in `src/lib/api.ts`, schema fields, and example YAML aligned when changing itinerary structure.
 
 `serializeToYaml` strips runtime-only timeline event `_id` values and re-adds the YAML schema modeline. Do not persist `_id` into YAML fixtures or exports.
 

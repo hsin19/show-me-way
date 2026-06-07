@@ -70,8 +70,10 @@ export interface ChecklistItem {
 
 export const USER_YAML_KEY = "showmeway_user_yaml";
 
-// Schema modeline re-injected on every export so editor autocompletion keeps working.
-const SCHEMA_LINE = "# yaml-language-server: $schema=./showmeway-schema.json\n";
+// Schema modeline re-injected on every export so editor autocompletion keeps
+// working. Points at the schema deployed alongside the site (in `public/`), so
+// the reference resolves no matter where an exported/shared YAML ends up.
+const SCHEMA_LINE = "# yaml-language-server: $schema=https://hsin19.github.io/show-me-way/showmeway-schema.json\n";
 
 let runtimeIdSeq = 0;
 

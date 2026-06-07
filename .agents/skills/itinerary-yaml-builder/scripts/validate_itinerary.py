@@ -26,7 +26,7 @@ import yaml
 from jsonschema import Draft7Validator
 
 SCHEMA_NAME = "showmeway-schema.json"
-DEFAULT_SCHEMA_URL = "https://raw.githubusercontent.com/hsin19/show-me-way/refs/heads/main/showmeway-schema.json"
+DEFAULT_SCHEMA_URL = "https://hsin19.github.io/show-me-way/showmeway-schema.json"
 
 
 def find_upwards(start: Path, name: str) -> Path | None:
@@ -75,12 +75,13 @@ def load_schema_for(target: Path) -> dict | None:
 
 
 def default_targets() -> list[Path]:
-    """When no args: locate the repo (schema location) and check both itineraries."""
-    schema = find_upwards(Path.cwd(), SCHEMA_NAME)
-    if schema is None:
-        return []
-    public = schema.parent / "public"
-    return [p for p in (public / "itinerary.yaml", public / "itinerary.local.yaml") if p.is_file()]
+    """When no args: locate the repo's public/ (where the schema lives) and check both itineraries."""
+    # The schema now lives in public/, so walk up looking for a public/ dir that contains it.
+    for directory in (Path.cwd(), *Path.cwd().parents):
+        public = directory / "public"
+        if (public / SCHEMA_NAME).is_file():
+            return [p for p in (public / "itinerary.yaml", public / "itinerary.local.yaml") if p.is_file()]
+    return []
 
 
 def format_error(err) -> str:

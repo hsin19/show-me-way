@@ -33,7 +33,7 @@ pnpm check     # svelte-check + tsc 型別檢查
 2. `public/itinerary.local.yaml`（個人用，已加入 `.gitignore`，不會進版控）。
 3. `public/itinerary.yaml`（專案預設範本）。
 
-編輯 YAML 時，檔案頂部已指向 [`showmeway-schema.json`](./showmeway-schema.json)，在 VS Code（搭配 YAML 擴充套件）中可獲得欄位自動補全與驗證。完整欄位定義請見該 schema。
+編輯 YAML 時，檔案頂部已指向 [`showmeway-schema.json`](./public/showmeway-schema.json)，在 VS Code（搭配 YAML 擴充套件）中可獲得欄位自動補全與驗證。完整欄位定義請見該 schema。
 
 最小範例：
 
