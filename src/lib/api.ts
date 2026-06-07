@@ -47,11 +47,12 @@ export interface TripData {
         start: string; // YYYY-MM-DD
         end: string; // YYYY-MM-DD
         departure: string; // ISO date-time string, e.g., 2026-06-11T14:00:00+08:00
+        /** Language code (e.g. 'ko', 'ja', 'en') selecting the built-in phrase set. */
+        lang?: string;
         hotels: HotelInfo[];
     };
     todo: ChecklistItem[];
     packing: ChecklistItem[];
-    phrases: PhraseInfo[];
     days: DayItinerary[];
 }
 
@@ -96,8 +97,9 @@ function attachRuntimeIds(data: TripData): TripData {
 
 /**
  * Validate the required shape of a parsed itinerary object and normalize
- * optional sections (todo / packing / phrases) to empty arrays so downstream
- * components can always iterate safely.
+ * optional sections (todo / packing) to empty arrays so downstream components
+ * can always iterate safely. Any legacy top-level `phrases` is ignored —
+ * phrases are now hard-coded per `trip.lang` (see `lib/phrases.ts`).
  *
  * Throws an Error with a user-facing (zh-TW) message on invalid structure.
  */
@@ -118,13 +120,13 @@ function normalizeTripData(raw: unknown): TripData {
         throw new Error("trip 區塊缺少 start, end, departure 或 hotels 屬性");
     }
 
-    // Optional sections default to empty arrays.
+    // Optional sections default to empty arrays. Note `phrases` is intentionally
+    // dropped here so any legacy value never round-trips back into saved YAML.
     const normalized: TripData = {
         trip: data.trip,
         days: data.days,
         todo: Array.isArray(data.todo) ? data.todo : [],
         packing: Array.isArray(data.packing) ? data.packing : [],
-        phrases: Array.isArray(data.phrases) ? data.phrases : [],
     };
 
     return attachRuntimeIds(normalized);

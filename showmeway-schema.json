@@ -26,6 +26,11 @@
           "type": "string",
           "description": "去程班機起飛時間，ISO 8601 格式，例如: 2026-06-11T14:00:00+08:00 (用於首頁倒數計時)"
         },
+        "lang": {
+          "type": "string",
+          "enum": ["ko", "ja", "en"],
+          "description": "目的地語言代碼，用於選擇內建的實用常用語與計程車司機提示 (ko=韓文, ja=日文, en=英文)。未設定或不支援時預設為英文 (en)。"
+        },
         "hotels": {
           "type": "array",
           "items": {
@@ -91,28 +96,6 @@
           "checked": {
             "type": "boolean",
             "description": "預設是否已勾選 (選填，預設 false)"
-          }
-        }
-      }
-    },
-    "phrases": {
-      "type": "array",
-      "description": "日常實用常用語",
-      "items": {
-        "type": "object",
-        "required": ["zh", "text", "rom"],
-        "properties": {
-          "zh": {
-            "type": "string",
-            "description": "中文翻譯"
-          },
-          "text": {
-            "type": "string",
-            "description": "外文原文 (例如韓文/日文)"
-          },
-          "rom": {
-            "type": "string",
-            "description": "發音/拼音"
           }
         }
       }

@@ -1,6 +1,6 @@
 ---
 name: itinerary-yaml-builder
-description: Turn freeform trip notes (scattered Traditional Chinese text, jotted plans, day-by-day descriptions) into a valid ShowMeWay itinerary YAML. MUST be used whenever the user wants to draft, build, organize, convert, or update their trip into the app's YAML format, or asks to add/edit days, hotels, todos, packing items, or phrases in the itinerary.
+description: Turn freeform trip notes (scattered Traditional Chinese text, jotted plans, day-by-day descriptions) into a valid ShowMeWay itinerary YAML. MUST be used whenever the user wants to draft, build, organize, convert, or update their trip into the app's YAML format, or asks to add/edit days, hotels, todos, or packing items in the itinerary.
 ---
 
 # Itinerary YAML Builder
@@ -20,13 +20,14 @@ The source of truth for structure is `showmeway-schema.json` at the repo root. T
 
 ## Schema quick reference
 
-Top-level keys: `trip` (required), `days` (required), and optional `todo`, `packing`, `phrases`.
+Top-level keys: `trip` (required), `days` (required), and optional `todo`, `packing`.
 
 ### trip (required: name, start, end, departure, hotels)
 
 - `name` — string, trip title.
 - `start` / `end` — `YYYY-MM-DD`.
 - `departure` — outbound flight time, ISO 8601 **with timezone offset**, e.g. `2026-06-11T14:00:00+08:00` (drives the home-screen countdown).
+- `lang` — optional language code (`ko` / `ja` / `en`). Selects the app's built-in survival phrases and taxi-driver prompt. Defaults to English (`en`) when omitted or unsupported. Phrases are no longer authored in YAML.
 - `hotels[]` — each requires `name`, `station` (nearest metro + walking distance), `address` (local-language address for taxi drivers), `checkIn`, `checkOut` (both `YYYY-MM-DD`).
 
 ### days[] (required: day, date, region, pace, timeline)
@@ -48,10 +49,6 @@ Top-level keys: `trip` (required), `days` (required), and optional `todo`, `pack
 - `text` — the todo / packing item description.
 - `checked` — optional boolean, default false.
 - Do not write an `id` (or `_id`) field. Items are identified by a runtime-only `_id` the app assigns in memory; checkbox state lives inline via `checked` and is persisted back to YAML.
-
-### phrases[] (each requires zh, text, rom)
-
-- `zh` — Chinese meaning, `text` — foreign original (Korean/Japanese), `rom` — pronunciation/romanization.
 
 ## Conventions
 

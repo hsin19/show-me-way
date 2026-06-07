@@ -13,10 +13,12 @@ import { getTodayIsoString } from "../utils";
 interface Props {
     hotels: HotelInfo[];
     phrases: PhraseInfo[];
+    driverPrompt: string;
+    copyAddressLabel: string;
     onCopy: (text: string, msg: string) => void;
 }
 
-let { hotels, phrases, onCopy }: Props = $props();
+let { hotels, phrases, driverPrompt, copyAddressLabel, onCopy }: Props = $props();
 
 let showFullscreen = $state(false);
 let selectedHotel = $state<HotelInfo | null>(null);
@@ -104,28 +106,30 @@ function formatShortDate(dateStr: string): string {
     {/each}
 </div>
 
-<!-- Survival Korean Deck -->
-<div class="mt-6">
-    <h3 class="text-base font-bold text-text-primary mb-4">💬 實用常用語</h3>
-    <div class="grid grid-cols-1 gap-3">
-        {#each phrases as p (p.zh)}
-            <button
-                type="button"
-                onclick={() => onCopy(p.text, `已複製：${p.text} (${p.zh})`)}
-                class="bg-card-bg border border-card-border rounded-xl p-3.5 flex justify-between items-center w-full text-left cursor-pointer transition-all duration-200 active:scale-[0.98] hover:bg-white/5 group"
-            >
-                <div class="flex flex-col gap-1">
-                    <span class="text-sm font-bold text-text-primary group-hover:text-neon-blue transition-colors">{p.zh}</span>
-                    <span class="text-base font-extrabold text-neon-pink">{p.text}</span>
-                    <span class="text-[10px] text-text-secondary italic">{p.rom}</span>
-                </div>
-                <div class="text-text-muted group-hover:text-text-primary transition-colors">
-                    <Copy size={14} />
-                </div>
-            </button>
-        {/each}
+<!-- Survival phrase deck (hidden when the trip language has no built-in set) -->
+{#if phrases.length > 0}
+    <div class="mt-6">
+        <h3 class="text-base font-bold text-text-primary mb-4">💬 實用常用語</h3>
+        <div class="grid grid-cols-1 gap-3">
+            {#each phrases as p (p.zh)}
+                <button
+                    type="button"
+                    onclick={() => onCopy(p.text, `已複製：${p.text} (${p.zh})`)}
+                    class="bg-card-bg border border-card-border rounded-xl p-3.5 flex justify-between items-center w-full text-left cursor-pointer transition-all duration-200 active:scale-[0.98] hover:bg-white/5 group"
+                >
+                    <div class="flex flex-col gap-1">
+                        <span class="text-sm font-bold text-text-primary group-hover:text-neon-blue transition-colors">{p.zh}</span>
+                        <span class="text-base font-extrabold text-neon-pink">{p.text}</span>
+                        <span class="text-[10px] text-text-secondary italic">{p.rom}</span>
+                    </div>
+                    <div class="text-text-muted group-hover:text-text-primary transition-colors">
+                        <Copy size={14} />
+                    </div>
+                </button>
+            {/each}
+        </div>
     </div>
-</div>
+{/if}
 
 <svelte:window onkeydown={(e => e.key === "Escape" && closeFullscreen())} />
 
@@ -150,7 +154,7 @@ function formatShortDate(dateStr: string): string {
             "
         >
             <div class="flex justify-between items-center mb-6">
-                <h3 class="text-sm text-text-secondary">기사님, 여기로 가주세요 (司機先生，請載我去這)：</h3>
+                <h3 class="text-sm text-text-secondary">{driverPrompt}</h3>
                 <button
                     onclick={closeFullscreen}
                     class="text-text-secondary hover:text-text-primary text-2xl cursor-pointer"
@@ -177,7 +181,7 @@ function formatShortDate(dateStr: string): string {
                 }}
                 class="w-full bg-gradient-to-r from-neon-blue to-neon-purple text-black font-bold py-3.5 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer"
             >
-                複製韓文地址
+                {copyAddressLabel}
             </button>
         </div>
     {/if}

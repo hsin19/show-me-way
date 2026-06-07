@@ -28,6 +28,7 @@ import DaySwitcher from "./lib/components/DaySwitcher.svelte";
 import Ledger from "./lib/components/Ledger.svelte";
 import TaxiHelper from "./lib/components/TaxiHelper.svelte";
 import Timeline from "./lib/components/Timeline.svelte";
+import { getLanguageConfig } from "./lib/phrases";
 import {
     formatDateRange,
     formatDayDate,
@@ -84,6 +85,10 @@ let activeDayData = $derived.by(() => {
     if (!tripData) return null;
     return tripData.days.find(d => d.day === currentDay) || tripData.days[0];
 });
+
+// Resolve the built-in phrase set and driver-card labels from `trip.lang`,
+// falling back to English when unset/unsupported.
+let langConfig = $derived(getLanguageConfig(tripData?.trip.lang));
 
 // --- Swipe to switch day (mobile gesture) ---
 let swipeStartX = 0;
@@ -469,7 +474,13 @@ function clearYaml() {
                         <h2 class="text-xl font-extrabold text-text-primary tracking-tight">🚕 乘車助手 & 實用常用語</h2>
                         <p class="text-xs text-text-secondary mt-0.5">出示給司機或快速複製使用</p>
                     </div>
-                    <TaxiHelper hotels={tripData.trip.hotels} phrases={tripData.phrases} onCopy={handleCopy} />
+                    <TaxiHelper
+                        hotels={tripData.trip.hotels}
+                        phrases={langConfig.phrases}
+                        driverPrompt={langConfig.driverPrompt}
+                        copyAddressLabel={langConfig.copyAddressLabel}
+                        onCopy={handleCopy}
+                    />
                 {:else if activeTab === "calc"}
                     <div class="mb-4">
                         <h2 class="text-xl font-extrabold text-text-primary tracking-tight">💱 匯率與消費記帳</h2>
