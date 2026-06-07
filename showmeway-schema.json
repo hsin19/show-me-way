@@ -64,12 +64,8 @@
       "description": "行前待辦清單",
       "items": {
         "type": "object",
-        "required": ["id", "text"],
+        "required": ["text"],
         "properties": {
-          "id": {
-            "type": "string",
-            "description": "唯一的 ID (如 todo_wowpass)，用於在手機中記錄勾選狀態"
-          },
           "text": {
             "type": "string",
             "description": "待辦事項文字"
@@ -86,12 +82,8 @@
       "description": "隨身行李與打包清單",
       "items": {
         "type": "object",
-        "required": ["id", "text"],
+        "required": ["text"],
         "properties": {
-          "id": {
-            "type": "string",
-            "description": "唯一的 ID (如 pack_passport)"
-          },
           "text": {
             "type": "string",
             "description": "打包物品描述"

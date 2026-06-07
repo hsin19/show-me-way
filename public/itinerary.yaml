@@ -11,24 +11,6 @@ trip:
       checkIn: '2026-10-01'
       checkOut: '2026-10-03'
 
-todo:
-  - id: 'todo_passport'
-    text: '確認護照效期大於 6 個月'
-  - id: 'todo_currency'
-    text: '兌換當地現金備用'
-
-packing:
-  - id: 'pack_clothes'
-    text: '更換衣物與常備藥品'
-
-phrases:
-  - zh: '謝謝'
-    text: 'Arigato'
-    rom: 'A-ri-ga-to-'
-  - zh: '你好'
-    text: 'Konnichiwa'
-    rom: 'Kon-ni-chi-wa'
-
 days:
   - day: 1
     date: '2026-10-01'
@@ -77,3 +59,18 @@ days:
         title: '✈️ 搭機回國'
         type: 'booked'
         desc: '帶著滿滿的回憶搭乘回程班機。'
+
+todo:
+  - text: '確認護照效期大於 6 個月'
+  - text: '兌換當地現金備用'
+
+packing:
+  - text: '更換衣物與常備藥品'
+
+phrases:
+  - zh: '謝謝'
+    text: 'Arigato'
+    rom: 'A-ri-ga-to-'
+  - zh: '你好'
+    text: 'Konnichiwa'
+    rom: 'Kon-ni-chi-wa'

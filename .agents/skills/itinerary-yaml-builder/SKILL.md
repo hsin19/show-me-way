@@ -43,10 +43,11 @@ Top-level keys: `trip` (required), `days` (required), and optional `todo`, `pack
   - `bullets[]` — optional string notes (may contain HTML like `<i>`).
   - `naverSearch` — optional NAVER Map search keyword for that spot.
 
-### todo[] / packing[] (each item requires id, text; optional checked)
+### todo[] / packing[] (each item requires text; optional checked)
 
-- `id` — stable, descriptive, prefixed: `todo_*` for todo, `pack_*` for packing (e.g. `todo_wowpass`, `pack_passport`). IDs persist checkbox state on the user's phone — never renumber or churn existing ids.
+- `text` — the todo / packing item description.
 - `checked` — optional boolean, default false.
+- Do not write an `id` (or `_id`) field. Items are identified by a runtime-only `_id` the app assigns in memory; checkbox state lives inline via `checked` and is persisted back to YAML.
 
 ### phrases[] (each requires zh, text, rom)
 

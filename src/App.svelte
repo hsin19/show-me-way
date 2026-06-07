@@ -15,8 +15,12 @@ import {
     onMount,
 } from "svelte";
 import {
+    createChecklistItemId,
     fetchItinerary,
+    saveTripData,
+    serializeToYaml,
     type TripData,
+    USER_YAML_KEY,
     validateYaml,
 } from "./lib/api";
 import Checklist from "./lib/components/Checklist.svelte";
@@ -137,6 +141,12 @@ async function loadTripData() {
         const data = await fetchItinerary();
         tripData = data;
 
+        // Fold any legacy per-list checked-state into the itinerary, then write
+        // the unified data back so YAML becomes the single source of truth.
+        if (migrateLegacyChecklistState(data)) {
+            persistTripData();
+        }
+
         // Auto-jump to today's itinerary if trip is active
         if (data && data.days && data.days.length > 0) {
             const todayStr = getTodayIsoString();
@@ -165,6 +175,72 @@ async function loadTripData() {
     }
 }
 
+// Persist the current in-memory trip data back into the user YAML so edits
+// (add / delete / toggle on checklists) survive a reload.
+function persistTripData() {
+    if (!tripData) return;
+    try {
+        saveTripData(tripData);
+    } catch (err) {
+        console.error("Failed to persist trip data:", err);
+        triggerToast("儲存失敗，請稍後再試");
+    }
+}
+
+// One-time migration: older versions kept checklist checked-state in separate
+// localStorage keys (todo_state / packing_state). Fold those values into the
+// itinerary data (single source of truth) and remove the legacy keys.
+function migrateLegacyChecklistState(data: TripData): boolean {
+    let migrated = false;
+    const legacy: Array<["todo" | "packing", string]> = [
+        ["todo", "todo_state"],
+        ["packing", "packing_state"],
+    ];
+    for (const [listKey, storageKey] of legacy) {
+        const saved = localStorage.getItem(storageKey);
+        if (!saved) continue;
+        try {
+            const map = JSON.parse(saved) as Record<string, boolean>;
+            for (const item of data[listKey]) {
+                // Legacy YAML keyed checked-state by a persisted `id`, which is
+                // no longer part of the schema; read it off the raw parsed item.
+                const legacyId = (item as { id?: string; }).id;
+                if (legacyId && legacyId in map) item.checked = map[legacyId];
+            }
+            migrated = true;
+        } catch (e) {
+            console.error("Failed to migrate legacy checklist state:", e);
+        }
+        localStorage.removeItem(storageKey);
+    }
+    return migrated;
+}
+
+// --- Checklist editing handlers (todo / packing) ---
+function toggleChecklistItem(list: "todo" | "packing", id: string) {
+    if (!tripData) return;
+    const item = tripData[list].find(i => i._id === id);
+    if (!item) return;
+    item.checked = !item.checked;
+    persistTripData();
+}
+
+function addChecklistItem(list: "todo" | "packing", text: string) {
+    if (!tripData) return;
+    tripData[list].push({
+        _id: createChecklistItemId(list === "todo" ? "todo" : "pack"),
+        text,
+        checked: false,
+    });
+    persistTripData();
+}
+
+function deleteChecklistItem(list: "todo" | "packing", id: string) {
+    if (!tripData) return;
+    tripData[list] = tripData[list].filter(i => i._id !== id);
+    persistTripData();
+}
+
 // Snapshot of the YAML when the editor was opened, used to detect unsaved edits
 let yamlSnapshot = "";
 
@@ -173,7 +249,7 @@ async function openSettings() {
     showSettings = true;
     validationError = null;
 
-    const customYaml = localStorage.getItem("showmeway_user_yaml");
+    const customYaml = localStorage.getItem(USER_YAML_KEY);
     if (customYaml) {
         yamlInput = customYaml;
     } else {
@@ -204,9 +280,15 @@ function attemptCloseSettings() {
 // Save Settings & Validate YAML
 async function saveSettings() {
     try {
-        validateYaml(yamlInput);
-        localStorage.setItem("showmeway_user_yaml", yamlInput);
-        yamlSnapshot = yamlInput;
+        const parsed = validateYaml(yamlInput);
+        // Canonicalize on save: re-serialize the parsed data so the stored (and
+        // re-displayed) YAML always has a consistent key order and is stripped
+        // of runtime/legacy ids. This is what makes the layout look the same
+        // every time Settings is reopened.
+        const tidied = serializeToYaml(parsed);
+        localStorage.setItem(USER_YAML_KEY, tidied);
+        yamlInput = tidied;
+        yamlSnapshot = tidied;
         showSettings = false;
         validationError = null;
         triggerToast("自訂 YAML 行程儲存成功！");
@@ -221,7 +303,7 @@ async function saveSettings() {
 // Reset to Local default
 async function resetToLocalDefault() {
     if (confirm("要清除自訂 YAML，並恢復為專案預設的行程嗎？")) {
-        localStorage.removeItem("showmeway_user_yaml");
+        localStorage.removeItem(USER_YAML_KEY);
         showSettings = false;
         validationError = null;
         triggerToast("已恢復為預設行程...");
@@ -368,8 +450,20 @@ function clearYaml() {
                         <h2 class="text-xl font-extrabold text-text-primary tracking-tight">📌 行前準備與打包</h2>
                         <p class="text-xs text-text-secondary mt-0.5">狀態將自動快取於手機</p>
                     </div>
-                    <Checklist title="📋 待辦事項" storageKey="todo_state" defaultItems={tripData.todo} />
-                    <Checklist title="🧳 隨身行李與打包" storageKey="packing_state" defaultItems={tripData.packing} />
+                    <Checklist
+                        title="📋 待辦事項"
+                        items={tripData.todo}
+                        onToggle={id => toggleChecklistItem("todo", id)}
+                        onAdd={text => addChecklistItem("todo", text)}
+                        onDelete={id => deleteChecklistItem("todo", id)}
+                    />
+                    <Checklist
+                        title="🧳 隨身行李與打包"
+                        items={tripData.packing}
+                        onToggle={id => toggleChecklistItem("packing", id)}
+                        onAdd={text => addChecklistItem("packing", text)}
+                        onDelete={id => deleteChecklistItem("packing", id)}
+                    />
                 {:else if activeTab === "taxi"}
                     <div class="mb-4">
                         <h2 class="text-xl font-extrabold text-text-primary tracking-tight">🚕 乘車助手 & 實用常用語</h2>

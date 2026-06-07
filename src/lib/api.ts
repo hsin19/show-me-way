@@ -49,13 +49,25 @@ export interface TripData {
         departure: string; // ISO date-time string, e.g., 2026-06-11T14:00:00+08:00
         hotels: HotelInfo[];
     };
-    todo: Array<{ id: string; text: string; checked?: boolean; }>;
-    packing: Array<{ id: string; text: string; checked?: boolean; }>;
+    todo: ChecklistItem[];
+    packing: ChecklistItem[];
     phrases: PhraseInfo[];
     days: DayItinerary[];
 }
 
-const USER_YAML_KEY = "showmeway_user_yaml";
+export interface ChecklistItem {
+    text: string;
+    checked?: boolean;
+    /**
+     * Ephemeral, runtime-only identity used as a stable `{#each}` key and as the
+     * lookup handle for toggle/add/delete. Assigned on load and on creation,
+     * stripped again on serialization — it never appears in saved/exported YAML.
+     * (Same pattern as `TimelineEvent._id`.)
+     */
+    _id?: string;
+}
+
+export const USER_YAML_KEY = "showmeway_user_yaml";
 
 // Schema modeline re-injected on every export so editor autocompletion keeps working.
 const SCHEMA_LINE = "# yaml-language-server: $schema=./showmeway-schema.json\n";
@@ -63,15 +75,21 @@ const SCHEMA_LINE = "# yaml-language-server: $schema=./showmeway-schema.json\n";
 let runtimeIdSeq = 0;
 
 /**
- * Assign an ephemeral, session-stable `_id` to every timeline event. These ids
- * exist only in memory (as `{#each}` keys for a future edit mode) and are never
- * persisted — see `serializeToYaml`.
+ * Assign an ephemeral, session-stable `_id` to every timeline event and
+ * checklist item. These ids exist only in memory (as `{#each}` keys and as the
+ * lookup handle for editing) and are never persisted — see `serializeToYaml`.
  */
 function attachRuntimeIds(data: TripData): TripData {
     for (const day of data.days) {
         for (const ev of day.timeline) {
             ev._id = `ev-${runtimeIdSeq++}`;
         }
+    }
+    for (const item of data.todo) {
+        item._id = `todo-${runtimeIdSeq++}`;
+    }
+    for (const item of data.packing) {
+        item._id = `pack-${runtimeIdSeq++}`;
     }
     return data;
 }
@@ -114,16 +132,25 @@ function normalizeTripData(raw: unknown): TripData {
 
 /**
  * Serialize trip data back to a YAML string for saving/exporting.
- * Strips the runtime-only `_id` fields and re-adds the schema modeline.
- * Array order is preserved; comments and key ordering from any original
- * hand-written YAML are not (by design — the object is the source of truth).
+ * Strips the runtime-only `_id` fields (and any legacy `id` left over from the
+ * old checklist schema) and re-adds the schema modeline. Array order is
+ * preserved; comments and key ordering from any original hand-written YAML are
+ * not (by design — the object is the source of truth).
  */
 export function serializeToYaml(data: TripData): string {
-    const clean = structuredClone(data);
+    // JSON round-trip rather than structuredClone: `data` may be a Svelte
+    // reactive ($state) proxy, which structuredClone cannot clone. TripData is
+    // fully JSON-serializable, so this safely yields a plain detached object.
+    const clean = JSON.parse(JSON.stringify(data)) as TripData;
     for (const day of clean.days) {
         for (const ev of day.timeline) {
             delete ev._id;
         }
+    }
+    for (const item of [...clean.todo, ...clean.packing]) {
+        delete item._id;
+        // Drop the obsolete persisted `id` so it is cleaned out on first save.
+        delete (item as { id?: string; }).id;
     }
 
     const body = dumpYaml(clean, {
@@ -134,6 +161,25 @@ export function serializeToYaml(data: TripData): string {
     });
 
     return SCHEMA_LINE + body;
+}
+
+/**
+ * Persist the current in-memory trip data back into the user YAML stored in
+ * localStorage. This is how runtime edits (e.g. adding/deleting checklist
+ * items, toggling checked state) survive a reload — the serialized object
+ * becomes the new source of truth on the next `fetchItinerary`.
+ */
+export function saveTripData(data: TripData): void {
+    localStorage.setItem(USER_YAML_KEY, serializeToYaml(data));
+}
+
+/**
+ * Generate a runtime-only `_id` for a newly added checklist item. Shares the
+ * same sequence as `attachRuntimeIds` so ids never collide within a session.
+ * Like all `_id`s, it is stripped on serialization and never written to YAML.
+ */
+export function createChecklistItemId(prefix: "todo" | "pack"): string {
+    return `${prefix}-${runtimeIdSeq++}`;
 }
 
 // Load and parse itinerary YAML from local storage or fallback file

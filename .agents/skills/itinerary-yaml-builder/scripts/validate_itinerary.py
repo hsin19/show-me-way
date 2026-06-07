@@ -185,18 +185,12 @@ def validate_file(path: Path) -> bool:
                 if "_id" in event:
                     custom_errors.append(f"days[{idx}].timeline[{t_idx}]: Contains forbidden runtime key '_id'")
 
-        # 5. Check todo and packing IDs prefixes
-        todos = data.get("todo") or []
-        for idx, todo in enumerate(todos):
-            todo_id = todo.get("id", "")
-            if todo_id and not todo_id.startswith("todo_"):
-                custom_errors.append(f"todo[{idx}].id: ID '{todo_id}' must start with 'todo_' prefix")
-                
-        packing = data.get("packing") or []
-        for idx, item in enumerate(packing):
-            pack_id = item.get("id", "")
-            if pack_id and not pack_id.startswith("pack_"):
-                custom_errors.append(f"packing[{idx}].id: ID '{pack_id}' must start with 'pack_' prefix")
+        # 5. todo/packing items must not carry id or runtime-only _id keys.
+        for list_name in ("todo", "packing"):
+            for idx, item in enumerate(data.get(list_name) or []):
+                for forbidden in ("id", "_id"):
+                    if forbidden in item:
+                        custom_errors.append(f"{list_name}[{idx}]: Contains forbidden key '{forbidden}'")
 
     if custom_errors:
         print(f"✗ {path}", file=sys.stderr)
