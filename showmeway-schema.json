@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ShowMeWay Itinerary Schema",
   "type": "object",
-  "required": ["trip", "days", "phrases"],
+  "required": ["trip", "days"],
   "properties": {
     "trip": {
       "type": "object",

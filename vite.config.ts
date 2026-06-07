@@ -12,6 +12,10 @@ export default defineConfig({
         tailwindcss(),
         VitePWA({
             registerType: "autoUpdate",
+            pwaAssets: {
+                disabled: false,
+                config: true,
+            },
             manifest: {
                 name: "ShowMeWay 行程小助手 🧭",
                 short_name: "ShowMeWay",
@@ -20,13 +24,6 @@ export default defineConfig({
                 theme_color: "#0a0b10",
                 display: "standalone",
                 orientation: "portrait",
-                icons: [
-                    {
-                        src: "icon.svg",
-                        sizes: "any",
-                        type: "image/svg+xml",
-                    },
-                ],
             },
             workbox: {
                 globPatterns: ["**/*.{js,css,html,svg,png,ico,webp}"],

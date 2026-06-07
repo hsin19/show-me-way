@@ -10,11 +10,13 @@ import type { HotelInfo } from "../api";
 import type { PhraseInfo } from "../api";
 import { getTodayIsoString } from "../utils";
 
-let { hotels, phrases, onCopy } = $props<{
+interface Props {
     hotels: HotelInfo[];
     phrases: PhraseInfo[];
     onCopy: (text: string, msg: string) => void;
-}>();
+}
+
+let { hotels, phrases, onCopy }: Props = $props();
 
 let showFullscreen = $state(false);
 let selectedHotel = $state<HotelInfo | null>(null);
@@ -107,9 +109,10 @@ function formatShortDate(dateStr: string): string {
     <h3 class="text-base font-bold text-text-primary mb-4">💬 實用常用語</h3>
     <div class="grid grid-cols-1 gap-3">
         {#each phrases as p (p.zh)}
-            <div
+            <button
+                type="button"
                 onclick={() => onCopy(p.text, `已複製：${p.text} (${p.zh})`)}
-                class="bg-card-bg border border-card-border rounded-xl p-3.5 flex justify-between items-center cursor-pointer transition-all duration-200 active:scale-[0.98] hover:bg-white/5 group"
+                class="bg-card-bg border border-card-border rounded-xl p-3.5 flex justify-between items-center w-full text-left cursor-pointer transition-all duration-200 active:scale-[0.98] hover:bg-white/5 group"
             >
                 <div class="flex flex-col gap-1">
                     <span class="text-sm font-bold text-text-primary group-hover:text-neon-blue transition-colors">{p.zh}</span>
@@ -119,12 +122,16 @@ function formatShortDate(dateStr: string): string {
                 <div class="text-text-muted group-hover:text-text-primary transition-colors">
                     <Copy size={14} />
                 </div>
-            </div>
+            </button>
         {/each}
     </div>
 </div>
 
+<svelte:window onkeydown={(e => e.key === "Escape" && closeFullscreen())} />
+
 <!-- Fullscreen Overlay Modal -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
     onclick={closeFullscreen}
     class="
@@ -133,6 +140,8 @@ function formatShortDate(dateStr: string): string {
     "
 >
     {#if selectedHotel}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
             onclick={(e => e.stopPropagation())}
             class="

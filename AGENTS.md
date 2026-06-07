@@ -66,6 +66,12 @@ Other `localStorage` keys exist for component state: `exchange_rate` (`Ledger`) 
 - YAML prefers single quotes.
 - Keep comments sparse and useful. Existing comments often explain date/time or YAML persistence behavior; preserve that clarity.
 
+## Testing Notes
+
+- Pure date/time helpers belong in `src/lib/utils.ts` and should have Vitest coverage in `src/lib/utils.test.ts`.
+- Be careful with `YYYY-MM-DD` parsing. This project intentionally parses plain dates in local time to avoid UTC day shifts.
+- When changing PWA, Vite, or asset behavior, verify with `pnpm run build`.
+
 ## Git And Generated Files
 
 - Do not edit `dist/` for source changes.

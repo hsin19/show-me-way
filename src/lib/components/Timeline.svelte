@@ -50,16 +50,16 @@ const hotelText = $derived.by(() => {
 
 <!-- Timeline List -->
 <div class="relative pl-6 before:content-[''] before:absolute before:top-2 before:left-[7px] before:w-[2px] before:h-[calc(100%-16px)] before:bg-gradient-to-b before:from-neon-blue/40 before:to-neon-pink/40">
-    {#each dayData.timeline as event (event.time + event.title)}
+    {#each dayData.timeline as event (event._id ?? event.time + event.title)}
         <div class="relative mb-6">
             <!-- Timeline Node Badge -->
             <div
                 class="
                     absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 z-10 transition-all duration-300
-                    {event.type === 'booked' ? 'border-neon-orange shadow-[0_0_8px_var(--color-neon-orange)]' : ''}
-                    {event.type === 'must-go' ? 'border-neon-pink shadow-[0_0_8px_var(--color-neon-pink)]' : ''}
-                    {event.type === 'option' ? 'border-neon-purple shadow-[0_0_8px_var(--color-neon-purple)]' : ''}
-                    {event.type === 'standard' ? 'border-neon-blue shadow-[0_0_8px_var(--color-neon-blue)]' : ''}
+                    {event.type === 'booked' ? 'border-neon-orange shadow-[0_0_7px_rgba(255,123,0,0.6)]' : ''}
+                    {event.type === 'must-go' ? 'border-neon-pink shadow-[0_0_7px_rgba(255,42,116,0.6)]' : ''}
+                    {event.type === 'option' ? 'border-neon-purple' : ''}
+                    {event.type === 'standard' ? 'border-neon-blue/70' : ''}
                 "
             >
             </div>
@@ -79,11 +79,11 @@ const hotelText = $derived.by(() => {
                         {event.time}
                     </span>
                     {#if event.type === "booked"}
-                        <span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-neon-orange/15 text-neon-orange border border-neon-orange/30">📅 預訂</span>
+                        <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-orange/15 text-neon-orange border border-neon-orange/30"><span class="text-[11px] leading-none">📅</span>預訂</span>
                     {:else if event.type === "must-go"}
-                        <span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-neon-pink/15 text-neon-pink border border-neon-pink/30">🔥 必訪</span>
+                        <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-pink/15 text-neon-pink border border-neon-pink/30"><span class="text-[11px] leading-none">🔥</span>必訪</span>
                     {:else if event.type === "option"}
-                        <span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-neon-purple/15 text-neon-purple border border-neon-purple/30">📝 備選</span>
+                        <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-purple/15 text-neon-purple border border-neon-purple/30"><span class="text-[11px] leading-none">📝</span>備選</span>
                     {/if}
                 </div>
 
@@ -96,8 +96,7 @@ const hotelText = $derived.by(() => {
                 {#if event.bullets && event.bullets.length > 0}
                     <ul class="list-disc list-inside mt-2.5 pl-2 text-xs text-text-secondary space-y-1">
                         {#each event.bullets as bullet (bullet)}
-                            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-                            <li>{@html bullet}</li>
+                            <li>{bullet}</li>
                         {/each}
                     </ul>
                 {/if}

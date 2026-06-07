@@ -3,3 +3,5 @@ packages:
 allowBuilds:
   dprint: false
   simple-git-hooks: false
+  esbuild: true
+  sharp: false

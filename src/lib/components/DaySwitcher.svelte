@@ -4,10 +4,12 @@ interface DayInfo {
     date: string;
 }
 
-let { days, currentDay = $bindable() } = $props<{
+interface Props {
     days: DayInfo[];
     currentDay: number;
-}>();
+}
+
+let { days, currentDay = $bindable() }: Props = $props();
 </script>
 
 <div class="overflow-x-auto no-scrollbar pb-3">

@@ -27,6 +27,7 @@ import Timeline from "./lib/components/Timeline.svelte";
 import {
     formatDateRange,
     formatDayDate,
+    getCountdownText,
     getTodayIsoString,
     parseLocalDate,
 } from "./lib/utils";
@@ -52,6 +53,12 @@ let validationError = $state<string | null>(null);
 let isHeaderCollapsed = $state(false);
 let lastScrollTop = 0;
 
+function handleWindowKeydown(e: KeyboardEvent) {
+    if (e.key === "Escape" && showSettings) {
+        attemptCloseSettings();
+    }
+}
+
 function handleWindowScroll() {
     const scrollTop = window.scrollY || document.documentElement.scrollTop;
     if (scrollTop > lastScrollTop && scrollTop > 30) {
@@ -73,6 +80,40 @@ let activeDayData = $derived.by(() => {
     if (!tripData) return null;
     return tripData.days.find(d => d.day === currentDay) || tripData.days[0];
 });
+
+// --- Swipe to switch day (mobile gesture) ---
+let swipeStartX = 0;
+let swipeStartY = 0;
+let swipeTracking = false;
+
+// Move to an adjacent day by offset (+1 next / -1 previous), clamped to range
+function goToAdjacentDay(offset: number) {
+    if (!tripData) return;
+    const idx = tripData.days.findIndex(d => d.day === currentDay);
+    if (idx === -1) return;
+    const nextIdx = idx + offset;
+    if (nextIdx >= 0 && nextIdx < tripData.days.length) {
+        currentDay = tripData.days[nextIdx].day;
+    }
+}
+
+function handleSwipeStart(e: PointerEvent) {
+    if (activeTab !== "itinerary") return;
+    swipeStartX = e.clientX;
+    swipeStartY = e.clientY;
+    swipeTracking = true;
+}
+
+function handleSwipeEnd(e: PointerEvent) {
+    if (!swipeTracking) return;
+    swipeTracking = false;
+    const dx = e.clientX - swipeStartX;
+    const dy = e.clientY - swipeStartY;
+    // Require a mostly-horizontal gesture with enough travel to avoid clashing with vertical scroll
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        goToAdjacentDay(dx < 0 ? 1 : -1);
+    }
+}
 
 let timer: number;
 
@@ -103,7 +144,6 @@ async function loadTripData() {
 
             if (matchingDay) {
                 currentDay = matchingDay.day;
-                console.log(`[App] Automatically selected Day ${currentDay} matching today (${todayStr})`);
             } else {
                 // Default to Day 1 if before start, or last Day if after end
                 const today = new Date();
@@ -125,6 +165,9 @@ async function loadTripData() {
     }
 }
 
+// Snapshot of the YAML when the editor was opened, used to detect unsaved edits
+let yamlSnapshot = "";
+
 // Open Settings & Load current YAML text
 async function openSettings() {
     showSettings = true;
@@ -145,6 +188,17 @@ async function openSettings() {
             yamlInput = "";
         }
     }
+
+    yamlSnapshot = yamlInput;
+}
+
+// Close settings, warning if there are unsaved edits
+function attemptCloseSettings() {
+    if (yamlInput !== yamlSnapshot && !confirm("尚有未儲存的變更，確定要關閉嗎？")) {
+        return;
+    }
+    showSettings = false;
+    validationError = null;
 }
 
 // Save Settings & Validate YAML
@@ -152,6 +206,7 @@ async function saveSettings() {
     try {
         validateYaml(yamlInput);
         localStorage.setItem("showmeway_user_yaml", yamlInput);
+        yamlSnapshot = yamlInput;
         showSettings = false;
         validationError = null;
         triggerToast("自訂 YAML 行程儲存成功！");
@@ -177,40 +232,7 @@ async function resetToLocalDefault() {
 // Travel Countdown Calculator
 function updateCountdown() {
     if (!tripData) return;
-
-    const departureDate = new Date(tripData.trip.departure);
-    const startDate = parseLocalDate(tripData.trip.start);
-    const endDate = new Date(tripData.trip.end + "T23:59:59");
-    const now = new Date();
-
-    // 1. If currently during the trip
-    if (now >= startDate && now <= endDate) {
-        countdownText = "✈️ 冒險進行中！";
-        return;
-    }
-
-    // 2. If after the trip completed
-    if (now > endDate) {
-        countdownText = "🗺️ 旅程圓滿結束";
-        return;
-    }
-
-    // 3. Otherwise, show countdown to flight
-    const diff = departureDate.getTime() - now.getTime();
-    if (diff <= 0) {
-        countdownText = "✈️ 飛機已起飛！";
-        return;
-    }
-
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-
-    if (days > 0) {
-        countdownText = `⏳ 倒數 ${days} 天 ${hours} 小時`;
-    } else {
-        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        countdownText = `⏳ 即將出發 ${hours}時 ${mins}分`;
-    }
+    countdownText = getCountdownText(tripData.trip);
 }
 
 // Global Clipboard Copy
@@ -259,7 +281,7 @@ function clearYaml() {
 }
 </script>
 
-<svelte:window onscroll={handleWindowScroll} />
+<svelte:window onscroll={handleWindowScroll} onkeydown={handleWindowKeydown} />
 
 <div class="flex flex-col min-h-screen bg-[#0b0c13] text-text-primary pb-[calc(80px+var(--safe-bottom))] animate-fade-in">
     <!-- App Header -->
@@ -323,11 +345,23 @@ function clearYaml() {
             <div class="animate-fade-in">
                 {#if activeTab === "itinerary"}
                     {#if activeDayData}
-                        <Timeline
-                            dayData={activeDayData}
-                            hotels={tripData.trip.hotels}
-                            onCopy={handleCopy}
-                        />
+                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                        <div
+                            class="touch-pan-y"
+                            onpointerdown={handleSwipeStart}
+                            onpointerup={handleSwipeEnd}
+                            onpointercancel={() => (swipeTracking = false)}
+                        >
+                            {#key currentDay}
+                                <div class="animate-fade-in">
+                                    <Timeline
+                                        dayData={activeDayData}
+                                        hotels={tripData.trip.hotels}
+                                        onCopy={handleCopy}
+                                    />
+                                </div>
+                            {/key}
+                        </div>
                     {/if}
                 {:else if activeTab === "todo"}
                     <div class="mb-4">
@@ -399,13 +433,17 @@ function clearYaml() {
     </div>
 
     <!-- Settings Overlay Modal -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-        onclick={() => (showSettings = false)}
+        onclick={attemptCloseSettings}
         class="
             fixed inset-0 bg-black/95 z-[1000] flex items-center justify-center p-5 transition-opacity duration-300
             {showSettings ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
         "
     >
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
             onclick={(e => e.stopPropagation())}
             class="
@@ -419,7 +457,7 @@ function clearYaml() {
                     自訂 YAML 行程設定
                 </h3>
                 <button
-                    onclick={() => (showSettings = false)}
+                    onclick={attemptCloseSettings}
                     class="text-text-secondary hover:text-text-primary text-2xl cursor-pointer"
                 >
                     <X size={24} />

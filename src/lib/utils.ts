@@ -38,6 +38,38 @@ export function getTodayIsoString(): string {
     return `${yyyy}-${mm}-${dd}`;
 }
 
+export interface CountdownTrip {
+    start: string; // YYYY-MM-DD
+    end: string; // YYYY-MM-DD
+    departure: string; // ISO date-time
+}
+
+/**
+ * Compute the home-screen countdown label for a trip relative to `now`.
+ * Pure function (no Date.now side effects) so it can be unit-tested.
+ */
+export function getCountdownText(trip: CountdownTrip, now: Date = new Date()): string {
+    const departureDate = new Date(trip.departure);
+    const startDate = parseLocalDate(trip.start);
+    const endDate = new Date(trip.end + "T23:59:59");
+
+    // During the trip
+    if (now >= startDate && now <= endDate) return "✈️ 冒險進行中！";
+    // After the trip
+    if (now > endDate) return "🗺️ 旅程圓滿結束";
+
+    // Before the trip: count down to the flight
+    const diff = departureDate.getTime() - now.getTime();
+    if (diff <= 0) return "✈️ 飛機已起飛！";
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    if (days > 0) return `⏳ 倒數 ${days} 天 ${hours} 小時`;
+
+    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    return `⏳ 即將出發 ${hours}時 ${mins}分`;
+}
+
 /**
  * Format start and end date into MM/DD display range
  * Example: start: "2026-06-11", end: "2026-06-16" -> "2026.06.11 – 06.16"

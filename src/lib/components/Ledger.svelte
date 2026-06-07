@@ -14,9 +14,11 @@ interface ExpenseItem {
     date: string;
 }
 
-let { onToast } = $props<{
+interface Props {
     onToast: (msg: string) => void;
-}>();
+}
+
+let { onToast }: Props = $props();
 
 // Currency States
 let exchangeRate = $state(42.5);
@@ -69,7 +71,10 @@ function saveLedger() {
 
 // Currency Conversion
 function convert(source: "krw" | "twd" | "rate") {
-    localStorage.setItem("exchange_rate", exchangeRate.toString());
+    // Only persist the rate when it actually changes, not on every amount keystroke.
+    if (source === "rate") {
+        localStorage.setItem("exchange_rate", exchangeRate.toString());
+    }
 
     if (source === "krw" || source === "rate") {
         const krw = parseFloat(krwValue) || 0;
