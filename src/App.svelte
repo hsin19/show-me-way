@@ -8,6 +8,7 @@ import {
     DollarSign,
     Loader2,
     Settings,
+    Share2,
     X,
 } from "@lucide/svelte";
 import {
@@ -29,6 +30,13 @@ import Ledger from "./lib/components/Ledger.svelte";
 import TaxiHelper from "./lib/components/TaxiHelper.svelte";
 import Timeline from "./lib/components/Timeline.svelte";
 import { getLanguageConfig } from "./lib/phrases";
+import {
+    buildShareUrl,
+    clearShareHash,
+    decodeShareToken,
+    isShareSupported,
+    readShareTokenFromHash,
+} from "./lib/share";
 import {
     formatDateRange,
     formatDayDate,
@@ -127,6 +135,9 @@ function handleSwipeEnd(e: PointerEvent) {
 let timer: number;
 
 onMount(async () => {
+    // 0. If opened via a share link, offer to import it before loading.
+    await maybeImportSharedItinerary();
+
     // 1. Fetch Trip Itinerary
     await loadTripData();
 
@@ -134,6 +145,32 @@ onMount(async () => {
     updateCountdown();
     timer = window.setInterval(updateCountdown, 60000);
 });
+
+// If the URL hash carries a shared itinerary, decode it and ask before
+// overwriting whatever itinerary already lives on this device. The hash is
+// always stripped afterwards so a refresh won't re-prompt.
+async function maybeImportSharedItinerary() {
+    const token = readShareTokenFromHash();
+    if (!token) return;
+    try {
+        const yaml = await decodeShareToken(token);
+        const parsed = validateYaml(yaml); // throws on invalid structure/syntax
+        const hasExisting = !!localStorage.getItem(USER_YAML_KEY);
+        const message = hasExisting
+            ? "偵測到分享的行程。要以此行程「覆蓋」目前裝置上的行程嗎？（原行程將被取代）"
+            : "偵測到分享的行程，要載入嗎？";
+        if (confirm(message)) {
+            // Canonicalize (strip runtime ids, re-add schema line) before storing.
+            localStorage.setItem(USER_YAML_KEY, serializeToYaml(parsed));
+            triggerToast("已載入分享的行程");
+        }
+    } catch (err) {
+        console.error("Failed to import shared itinerary:", err);
+        triggerToast("分享連結內容無效，已略過");
+    } finally {
+        clearShareHash();
+    }
+}
 
 onDestroy(() => {
     if (timer) clearInterval(timer);
@@ -302,6 +339,26 @@ async function saveSettings() {
         console.error("YAML Validation failed:", err);
         const errorMessage = err instanceof Error ? err.message : "YAML 格式錯誤，請檢查縮排！";
         validationError = errorMessage;
+    }
+}
+
+// Generate a self-contained share link from the current editor content and
+// copy it to the clipboard. Validates first so we never share broken YAML.
+async function generateShareLink() {
+    if (!isShareSupported()) {
+        validationError = "此瀏覽器不支援連結壓縮，無法產生分享連結。";
+        return;
+    }
+    try {
+        const parsed = validateYaml(yamlInput);
+        const url = await buildShareUrl(serializeToYaml(parsed));
+        validationError = null;
+        handleCopy(url, "分享連結已複製！可貼到聊天軟體傳送");
+    } catch (err) {
+        console.error("Failed to build share link:", err);
+        validationError = err instanceof Error
+            ? `無法產生分享連結：${err.message}`
+            : "無法產生分享連結，請檢查 YAML 內容。";
     }
 }
 
@@ -630,6 +687,18 @@ function clearYaml() {
                     </ul>
                 </div>
             </div>
+
+            <button
+                onclick={generateShareLink}
+                class="w-full mt-4 bg-white/3 border border-neon-blue/30 text-neon-blue font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-neon-blue/10 transition active:scale-[0.98] cursor-pointer"
+            >
+                <Share2 size={14} /> 產生並複製分享連結
+            </button>
+            <p class="text-[10px] text-text-muted mt-1.5 leading-normal">
+                連結較長，可用
+                <a href="https://picsee.io/" target="_blank" rel="noopener noreferrer" class="text-neon-blue underline hover:text-white transition">短網址服務</a>
+                縮短。
+            </p>
 
             <div class="grid grid-cols-2 gap-2 mt-5">
                 <button
