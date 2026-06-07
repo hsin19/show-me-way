@@ -41,7 +41,9 @@
     "dist/**",
     "**/*.svg",
     ".agents/skills/**",
-    ".claude/skills/**"
+    ".claude/skills/**",
+    "public/itinerary.yaml",
+    "public/itinerary.local.yaml"
   ],
   "plugins": [
     "https://plugins.dprint.dev/typescript-0.95.15.wasm",
