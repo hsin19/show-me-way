@@ -86,11 +86,23 @@ export async function buildShareUrl(yaml: string): Promise<string> {
     return `${base}#${SHARE_HASH_PARAM}=${token}`;
 }
 
+/**
+ * Extract a share token from an arbitrary pasted string that may be a full
+ * share URL (`https://…/#s=<token>`) or a bare `#s=<token>` fragment. Returns
+ * null if no token is found. Shortened links (e.g. picsee) only redirect and
+ * carry no token, so they can't be expanded here — paste the full link.
+ */
+export function parseShareToken(input: string): string | null {
+    const hashIndex = input.indexOf("#");
+    if (hashIndex === -1) return null;
+    const fragment = input.slice(hashIndex + 1).trim();
+    if (!fragment) return null;
+    return new URLSearchParams(fragment).get(SHARE_HASH_PARAM);
+}
+
 /** Read the share token from the current URL hash, or null if none present. */
 export function readShareTokenFromHash(): string | null {
-    const raw = location.hash.startsWith("#") ? location.hash.slice(1) : location.hash;
-    if (!raw) return null;
-    return new URLSearchParams(raw).get(SHARE_HASH_PARAM);
+    return parseShareToken(location.hash);
 }
 
 /**

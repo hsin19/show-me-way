@@ -35,6 +35,7 @@ import {
     clearShareHash,
     decodeShareToken,
     isShareSupported,
+    parseShareToken,
     readShareTokenFromHash,
 } from "./lib/share";
 import {
@@ -322,7 +323,10 @@ function attemptCloseSettings() {
 // Save Settings & Validate YAML
 async function saveSettings() {
     try {
-        const parsed = validateYaml(yamlInput);
+        // Allow pasting a share link directly: decode it to YAML before parsing.
+        const token = parseShareToken(yamlInput);
+        const source = token ? await decodeShareToken(token) : yamlInput;
+        const parsed = validateYaml(source);
         // Canonicalize on save: re-serialize the parsed data so the stored (and
         // re-displayed) YAML always has a consistent key order and is stripped
         // of runtime/legacy ids. This is what makes the layout look the same
@@ -333,7 +337,7 @@ async function saveSettings() {
         yamlSnapshot = tidied;
         showSettings = false;
         validationError = null;
-        triggerToast("自訂 YAML 行程儲存成功！");
+        triggerToast(token ? "已從分享連結載入行程！" : "自訂 YAML 行程儲存成功！");
         await loadTripData();
     } catch (err) {
         console.error("YAML Validation failed:", err);
@@ -353,7 +357,7 @@ async function generateShareLink() {
         const parsed = validateYaml(yamlInput);
         const url = await buildShareUrl(serializeToYaml(parsed));
         validationError = null;
-        handleCopy(url, "分享連結已複製！可貼到聊天軟體傳送");
+        handleCopy(url, "分享連結已複製！網址較長，可用短網址服務縮短");
     } catch (err) {
         console.error("Failed to build share link:", err);
         validationError = err instanceof Error
@@ -610,10 +614,11 @@ function clearYaml() {
             onclick={(e => e.stopPropagation())}
             class="
                 bg-[#121422] border border-white/8 rounded-3xl w-full max-w-[420px] p-6 shadow-2xl transition-transform duration-300
+                flex flex-col h-[min(100dvh-2.5rem,720px)]
                 {showSettings ? 'translate-y-0' : 'translate-y-5'}
             "
         >
-            <div class="flex justify-between items-center mb-4">
+            <div class="flex justify-between items-center mb-4 shrink-0">
                 <h3 class="text-base font-bold text-text-primary flex items-center gap-1.5">
                     <Settings size={18} class="text-neon-blue" />
                     自訂 YAML 行程設定
@@ -626,15 +631,11 @@ function clearYaml() {
                 </button>
             </div>
 
-            <div class="space-y-4 text-xs">
-                <p class="text-text-secondary leading-normal">
-                    直接貼上你的 YAML 行程內容。行程僅會儲存在此裝置中（不會上傳至伺服器），隱私安全無虞。
-                </p>
-
+            <div class="flex-1 min-h-0 flex flex-col gap-2.5 text-xs">
                 <!-- YAML Editor Textarea -->
-                <div class="flex flex-col gap-1.5">
+                <div class="flex-1 min-h-0 flex flex-col gap-1.5">
                     <div class="flex justify-between items-center">
-                        <label for="yaml-editor" class="font-bold text-text-primary">編輯行程資料 (YAML 格式)：</label>
+                        <label for="yaml-editor" class="font-bold text-text-primary">行程資料 (YAML)</label>
                         <div class="flex items-center gap-2.5">
                             <button
                                 onclick={selectAllYaml}
@@ -661,8 +662,8 @@ function clearYaml() {
                     <textarea
                         id="yaml-editor"
                         bind:value={yamlInput}
-                        placeholder="貼上你的 YAML 格式行程..."
-                        class="w-full bg-black/40 border border-card-border rounded-xl p-3 text-[11px] text-text-primary font-mono outline-none focus:border-neon-blue h-[240px] resize-none overflow-y-auto"
+                        placeholder="貼上你的 YAML 行程，或直接貼上分享連結..."
+                        class="w-full flex-1 min-h-[160px] bg-black/40 border border-card-border rounded-xl p-3 text-[11px] text-text-primary font-mono outline-none focus:border-neon-blue resize-none overflow-y-auto"
                     ></textarea>
                 </div>
 
@@ -673,13 +674,13 @@ function clearYaml() {
                     </div>
                 {/if}
 
-                <div class="text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2 space-y-1">
-                    💡 <strong>貼心提示：</strong>
+                <div class="shrink-0 text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2 space-y-1">
+                    💡 行程僅存於本機、不會上傳。
                     <ul class="list-disc pl-4 mt-1 space-y-1.5">
-                        <li>建議在 VS Code 中編輯好你的 <code>itinerary.yaml</code> 後，全選複製貼上到此處。</li>
-                        <li>若清空並儲存，將會自動載入專案預設的 <a href="https://raw.githubusercontent.com/hsin19/show-me-way/refs/heads/main/public/itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-neon-blue underline hover:text-white transition">itinerary.yaml</a>。</li>
+                        <li>貼上 YAML 行程內容，或他人的分享連結，按下方儲存即可。</li>
+                        <li>清空並儲存會還原為預設的 <a href="https://raw.githubusercontent.com/hsin19/show-me-way/refs/heads/main/public/itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-neon-blue underline hover:text-white transition">itinerary.yaml</a>。</li>
                         <li>
-                            你可以在 AI 編輯器中使用以下指令安裝行程小幫手 Skill：
+                            可用此指令安裝行程小幫手 Skill：
                             <div class="bg-black/60 border border-white/5 rounded px-2 py-1 mt-1 font-mono text-[9px] select-all break-all text-text-primary">
                                 npx skills add https://github.com/hsin19/show-me-way --skill itinerary-yaml-builder
                             </div>
@@ -690,17 +691,12 @@ function clearYaml() {
 
             <button
                 onclick={generateShareLink}
-                class="w-full mt-4 bg-white/3 border border-neon-blue/30 text-neon-blue font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-neon-blue/10 transition active:scale-[0.98] cursor-pointer"
+                class="shrink-0 w-full mt-3 bg-white/3 border border-neon-blue/30 text-neon-blue font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-neon-blue/10 transition active:scale-[0.98] cursor-pointer"
             >
                 <Share2 size={14} /> 產生並複製分享連結
             </button>
-            <p class="text-[10px] text-text-muted mt-1.5 leading-normal">
-                連結較長，可用
-                <a href="https://picsee.io/" target="_blank" rel="noopener noreferrer" class="text-neon-blue underline hover:text-white transition">短網址服務</a>
-                縮短。
-            </p>
 
-            <div class="grid grid-cols-2 gap-2 mt-5">
+            <div class="grid grid-cols-2 gap-2 mt-3 shrink-0">
                 <button
                     onclick={resetToLocalDefault}
                     class="bg-white/3 border border-card-border text-text-secondary font-bold py-3 px-4 rounded-xl text-xs hover:bg-white/5 transition cursor-pointer"

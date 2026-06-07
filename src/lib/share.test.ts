@@ -11,6 +11,7 @@ import {
     decodeShareToken,
     encodeShareToken,
     isShareSupported,
+    parseShareToken,
     readShareTokenFromHash,
     SHARE_HASH_PARAM,
 } from "./share";
@@ -55,6 +56,30 @@ describe("encodeShareToken / decodeShareToken", () => {
 describe("isShareSupported", () => {
     it("is true where Compression Streams exist (test runtime)", () => {
         expect(isShareSupported()).toBe(true);
+    });
+});
+
+describe("parseShareToken", () => {
+    it("extracts the token from a full share URL", () => {
+        expect(parseShareToken("https://hsin19.github.io/show-me-way/#s=abc123")).toBe("abc123");
+    });
+
+    it("extracts the token from a bare hash fragment", () => {
+        expect(parseShareToken("#s=abc123")).toBe("abc123");
+    });
+
+    it("returns null for plain YAML or a hash without the token", () => {
+        expect(parseShareToken("trip:\n  name: 東京\n")).toBeNull();
+        expect(parseShareToken("https://example.com/#other=1")).toBeNull();
+    });
+
+    it("round-trips through buildShareUrl output", async () => {
+        vi.stubGlobal("location", { origin: "https://hsin19.github.io", pathname: "/show-me-way/" });
+        const url = await buildShareUrl(SAMPLE_YAML);
+        const token = parseShareToken(url);
+        expect(token).not.toBeNull();
+        expect(await decodeShareToken(token!)).toBe(SAMPLE_YAML);
+        vi.unstubAllGlobals();
     });
 });
 
