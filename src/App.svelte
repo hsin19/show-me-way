@@ -511,10 +511,18 @@ function clearYaml() {
                     </div>
                 {/if}
 
-                <div class="text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2">
-                    💡 <strong>貼心提示：</strong><br>
-                    1. 建議在 VS Code 中編輯好你的 <code>itinerary.yaml</code> 後，全選複製貼上到此處。<br>
-                    2. 若清空並儲存，將會自動載入專案預設的 <a href="https://raw.githubusercontent.com/hsin19/show-me-way/refs/heads/main/public/itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-neon-blue underline hover:text-white transition">itinerary.yaml</a>。
+                <div class="text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2 space-y-1">
+                    💡 <strong>貼心提示：</strong>
+                    <ul class="list-disc pl-4 mt-1 space-y-1.5">
+                        <li>建議在 VS Code 中編輯好你的 <code>itinerary.yaml</code> 後，全選複製貼上到此處。</li>
+                        <li>若清空並儲存，將會自動載入專案預設的 <a href="https://raw.githubusercontent.com/hsin19/show-me-way/refs/heads/main/public/itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-neon-blue underline hover:text-white transition">itinerary.yaml</a>。</li>
+                        <li>
+                            你可以在 AI 編輯器中使用以下指令安裝行程小幫手 Skill：
+                            <div class="bg-black/60 border border-white/5 rounded px-2 py-1 mt-1 font-mono text-[9px] select-all break-all text-text-primary">
+                                npx skills add https://github.com/hsin19/show-me-way --skill itinerary-yaml-builder
+                            </div>
+                        </li>
+                    </ul>
                 </div>
             </div>
 
