@@ -39,7 +39,9 @@
     "**/*-lock.json",
     "**/pnpm-lock.yaml",
     "dist/**",
-    "**/*.svg"
+    "**/*.svg",
+    ".agents/skills/**",
+    ".claude/skills/**"
   ],
   "plugins": [
     "https://plugins.dprint.dev/typescript-0.95.15.wasm",
