@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "ShowMeWay Itinerary Schema",
+  "title": "下面一way 行程 Schema",
   "type": "object",
   "required": ["trip", "days"],
   "properties": {
@@ -31,6 +31,17 @@
           "enum": ["ko", "ja", "en"],
           "description": "目的地語言代碼，用於選擇內建的實用常用語與計程車司機提示 (ko=韓文, ja=日文, en=英文)。未設定或不支援時預設為英文 (en)。"
         },
+        "currency": {
+          "type": "string",
+          "description": "目的地貨幣代碼，例如: KRW, JPY, USD (選填，未設定時將自動依目的地語言或預設推導)"
+        },
+        "wallets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "記帳使用的自訂電子錢包/卡片清單 (例如: Suica, WOWPASS, 信用卡。現金預設會自動存在)"
+        },
         "hotels": {
           "type": "array",
           "items": {
@@ -47,7 +58,7 @@
               },
               "address": {
                 "type": "string",
-                "description": "飯店韓文/外文地址 (供計程車司機觀看/複製)"
+                "description": "飯店外文地址 (供計程車司機觀看/複製)"
               },
               "checkIn": {
                 "type": "string",
@@ -118,7 +129,7 @@
           },
           "region": {
             "type": "string",
-            "description": "主要活動區域/景點，例如: 明洞 · 乙支路"
+            "description": "主要活動區域/景點，例如: 新宿、明洞"
           },
           "pace": {
             "type": "string",

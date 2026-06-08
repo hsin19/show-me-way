@@ -1,14 +1,20 @@
 <script lang="ts">
 import {
     Calendar,
+    Car,
     CheckCircle,
     CheckSquare,
     Compass,
     Copy,
     DollarSign,
+    ListChecks,
+    ListTodo,
     Loader2,
+    Luggage,
     Settings,
     Share2,
+    TriangleAlert,
+    Wallet,
     X,
 } from "@lucide/svelte";
 import {
@@ -50,7 +56,7 @@ import {
 let tripData = $state<TripData | null>(null);
 let currentDay = $state(1);
 let activeTab = $state("itinerary"); // itinerary | todo | taxi | calc
-let countdownText = $state("計算中...");
+let countdownText = $state("計算中…");
 let isLoading = $state(true);
 let loadError = $state<string | null>(null);
 
@@ -66,6 +72,13 @@ let validationError = $state<string | null>(null);
 // Scroll & Header Collapse States
 let isHeaderCollapsed = $state(false);
 let lastScrollTop = 0;
+let scrollTicking = false;
+// While collapsing/expanding, the header's own height change reflows the page and
+// clamps scrollY; lock toggles until this timestamp (> the 300ms transition) so that
+// animation-induced scroll changes can't flip the state back (the jitter source).
+let headerLockUntil = 0;
+// Ignore sub-threshold movement (sub-pixel events, iOS momentum/rubber-band)
+const SCROLL_DELTA = 8;
 
 function handleWindowKeydown(e: KeyboardEvent) {
     if (e.key === "Escape" && showSettings) {
@@ -74,19 +87,50 @@ function handleWindowKeydown(e: KeyboardEvent) {
 }
 
 function handleWindowScroll() {
-    const scrollTop = window.scrollY || document.documentElement.scrollTop;
-    if (scrollTop > lastScrollTop && scrollTop > 30) {
-        isHeaderCollapsed = true;
-    } else if (scrollTop < lastScrollTop) {
-        isHeaderCollapsed = false;
-    }
-    lastScrollTop = scrollTop;
+    // Throttle to one evaluation per frame so a burst of scroll events
+    // (especially while the collapse animation is reflowing) can't thrash state.
+    if (scrollTicking) return;
+    scrollTicking = true;
+    requestAnimationFrame(() => {
+        const scrollTop = Math.max(0, window.scrollY); // clamp iOS rubber-band negatives
+        const now = performance.now();
+
+        // During a collapse/expand transition, ignore toggles but keep the baseline
+        // synced to the (clamping) scroll position so no stale delta fires afterwards.
+        if (now < headerLockUntil) {
+            lastScrollTop = scrollTop;
+            scrollTicking = false;
+            return;
+        }
+
+        const delta = scrollTop - lastScrollTop;
+        let next = isHeaderCollapsed;
+        if (scrollTop <= 30) {
+            next = false; // always reveal at the very top
+        } else if (Math.abs(delta) > SCROLL_DELTA) {
+            next = delta > 0; // down → collapse, up → expand
+            // Re-baseline only when a real move crosses the threshold, so slow
+            // scrolls accumulate instead of locking the comparison in place.
+            lastScrollTop = scrollTop;
+        }
+
+        if (next !== isHeaderCollapsed) {
+            isHeaderCollapsed = next;
+            headerLockUntil = now + 380; // cover the 300ms transition + margin
+        }
+        scrollTicking = false;
+    });
 }
 
 $effect(() => {
     if (activeTab) {
         isHeaderCollapsed = false;
     }
+});
+
+// Reflect the loaded trip name in the browser tab title (falls back to the default).
+$effect(() => {
+    document.title = tripData?.trip.name ?? "下面一way";
 });
 
 // Derived values for current active day (with date formatted for display)
@@ -284,6 +328,17 @@ function deleteChecklistItem(list: "todo" | "packing", id: string) {
     persistTripData();
 }
 
+function addTripWallet(name: string) {
+    if (!tripData) return;
+    if (!tripData.trip.wallets) {
+        tripData.trip.wallets = [];
+    }
+    if (!tripData.trip.wallets.includes(name)) {
+        tripData.trip.wallets.push(name);
+        persistTripData();
+    }
+}
+
 // Snapshot of the YAML when the editor was opened, used to detect unsaved edits
 let yamlSnapshot = "";
 
@@ -372,7 +427,7 @@ async function resetToLocalDefault() {
         localStorage.removeItem(USER_YAML_KEY);
         showSettings = false;
         validationError = null;
-        triggerToast("已恢復為預設行程...");
+        triggerToast("已恢復為預設行程…");
         await loadTripData();
     }
 }
@@ -433,14 +488,14 @@ function clearYaml() {
 
 <div class="flex flex-col min-h-screen bg-[#0b0c13] text-text-primary pb-[calc(80px+var(--safe-bottom))] animate-fade-in">
     <!-- App Header -->
-    <header class="sticky top-0 z-[100] bg-[#0d0e15]/85 backdrop-blur-xl border-b border-white/5 pt-[calc(15px+var(--safe-top))] px-5 transition-all duration-300 {isHeaderCollapsed ? 'pb-2' : 'pb-3'}">
+    <header class="sticky top-0 z-[100] bg-[#0d0e15]/85 backdrop-blur-xl border-b border-white/5 pt-[calc(15px+var(--safe-top))] px-5 transition-[padding] duration-300 {isHeaderCollapsed ? 'pb-2' : 'pb-3'}">
         <div class="max-w-3xl mx-auto w-full">
-            <div class="transition-all duration-300 ease-in-out overflow-hidden {isHeaderCollapsed ? 'max-h-0 opacity-0 mb-0 scale-95 pointer-events-none' : 'max-h-[80px] opacity-100 mb-3'}">
+            <div class="transition-[max-height,opacity,margin,transform] duration-300 ease-in-out overflow-hidden {isHeaderCollapsed ? 'max-h-0 opacity-0 mb-0 scale-95 pointer-events-none' : 'max-h-[80px] opacity-100 mb-3'}">
                 <div class="flex justify-between items-center">
                     <div class="flex items-center gap-3">
                         <div>
                             <h1 class="text-lg font-black bg-gradient-to-r from-white to-[#cbd5e1] bg-clip-text text-transparent tracking-tight">
-                                {tripData ? tripData.trip.name : "ShowMeWay"}
+                                {tripData ? tripData.trip.name : "下面一way"}
                             </h1>
                             <p class="text-[11px] text-text-secondary font-medium tracking-wide">
                                 {tripData ? formatDateRange(tripData.trip.start, tripData.trip.end) : "旅行規劃小助手"}
@@ -454,10 +509,11 @@ function clearYaml() {
                         </div>
                         <button
                             onclick={openSettings}
-                            class="p-2 border border-card-border text-text-secondary rounded-xl hover:bg-white/5 hover:text-text-primary transition cursor-pointer"
+                            class="min-w-[44px] min-h-[44px] flex items-center justify-center border border-card-border text-text-secondary rounded-xl hover:bg-white/5 hover:text-text-primary transition cursor-pointer"
+                            aria-label="開啟 YAML 設定"
                             title="開啟 YAML 設定"
                         >
-                            <Settings size={16} />
+                            <Settings size={18} aria-hidden="true" />
                         </button>
                     </div>
                 </div>
@@ -475,11 +531,11 @@ function clearYaml() {
         {#if isLoading}
             <div class="flex flex-col items-center justify-center py-20 gap-3">
                 <Loader2 class="animate-spin text-neon-blue" size={36} />
-                <p class="text-text-secondary text-sm">正在載入行程資料...</p>
+                <p class="text-text-secondary text-sm">正在載入行程資料…</p>
             </div>
         {:else if loadError}
             <div class="glass-panel rounded-2xl p-6 text-center border-neon-pink/35 shadow-[0_0_15px_rgba(255,42,116,0.1)]">
-                <span class="text-3xl block mb-3">⚠️</span>
+                <TriangleAlert size={32} class="text-neon-pink mx-auto mb-3" aria-hidden="true" />
                 <p class="text-text-primary text-sm font-semibold mb-4">{loadError}</p>
                 <button
                     onclick={openSettings}
@@ -513,18 +569,22 @@ function clearYaml() {
                     {/if}
                 {:else if activeTab === "todo"}
                     <div class="mb-4">
-                        <h2 class="text-xl font-extrabold text-text-primary tracking-tight">📌 行前準備與打包</h2>
+                        <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
+                            <ListChecks size={22} class="text-neon-blue" aria-hidden="true" />行前準備與打包
+                        </h2>
                         <p class="text-xs text-text-secondary mt-0.5">狀態將自動快取於手機</p>
                     </div>
                     <Checklist
-                        title="📋 待辦事項"
+                        title="待辦事項"
+                        icon={ListTodo}
                         items={tripData.todo}
                         onToggle={id => toggleChecklistItem("todo", id)}
                         onAdd={text => addChecklistItem("todo", text)}
                         onDelete={id => deleteChecklistItem("todo", id)}
                     />
                     <Checklist
-                        title="🧳 隨身行李與打包"
+                        title="隨身行李與打包"
+                        icon={Luggage}
                         items={tripData.packing}
                         onToggle={id => toggleChecklistItem("packing", id)}
                         onAdd={text => addChecklistItem("packing", text)}
@@ -532,7 +592,9 @@ function clearYaml() {
                     />
                 {:else if activeTab === "taxi"}
                     <div class="mb-4">
-                        <h2 class="text-xl font-extrabold text-text-primary tracking-tight">🚕 乘車助手 & 實用常用語</h2>
+                        <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
+                            <Car size={22} class="text-neon-blue" aria-hidden="true" />乘車助手 & 實用常用語
+                        </h2>
                         <p class="text-xs text-text-secondary mt-0.5">出示給司機或快速複製使用</p>
                     </div>
                     <TaxiHelper
@@ -544,10 +606,17 @@ function clearYaml() {
                     />
                 {:else if activeTab === "calc"}
                     <div class="mb-4">
-                        <h2 class="text-xl font-extrabold text-text-primary tracking-tight">💱 匯率與消費記帳</h2>
+                        <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
+                            <Wallet size={22} class="text-neon-blue" aria-hidden="true" />匯率與消費記帳
+                        </h2>
                         <p class="text-xs text-text-secondary mt-0.5">出國換算與儲值餘額管理</p>
                     </div>
-                    <Ledger onToast={triggerToast} />
+                    <Ledger
+                        currency={tripData.trip.currency}
+                        wallets={tripData.trip.wallets}
+                        onAddWallet={addTripWallet}
+                        onToast={triggerToast}
+                    />
                 {/if}
             </div>
         {/if}
@@ -589,12 +658,14 @@ function clearYaml() {
 
     <!-- Global Toast Notification -->
     <div
+        role="status"
+        aria-live="polite"
         class="
-            fixed bottom-[85px] left-1/2 -translate-x-1/2 bg-neon-blue text-black font-bold text-xs py-2.5 px-5 rounded-full z-[2000] shadow-[0_4px_15px_rgba(0,240,255,0.3)] transition-all duration-300 flex items-center gap-1.5
+            fixed bottom-[85px] left-1/2 -translate-x-1/2 bg-neon-blue text-black font-bold text-xs py-2.5 px-5 rounded-full z-[2000] shadow-[0_4px_15px_rgba(0,240,255,0.3)] transition-[opacity,transform] duration-300 flex items-center gap-1.5
             {isToastVisible ? 'opacity-100 translate-y-0 visible' : 'opacity-0 translate-y-5 invisible'}
         "
     >
-        <CheckCircle size={14} class="stroke-[3]" />
+        <CheckCircle size={14} class="stroke-[3]" aria-hidden="true" />
         {toastMessage}
     </div>
 
@@ -609,25 +680,29 @@ function clearYaml() {
         "
     >
         <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="自訂 YAML 行程設定"
+            tabindex="-1"
             onclick={(e => e.stopPropagation())}
             class="
                 bg-[#121422] border border-white/8 rounded-3xl w-full max-w-[420px] p-6 shadow-2xl transition-transform duration-300
-                flex flex-col h-[min(100dvh-2.5rem,720px)]
+                flex flex-col h-[min(100dvh-2.5rem,720px)] overscroll-contain
                 {showSettings ? 'translate-y-0' : 'translate-y-5'}
             "
         >
             <div class="flex justify-between items-center mb-4 shrink-0">
                 <h3 class="text-base font-bold text-text-primary flex items-center gap-1.5">
-                    <Settings size={18} class="text-neon-blue" />
+                    <Settings size={18} class="text-neon-blue" aria-hidden="true" />
                     自訂 YAML 行程設定
                 </h3>
                 <button
                     onclick={attemptCloseSettings}
+                    aria-label="關閉設定"
                     class="text-text-secondary hover:text-text-primary text-2xl cursor-pointer"
                 >
-                    <X size={24} />
+                    <X size={24} aria-hidden="true" />
                 </button>
             </div>
 
@@ -639,31 +714,33 @@ function clearYaml() {
                         <div class="flex items-center gap-2.5">
                             <button
                                 onclick={selectAllYaml}
-                                class="text-[10px] text-text-secondary hover:text-neon-blue flex items-center gap-0.5 cursor-pointer font-medium transition"
+                                class="text-[11px] py-1.5 px-1 -my-1 text-text-secondary hover:text-neon-blue flex items-center gap-0.5 cursor-pointer font-medium transition"
                             >
                                 全選
                             </button>
                             <span class="text-[9px] text-white/10 select-none">|</span>
                             <button
                                 onclick={clearYaml}
-                                class="text-[10px] text-text-secondary hover:text-neon-pink flex items-center gap-0.5 cursor-pointer font-medium transition"
+                                class="text-[11px] py-1.5 px-1 -my-1 text-text-secondary hover:text-neon-pink flex items-center gap-0.5 cursor-pointer font-medium transition"
                             >
                                 清空
                             </button>
                             <span class="text-[9px] text-white/10 select-none">|</span>
                             <button
                                 onclick={() => handleCopy(yamlInput, "已複製編輯器中的 YAML")}
-                                class="text-[10px] text-text-secondary hover:text-neon-blue flex items-center gap-1 cursor-pointer font-medium transition"
+                                class="text-[11px] py-1.5 px-1 -my-1 text-text-secondary hover:text-neon-blue flex items-center gap-1 cursor-pointer font-medium transition"
                             >
-                                <Copy size={10} /> 複製
+                                <Copy size={12} aria-hidden="true" /> 複製
                             </button>
                         </div>
                     </div>
                     <textarea
                         id="yaml-editor"
                         bind:value={yamlInput}
-                        placeholder="貼上你的 YAML 行程，或直接貼上分享連結..."
-                        class="w-full flex-1 min-h-[160px] bg-black/40 border border-card-border rounded-xl p-3 text-[11px] text-text-primary font-mono outline-none focus:border-neon-blue resize-none overflow-y-auto"
+                        spellcheck="false"
+                        autocapitalize="off"
+                        placeholder="貼上你的 YAML 行程，或直接貼上分享連結…"
+                        class="w-full flex-1 min-h-[160px] bg-black/40 border border-card-border rounded-xl p-3 text-[11px] text-text-primary font-mono outline-none focus:border-neon-blue resize-none overflow-y-auto overscroll-contain"
                     ></textarea>
                 </div>
 
@@ -681,7 +758,7 @@ function clearYaml() {
                         <li>清空並儲存會還原為預設的 <a href="./itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-neon-blue underline hover:text-white transition">itinerary.yaml</a>。</li>
                         <li>
                             可用此指令安裝行程小幫手 Skill：
-                            <div class="bg-black/60 border border-white/5 rounded px-2 py-1 mt-1 font-mono text-[9px] select-all break-all text-text-primary">
+                            <div class="bg-black/60 border border-white/5 rounded px-2 py-1 mt-1 font-mono text-[10px] select-all break-all text-text-primary">
                                 npx skills add https://github.com/hsin19/show-me-way --skill itinerary-yaml-builder
                             </div>
                         </li>
@@ -693,7 +770,7 @@ function clearYaml() {
                 onclick={generateShareLink}
                 class="shrink-0 w-full mt-3 bg-white/3 border border-neon-blue/30 text-neon-blue font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-neon-blue/10 transition active:scale-[0.98] cursor-pointer"
             >
-                <Share2 size={14} /> 產生並複製分享連結
+                <Share2 size={14} aria-hidden="true" /> 產生並複製分享連結
             </button>
 
             <div class="grid grid-cols-2 gap-2 mt-3 shrink-0">

@@ -1,8 +1,10 @@
 <script lang="ts">
 import {
+    BedDouble,
     Calendar,
     Copy,
     Maximize2,
+    MessageSquareText,
     X,
 } from "@lucide/svelte";
 import { onMount } from "svelte";
@@ -68,15 +70,15 @@ function formatShortDate(dateStr: string): string {
                     <div class="flex items-center gap-2 flex-wrap">
                         <span class="text-sm font-bold text-text-primary block">{hotel.name}</span>
                         {#if isCurrentStay(hotel)}
-                            <span class="text-[9px] bg-neon-blue/15 text-neon-blue font-extrabold px-1.5 py-0.5 rounded border border-neon-blue/30 animate-pulse">
-                                🏨 當前入住
+                            <span class="inline-flex items-center gap-1 text-[10px] bg-neon-blue/15 text-neon-blue font-extrabold px-1.5 py-0.5 rounded border border-neon-blue/30 animate-pulse">
+                                <BedDouble size={11} aria-hidden="true" /> 當前入住
                             </span>
                         {/if}
                     </div>
 
                     <!-- Date duration display -->
                     <div class="flex items-center gap-1 text-[10px] text-text-secondary">
-                        <Calendar size={10} />
+                        <Calendar size={10} aria-hidden="true" />
                         <span>{formatShortDate(hotel.checkIn)} 入房 – {formatShortDate(hotel.checkOut)} 退房</span>
                     </div>
                     <span class="text-xs text-text-secondary block pt-1">{hotel.station}</span>
@@ -84,10 +86,11 @@ function formatShortDate(dateStr: string): string {
 
                 <button
                     onclick={() => onCopy(`${hotel.name}\n${hotel.address}`, "已複製飯店地址資訊")}
-                    class="p-2 text-text-secondary border border-card-border rounded-lg transition hover:bg-white/5 hover:text-text-primary cursor-pointer flex-shrink-0"
+                    class="min-w-[44px] min-h-[44px] flex items-center justify-center text-text-secondary border border-card-border rounded-lg transition hover:bg-white/5 hover:text-text-primary cursor-pointer flex-shrink-0"
+                    aria-label="複製地址"
                     title="複製地址"
                 >
-                    <Copy size={14} />
+                    <Copy size={14} aria-hidden="true" />
                 </button>
             </div>
 
@@ -99,7 +102,7 @@ function formatShortDate(dateStr: string): string {
                 onclick={() => openFullscreen(hotel)}
                 class="w-full bg-gradient-to-r from-neon-blue to-neon-purple text-black font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition active:scale-[0.98] cursor-pointer shadow-[0_0_10px_rgba(0,240,255,0.15)]"
             >
-                <Maximize2 size={12} />
+                <Maximize2 size={12} aria-hidden="true" />
                 全螢幕放大給司機看
             </button>
         </div>
@@ -109,13 +112,15 @@ function formatShortDate(dateStr: string): string {
 <!-- Survival phrase deck (hidden when the trip language has no built-in set) -->
 {#if phrases.length > 0}
     <div class="mt-6">
-        <h3 class="text-base font-bold text-text-primary mb-4">💬 實用常用語</h3>
+        <h3 class="text-base font-bold text-text-primary mb-4 flex items-center gap-2">
+            <MessageSquareText size={18} class="text-neon-blue" aria-hidden="true" />實用常用語
+        </h3>
         <div class="grid grid-cols-1 gap-3">
             {#each phrases as p (p.zh)}
                 <button
                     type="button"
                     onclick={() => onCopy(p.text, `已複製：${p.text} (${p.zh})`)}
-                    class="bg-card-bg border border-card-border rounded-xl p-3.5 flex justify-between items-center w-full text-left cursor-pointer transition-all duration-200 active:scale-[0.98] hover:bg-white/5 group"
+                    class="bg-card-bg border border-card-border rounded-xl p-3.5 flex justify-between items-center w-full text-left cursor-pointer transition duration-200 active:scale-[0.98] hover:bg-white/5 group"
                 >
                     <div class="flex flex-col gap-1">
                         <span class="text-sm font-bold text-text-primary group-hover:text-neon-blue transition-colors">{p.zh}</span>
@@ -123,7 +128,7 @@ function formatShortDate(dateStr: string): string {
                         <span class="text-[10px] text-text-secondary italic">{p.rom}</span>
                     </div>
                     <div class="text-text-muted group-hover:text-text-primary transition-colors">
-                        <Copy size={14} />
+                        <Copy size={14} aria-hidden="true" />
                     </div>
                 </button>
             {/each}
@@ -145,11 +150,14 @@ function formatShortDate(dateStr: string): string {
 >
     {#if selectedHotel}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={driverPrompt}
+            tabindex="-1"
             onclick={(e => e.stopPropagation())}
             class="
-                bg-[#121422] border border-white/8 rounded-3xl w-full max-w-[400px] p-6 shadow-2xl transition-transform duration-300
+                bg-[#121422] border border-white/8 rounded-3xl w-full max-w-[400px] p-6 shadow-2xl transition-transform duration-300 overscroll-contain
                 {showFullscreen ? 'translate-y-0' : 'translate-y-5'}
             "
         >
@@ -157,9 +165,10 @@ function formatShortDate(dateStr: string): string {
                 <h3 class="text-sm text-text-secondary">{driverPrompt}</h3>
                 <button
                     onclick={closeFullscreen}
+                    aria-label="關閉"
                     class="text-text-secondary hover:text-text-primary text-2xl cursor-pointer"
                 >
-                    <X size={24} />
+                    <X size={24} aria-hidden="true" />
                 </button>
             </div>
 

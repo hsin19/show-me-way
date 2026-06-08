@@ -41,6 +41,8 @@
 :root {
     --safe-bottom: env(safe-area-inset-bottom, 0px);
     --safe-top: env(safe-area-inset-top, 0px);
+    /* Dark theme hint so native UI (scrollbars, number/date inputs, form controls) renders dark */
+    color-scheme: dark;
 }
 
 body {
@@ -52,6 +54,8 @@ body {
     min-height: -webkit-fill-available;
     overflow-x: hidden;
     line-height: 1.5;
+    /* Remove the 300ms tap delay now that pinch-zoom is enabled */
+    touch-action: manipulation;
 }
 
 /* Glassmorphism Common Utilities */
@@ -89,4 +93,23 @@ body {
 .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+}
+
+/* Visible keyboard focus for interactive elements (low specificity so components can override) */
+:where(a, button, input, select, textarea, [role="button"], [role="checkbox"], [tabindex]):focus-visible {
+    outline: 2px solid var(--color-neon-blue);
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+
+/* Respect users who prefer reduced motion: disable non-essential animations/transitions */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }

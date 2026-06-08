@@ -1,10 +1,13 @@
 <script lang="ts">
 import {
     ArrowLeftRight,
+    Calculator,
     Plus,
     Trash2,
+    Wallet,
 } from "@lucide/svelte";
 import { onMount } from "svelte";
+import { loadExchangeRates } from "../exchange";
 
 interface ExpenseItem {
     id: string;
@@ -15,21 +18,90 @@ interface ExpenseItem {
 }
 
 interface Props {
+    currency?: string;
+    wallets?: string[];
+    onAddWallet?: (name: string) => void;
     onToast: (msg: string) => void;
 }
 
-let { onToast }: Props = $props();
+let { currency, wallets = [], onAddWallet, onToast }: Props = $props();
+
+// Resolve active currency code, defaulting directly to TWD if not specified
+const activeCurrency = $derived.by(() => {
+    if (currency) return currency.toUpperCase();
+    return "TWD";
+});
+
+// Resolve default wallets based on active currency
+const defaultWallets = $derived.by(() => {
+    switch (activeCurrency) {
+        case "JPY":
+            return ["Suica"];
+        case "KRW":
+            return ["WOWPASS", "T-money"];
+        case "TWD":
+            return ["信用卡"];
+        default:
+            return [];
+    }
+});
+
+// Final wallets list is the combination of prop wallets or defaults
+const activeWallets = $derived(wallets.length > 0 ? wallets : defaultWallets);
+
+// Localized config based on active currency
+const localConfig = $derived.by(() => {
+    const code = activeCurrency;
+    switch (code) {
+        case "JPY":
+            return {
+                currencyCode: "JPY",
+                currencyName: "日圓",
+                currencySymbol: "¥",
+                defaultRate: 4.5,
+            };
+        case "KRW":
+            return {
+                currencyCode: "KRW",
+                currencyName: "韓元",
+                currencySymbol: "₩",
+                defaultRate: 42.5,
+            };
+        case "TWD":
+            return {
+                currencyCode: "TWD",
+                currencyName: "台幣",
+                currencySymbol: "NT$",
+                defaultRate: 1.0,
+            };
+        case "USD":
+            return {
+                currencyCode: "USD",
+                currencyName: "美元",
+                currencySymbol: "$",
+                defaultRate: 30.0,
+            };
+        default:
+            return {
+                currencyCode: code,
+                currencyName: code,
+                currencySymbol: "$",
+                defaultRate: 1.0,
+            };
+    }
+});
 
 // Currency States
-let exchangeRate = $state(42.5);
-let krwValue = $state("10000");
+let exchangeRate = $state(1.0);
+let foreignValue = $state("1000");
 let twdValue = $state("");
 
 // Ledger States
 let expenseHistory = $state<ExpenseItem[]>([]);
 let expenseName = $state("");
 let expenseAmount = $state("");
-let expenseType = $state("WOWPASS");
+let expenseType = $state("Cash");
+let newWalletName = $state("");
 
 // Derived values
 let totalDeposited = $derived(
@@ -44,13 +116,31 @@ let totalSpent = $derived(
 );
 let balance = $derived(totalDeposited - totalSpent);
 
-onMount(() => {
-    // Load exchange rate
-    const savedRate = localStorage.getItem("exchange_rate");
-    if (savedRate) {
-        exchangeRate = parseFloat(savedRate);
+// Dynamically compute quickAmounts based on TWD values and exchange rate
+const quickAmounts = $derived.by(() => {
+    if (activeCurrency === "TWD" || exchangeRate <= 0) {
+        return [100, 200, 500, 1000, 2000, 5000];
     }
+    const rawAmounts = [50, 100, 250, 500, 1000, 2000].map(twd => twd * exchangeRate);
+    const rounded = rawAmounts.map(val => {
+        if (val < 1) return parseFloat(val.toFixed(1));
+        if (val < 5) return Math.round(val);
+        if (val < 50) return Math.round(val / 5) * 5;
+        if (val < 100) return Math.round(val / 10) * 10;
+        if (val < 1000) return Math.round(val / 50) * 50;
+        if (val < 10000) return Math.round(val / 500) * 500;
+        return Math.round(val / 5000) * 5000;
+    });
+    return [...new Set(rounded)];
+});
 
+function formatQuickAmount(amount: number): string {
+    const symbol = localConfig.currencySymbol;
+    if (activeCurrency === "TWD") return `$${amount}`;
+    return `${symbol}${amount.toLocaleString()}`;
+}
+
+onMount(() => {
     // Load ledger (start empty; user adds their own deposits/expenses)
     try {
         const savedExpenses = localStorage.getItem("ledger_expenses");
@@ -60,9 +150,59 @@ onMount(() => {
     } catch {
         expenseHistory = [];
     }
+});
 
-    // Run initial conversion
-    convert("krw");
+// Sync default expenseType when activeWallets changes
+$effect(() => {
+    if (activeWallets.length > 0) {
+        if (!activeWallets.includes(expenseType) && !expenseType.startsWith("Deposit-") && expenseType !== "Cash") {
+            expenseType = activeWallets[0];
+        }
+    } else {
+        expenseType = "Cash";
+    }
+});
+
+// Keep exchange rate and initial values updated when activeCurrency changes
+let lastCurrency = "";
+$effect(() => {
+    const rateKey = `exchange_rate_${activeCurrency}`;
+    const savedRate = localStorage.getItem(rateKey);
+    if (savedRate) {
+        exchangeRate = parseFloat(savedRate);
+    } else {
+        exchangeRate = activeCurrency === "TWD" ? 1.0 : 0.0;
+    }
+
+    if (activeCurrency !== lastCurrency) {
+        foreignValue = activeCurrency === "TWD" ? "1000" : (exchangeRate > 0 ? Math.round(100 * exchangeRate).toString() : "100");
+        lastCurrency = activeCurrency;
+    }
+    convert("foreign");
+
+    // Fetch live rate from network/cache (TWD as base currency)
+    if (activeCurrency !== "TWD") {
+        loadExchangeRates("TWD", data => {
+            const targetCode = activeCurrency.toLowerCase();
+            const ratesRecord = data["twd"] as Record<string, number> | undefined;
+            const rate = ratesRecord?.[targetCode];
+            if (rate && typeof rate === "number") {
+                const prevRate = exchangeRate;
+                exchangeRate = parseFloat(rate.toFixed(4));
+                localStorage.setItem(rateKey, exchangeRate.toString());
+                // If the previous rate was unset, reinitialize the default input value
+                if (prevRate === 0 && foreignValue === "100") {
+                    foreignValue = Math.round(100 * exchangeRate).toString();
+                    convert("foreign");
+                } else {
+                    convert("rate");
+                }
+            }
+        });
+    } else {
+        exchangeRate = 1.0;
+        convert("rate");
+    }
 });
 
 function saveLedger() {
@@ -70,29 +210,28 @@ function saveLedger() {
 }
 
 // Currency Conversion
-function convert(source: "krw" | "twd" | "rate") {
-    // Only persist the rate when it actually changes, not on every amount keystroke.
+function convert(source: "foreign" | "twd" | "rate") {
     if (source === "rate") {
-        localStorage.setItem("exchange_rate", exchangeRate.toString());
+        localStorage.setItem(`exchange_rate_${activeCurrency}`, exchangeRate.toString());
     }
 
-    if (source === "krw" || source === "rate") {
-        const krw = parseFloat(krwValue) || 0;
-        twdValue = Math.round(krw / exchangeRate).toString();
+    if (source === "foreign" || source === "rate") {
+        const foreign = parseFloat(foreignValue) || 0;
+        twdValue = Math.round(foreign / exchangeRate).toString();
     } else {
         const twd = parseFloat(twdValue) || 0;
-        krwValue = Math.round(twd * exchangeRate).toString();
+        foreignValue = Math.round(twd * exchangeRate).toString();
     }
 }
 
-function setQuickKRW(amount: number) {
-    krwValue = amount.toString();
-    convert("krw");
+function setQuickForeign(amount: number) {
+    foreignValue = amount.toString();
+    convert("foreign");
 }
 
 function swapCurrency() {
-    const temp = krwValue;
-    krwValue = twdValue;
+    const temp = foreignValue;
+    foreignValue = twdValue;
     twdValue = temp;
     onToast("已切換數值");
 }
@@ -107,7 +246,6 @@ function addExpense() {
         return;
     }
 
-    // Type comes directly from the dropdown (expense vs. deposit chosen explicitly)
     const newItem: ExpenseItem = {
         id: Date.now().toString(),
         name,
@@ -119,7 +257,6 @@ function addExpense() {
     expenseHistory = [newItem, ...expenseHistory];
     saveLedger();
 
-    // Clear Inputs
     expenseName = "";
     expenseAmount = "";
     onToast("記帳成功");
@@ -138,73 +275,103 @@ function resetBudget() {
         onToast("已全部重置");
     }
 }
+
+function handleAddWallet() {
+    const name = newWalletName.trim();
+    if (!name) return;
+    if (activeWallets.includes(name) || name === "Cash") {
+        onToast("錢包或卡片名稱已存在");
+        return;
+    }
+    if (onAddWallet) {
+        onAddWallet(name);
+        newWalletName = "";
+        onToast(`已新增錢包：${name}`);
+        // Auto select the newly added wallet
+        expenseType = name;
+    } else {
+        onToast("無法在目前行程儲存自訂錢包");
+    }
+}
 </script>
 
 <!-- Currency Converter -->
 <div class="glass-panel rounded-2xl p-5 mb-5">
-    <h3 class="text-base font-bold text-text-primary mb-4">💰 韓元/台幣 雙向換算</h3>
+    <h3 class="text-base font-bold text-text-primary mb-4 flex items-center gap-2">
+        <Calculator size={18} class="text-neon-blue" aria-hidden="true" />
+        {activeCurrency === "TWD" ? "台幣計算機" : `${localConfig.currencyName}/台幣 雙向換算`}
+    </h3>
     <div class="flex flex-col gap-4">
         <div class="flex flex-col gap-1.5">
-            <label for="krw-input" class="text-xs font-semibold text-text-secondary">KRW 韓元 ₩</label>
+            <label for="foreign-input" class="text-xs font-semibold text-text-secondary">{localConfig.currencyCode} {localConfig.currencyName} {localConfig.currencySymbol}</label>
             <div class="relative flex items-center">
                 <input
                     type="number"
-                    id="krw-input"
-                    bind:value={krwValue}
-                    oninput={() => convert("krw")}
-                    placeholder="輸入韓元"
+                    inputmode="decimal"
+                    id="foreign-input"
+                    bind:value={foreignValue}
+                    oninput={() => convert("foreign")}
+                    placeholder="輸入{localConfig.currencyName}"
                     class="w-full bg-black/25 border border-card-border rounded-xl py-3 pl-4 pr-10 text-text-primary font-bold text-base outline-none focus:border-neon-blue transition"
                 >
-                <span class="absolute right-4 font-bold text-text-secondary">₩</span>
+                <span class="absolute right-4 font-bold text-text-secondary">{localConfig.currencySymbol}</span>
             </div>
         </div>
 
-        <div class="flex justify-center -my-1">
-            <button
-                onclick={swapCurrency}
-                class="w-9 h-9 rounded-full bg-white/5 border border-card-border flex items-center justify-center text-text-primary hover:bg-neon-blue hover:text-black cursor-pointer transition active:scale-90"
-            >
-                <ArrowLeftRight size={16} />
-            </button>
-        </div>
-
-        <div class="flex flex-col gap-1.5">
-            <label for="twd-input" class="text-xs font-semibold text-text-secondary">TWD 台幣 NT$</label>
-            <div class="relative flex items-center">
-                <input
-                    type="number"
-                    id="twd-input"
-                    bind:value={twdValue}
-                    oninput={() => convert("twd")}
-                    placeholder="輸入台幣"
-                    class="w-full bg-black/25 border border-card-border rounded-xl py-3 pl-4 pr-10 text-text-primary font-bold text-base outline-none focus:border-neon-blue transition"
+        {#if activeCurrency !== "TWD"}
+            <div class="flex justify-center -my-1">
+                <button
+                    onclick={swapCurrency}
+                    aria-label="互換上下金額"
+                    class="w-9 h-9 rounded-full bg-white/5 border border-card-border flex items-center justify-center text-text-primary hover:bg-neon-blue hover:text-black cursor-pointer transition active:scale-90"
                 >
-                <span class="absolute right-4 font-bold text-text-secondary">$</span>
+                    <ArrowLeftRight size={16} aria-hidden="true" />
+                </button>
             </div>
-        </div>
+
+            <div class="flex flex-col gap-1.5">
+                <label for="twd-input" class="text-xs font-semibold text-text-secondary">TWD 台幣 NT$</label>
+                <div class="relative flex items-center">
+                    <input
+                        type="number"
+                        inputmode="decimal"
+                        id="twd-input"
+                        bind:value={twdValue}
+                        oninput={() => convert("twd")}
+                        placeholder="輸入台幣"
+                        class="w-full bg-black/25 border border-card-border rounded-xl py-3 pl-4 pr-10 text-text-primary font-bold text-base outline-none focus:border-neon-blue transition"
+                    >
+                    <span class="absolute right-4 font-bold text-text-secondary">$</span>
+                </div>
+            </div>
+        {/if}
     </div>
 
     <!-- Exchange Rate Setting -->
-    <div class="flex items-center justify-end gap-2 text-[11px] text-text-muted mt-4">
-        <span>匯率設定：1 TWD = </span>
-        <input
-            type="number"
-            bind:value={exchangeRate}
-            oninput={() => convert("rate")}
-            step="0.1"
-            class="w-14 bg-transparent border-0 border-b border-dashed border-text-muted text-center text-text-secondary font-bold outline-none"
-        >
-        <span>KRW</span>
-    </div>
+    {#if activeCurrency !== "TWD"}
+        <div class="flex items-center justify-end gap-2 text-[11px] text-text-muted mt-4">
+            <span>匯率設定：1 TWD = </span>
+            <input
+                type="number"
+                inputmode="decimal"
+                aria-label="匯率（1 TWD 兌換 {localConfig.currencyCode}）"
+                bind:value={exchangeRate}
+                oninput={() => convert("rate")}
+                step="0.0001"
+                class="w-20 bg-transparent border-0 border-b border-dashed border-text-muted text-center text-text-secondary font-bold outline-none"
+            >
+            <span>{localConfig.currencyCode}</span>
+        </div>
+    {/if}
 
     <!-- Quick Buttons -->
     <div class="flex flex-wrap gap-1.5 mt-3">
-        {#each [1000, 5000, 10000, 30000, 50000, 100000] as amount (amount)}
+        {#each quickAmounts as amount (amount)}
             <button
-                onclick={() => setQuickKRW(amount)}
+                onclick={() => setQuickForeign(amount)}
                 class="bg-white/3 border border-card-border text-text-secondary py-1.5 px-3 rounded-lg text-xs font-semibold hover:bg-neon-blue hover:text-black transition cursor-pointer"
             >
-                {amount / 1000}k ₩
+                {formatQuickAmount(amount)}
             </button>
         {/each}
     </div>
@@ -213,23 +380,25 @@ function resetBudget() {
 <!-- Ledger Management -->
 <div class="glass-panel rounded-2xl p-5 mb-5">
     <div class="flex justify-between items-center mb-4">
-        <h3 class="text-base font-bold text-text-primary">💳 WOWPASS & 現金記帳</h3>
+        <h3 class="text-base font-bold text-text-primary flex items-center gap-2">
+            <Wallet size={18} class="text-neon-blue" aria-hidden="true" />記帳與餘額管理
+        </h3>
         <button onclick={resetBudget} class="text-xs text-text-muted hover:text-neon-pink font-semibold cursor-pointer">重設</button>
     </div>
 
     <!-- Stats Dashboard -->
     <div class="grid grid-cols-3 gap-2 mb-5">
         <div class="bg-black/20 border border-white/2 rounded-xl p-2.5 flex flex-col items-center gap-0.5">
-            <span class="text-[9px] text-text-secondary font-medium">儲值總額</span>
-            <span class="text-xs font-extrabold text-accent-green">₩{totalDeposited.toLocaleString()}</span>
+            <span class="text-[11px] text-text-secondary font-medium">儲值總額</span>
+            <span class="text-xs font-extrabold text-accent-green tabular-nums">{localConfig.currencySymbol}{totalDeposited.toLocaleString()}</span>
         </div>
         <div class="bg-black/20 border border-white/2 rounded-xl p-2.5 flex flex-col items-center gap-0.5">
-            <span class="text-[9px] text-text-secondary font-medium">已花費</span>
-            <span class="text-xs font-extrabold text-neon-pink">₩{totalSpent.toLocaleString()}</span>
+            <span class="text-[11px] text-text-secondary font-medium">已花費</span>
+            <span class="text-xs font-extrabold text-neon-pink tabular-nums">{localConfig.currencySymbol}{totalSpent.toLocaleString()}</span>
         </div>
         <div class="bg-black/20 border border-white/2 rounded-xl p-2.5 flex flex-col items-center gap-0.5">
-            <span class="text-[9px] text-text-secondary font-medium">剩餘餘額</span>
-            <span class="text-xs font-extrabold text-neon-blue">₩{balance.toLocaleString()}</span>
+            <span class="text-[11px] text-text-secondary font-medium">剩餘餘額</span>
+            <span class="text-xs font-extrabold text-neon-blue tabular-nums">{localConfig.currencySymbol}{balance.toLocaleString()}</span>
         </div>
     </div>
 
@@ -238,33 +407,62 @@ function resetBudget() {
         <input
             type="text"
             bind:value={expenseName}
-            placeholder="項目 (如: 雪濃湯)"
+            aria-label="消費項目名稱"
+            autocomplete="off"
+            placeholder="項目 (如: {activeCurrency === 'TWD' ? '午餐' : '拉麵'})"
             class="col-span-3 bg-black/25 border border-card-border rounded-xl p-2.5 text-xs text-text-primary font-semibold outline-none focus:border-neon-blue"
         >
         <input
             type="number"
+            inputmode="numeric"
             bind:value={expenseAmount}
-            placeholder="金額 (₩)"
+            aria-label="金額"
+            placeholder="金額 ({localConfig.currencySymbol})"
             class="col-span-2 bg-black/25 border border-card-border rounded-xl p-2.5 text-xs text-text-primary font-semibold outline-none focus:border-neon-blue"
         >
         <select
             bind:value={expenseType}
+            aria-label="支付方式"
             class="bg-black/25 border border-card-border rounded-xl p-2.5 text-xs text-text-primary font-semibold outline-none cursor-pointer"
         >
             <optgroup label="支出">
-                <option value="WOWPASS">WOWPASS 支出 💳</option>
+                {#each activeWallets as wallet (wallet)}
+                    <option value={wallet}>{wallet} 支出 💳</option>
+                {/each}
                 <option value="Cash">現金 支出 💵</option>
             </optgroup>
             <optgroup label="儲值 / 兌換">
-                <option value="Deposit-WOWPASS">WOWPASS 加值 ＋</option>
+                {#each activeWallets as wallet (wallet)}
+                    <option value="Deposit-{wallet}">{wallet} 加值 ＋</option>
+                {/each}
                 <option value="Deposit-Cash">現金 兌換 ＋</option>
             </optgroup>
         </select>
+
+        <!-- Add Custom Wallet Sub-row -->
+        <div class="col-span-3 flex items-center gap-1.5 mt-1">
+            <input
+                type="text"
+                bind:value={newWalletName}
+                aria-label="新增自訂卡片或錢包名稱"
+                autocomplete="off"
+                placeholder="新增自訂卡片/錢包 (如: ICOCA, 悠遊卡)"
+                class="flex-1 bg-black/40 border border-card-border rounded-xl px-3 py-1.5 text-[11px] text-text-primary outline-none focus:border-neon-blue transition"
+            >
+            <button
+                type="button"
+                onclick={handleAddWallet}
+                class="bg-white/5 border border-card-border text-text-secondary hover:bg-neon-blue hover:text-black font-bold py-1.5 px-3 rounded-xl text-[10px] transition active:scale-[0.96] cursor-pointer"
+            >
+                新增
+            </button>
+        </div>
+
         <button
             onclick={addExpense}
-            class="col-span-3 bg-gradient-to-r from-neon-blue to-neon-purple text-black font-extrabold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1 transition active:scale-[0.98] cursor-pointer shadow-[0_0_15px_rgba(0,240,255,0.2)]"
+            class="col-span-3 bg-gradient-to-r from-neon-blue to-neon-purple text-black font-extrabold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1 transition active:scale-[0.98] cursor-pointer shadow-[0_0_15px_rgba(0,240,255,0.2)] mt-2"
         >
-            <Plus size={14} class="stroke-[3]" />
+            <Plus size={14} class="stroke-[3]" aria-hidden="true" />
             記一筆
         </button>
     </div>
@@ -277,24 +475,25 @@ function resetBudget() {
                 <li class="flex justify-between items-center text-xs py-2 border-b border-white/3 last:border-0">
                     <div class="flex flex-col">
                         <span class="font-bold text-text-primary">{item.name}</span>
-                        <span class="text-[9px] text-text-muted">
+                        <span class="text-[10px] text-text-muted">
                             {
                                 item.type.startsWith("Deposit")
-                                ? (item.type.includes("WOWPASS") ? "💳 WOWPASS 加值" : "💵 現金兌換")
-                                : (item.type === "WOWPASS" ? "💳 WOWPASS 支付" : "💵 現金支付")
+                                ? (item.type === "Deposit-Cash" ? "💵 現金兌換" : `💳 ${item.type.replace("Deposit-", "")} 加值`)
+                                : (item.type === "Cash" ? "💵 現金支付" : `💳 ${item.type} 支付`)
                             }
                         </span>
                     </div>
                     <div class="flex items-center gap-3">
-                        <span class="font-bold {item.type.startsWith('Deposit') ? 'text-accent-green' : 'text-text-primary'}">
-                            {item.type.startsWith("Deposit") ? "+" : "-"}₩{item.amount.toLocaleString()}
+                        <span class="font-bold tabular-nums {item.type.startsWith('Deposit') ? 'text-accent-green' : 'text-text-primary'}">
+                            {item.type.startsWith("Deposit") ? "+" : "-"}{localConfig.currencySymbol}{item.amount.toLocaleString()}
                         </span>
                         <button
                             onclick={() => deleteExpense(item.id)}
-                            class="text-text-muted hover:text-neon-pink cursor-pointer transition"
+                            class="text-text-muted hover:text-neon-pink cursor-pointer transition min-w-[44px] min-h-[44px] -my-2 flex items-center justify-center"
+                            aria-label="刪除紀錄"
                             title="刪除"
                         >
-                            <Trash2 size={12} />
+                            <Trash2 size={14} aria-hidden="true" />
                         </button>
                     </div>
                 </li>

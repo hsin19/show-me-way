@@ -1,7 +1,13 @@
 <script lang="ts">
 import {
+    BedDouble,
+    CalendarCheck,
+    ClipboardList,
     Copy,
+    Flame,
+    Footprints,
     MapPin,
+    Zap,
 } from "@lucide/svelte";
 import type { DayItinerary } from "../api";
 import type { HotelInfo } from "../api";
@@ -35,15 +41,16 @@ const hotelText = $derived.by(() => {
             {dayData.region}
         </span>
     </div>
-    <p class="text-sm text-text-secondary leading-relaxed">
-        ⚡️ <strong class="text-text-primary">今日節奏：</strong>{dayData.pace}
+    <p class="text-sm text-text-secondary leading-relaxed flex items-start gap-1.5">
+        <Zap size={15} class="text-neon-orange shrink-0 mt-0.5" aria-hidden="true" />
+        <span><strong class="text-text-primary">今日節奏：</strong>{dayData.pace}</span>
     </p>
     <div class="flex gap-4 mt-4 pt-4 border-t border-white/5">
         <div class="flex items-center gap-1.5 text-xs text-text-secondary">
-            <span>🏃‍♂️</span> {transportText}
+            <Footprints size={14} class="shrink-0" aria-hidden="true" /> {transportText}
         </div>
         <div class="flex items-center gap-1.5 text-xs text-text-secondary">
-            <span>🏨</span> {hotelText}
+            <BedDouble size={14} class="shrink-0" aria-hidden="true" /> {hotelText}
         </div>
     </div>
 </div>
@@ -55,7 +62,7 @@ const hotelText = $derived.by(() => {
             <!-- Timeline Node Badge -->
             <div
                 class="
-                    absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 z-10 transition-all duration-300
+                    absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 z-10 transition duration-300
                     {event.type === 'booked' ? 'border-neon-orange shadow-[0_0_7px_rgba(255,123,0,0.6)]' : ''}
                     {event.type === 'must-go' ? 'border-neon-pink shadow-[0_0_7px_rgba(255,42,116,0.6)]' : ''}
                     {event.type === 'option' ? 'border-neon-purple' : ''}
@@ -79,11 +86,11 @@ const hotelText = $derived.by(() => {
                         {event.time}
                     </span>
                     {#if event.type === "booked"}
-                        <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-orange/15 text-neon-orange border border-neon-orange/30"><span class="text-[11px] leading-none">📅</span>預訂</span>
+                        <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-orange/15 text-neon-orange border border-neon-orange/30"><CalendarCheck size={11} aria-hidden="true" />預訂</span>
                     {:else if event.type === "must-go"}
-                        <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-pink/15 text-neon-pink border border-neon-pink/30"><span class="text-[11px] leading-none">🔥</span>必訪</span>
+                        <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-pink/15 text-neon-pink border border-neon-pink/30"><Flame size={11} aria-hidden="true" />必訪</span>
                     {:else if event.type === "option"}
-                        <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-purple/15 text-neon-purple border border-neon-purple/30"><span class="text-[11px] leading-none">📝</span>備選</span>
+                        <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-purple/15 text-neon-purple border border-neon-purple/30"><ClipboardList size={11} aria-hidden="true" />備選</span>
                     {/if}
                 </div>
 
@@ -107,17 +114,18 @@ const hotelText = $derived.by(() => {
                             href="https://map.naver.com/p/search/{encodeURIComponent(event.naverSearch)}"
                             target="_blank"
                             rel="noopener noreferrer"
-                            class="flex items-center gap-1.5 bg-neon-blue/10 border border-neon-blue/20 text-neon-blue text-[11px] font-bold px-3 py-1.5 rounded-lg transition-all duration-300 hover:bg-neon-blue hover:text-black hover:shadow-[0_0_15px_rgba(0,240,255,0.25)]"
+                            class="flex items-center gap-1.5 bg-neon-blue/10 border border-neon-blue/20 text-neon-blue text-[11px] font-bold px-3 py-1.5 rounded-lg transition duration-300 hover:bg-neon-blue hover:text-black hover:shadow-[0_0_15px_rgba(0,240,255,0.25)]"
                         >
-                            <MapPin size={12} />
+                            <MapPin size={12} aria-hidden="true" />
                             NAVER 地圖搜尋
                         </a>
                         <button
                             onclick={() => onCopy(event.naverSearch || "", "已複製韓文名稱，可貼到 Naver Map")}
-                            class="p-2 border border-card-border text-text-secondary rounded-lg transition-all hover:bg-white/5 hover:text-text-primary cursor-pointer"
+                            class="min-w-[44px] min-h-[44px] flex items-center justify-center border border-card-border text-text-secondary rounded-lg transition-colors hover:bg-white/5 hover:text-text-primary cursor-pointer"
+                            aria-label="複製韓文名稱"
                             title="複製韓文名稱"
                         >
-                            <Copy size={12} />
+                            <Copy size={14} aria-hidden="true" />
                         </button>
                     </div>
                 {/if}

@@ -49,6 +49,10 @@ export interface TripData {
         departure: string; // ISO date-time string, e.g., 2026-06-11T14:00:00+08:00
         /** Language code (e.g. 'ko', 'ja', 'en') selecting the built-in phrase set. */
         lang?: string;
+        /** Currency code (e.g. 'KRW', 'JPY', 'USD') for the ledger. */
+        currency?: string;
+        /** Customized wallets/cards (e.g. 'Suica', 'WOWPASS') for the ledger. */
+        wallets?: string[];
         hotels: HotelInfo[];
     };
     todo: ChecklistItem[];

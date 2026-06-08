@@ -17,9 +17,9 @@ export default defineConfig({
                 config: true,
             },
             manifest: {
-                name: "ShowMeWay 行程小助手 🧭",
-                short_name: "ShowMeWay",
-                description: "下面一位！旅行行程規劃與 PWA 隨身小助手",
+                name: "下面一way 行程小助手",
+                short_name: "下面一way",
+                description: "下面一way！你的旅行行程離線隨身小助手",
                 background_color: "#0a0b10",
                 theme_color: "#0a0b10",
                 display: "standalone",

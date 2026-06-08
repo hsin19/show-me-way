@@ -73,6 +73,6 @@
   <path d="M 340 240 Q 365 225 390 240 Q 405 225 420 240 L 340 240 Z" fill="#ffffff" opacity="0.1"/>
 
   <!-- Decorative text (Korean representation) -->
-  <text x="256" y="445" font-family="'Plus Jakarta Sans', sans-serif" font-size="34" font-weight="800" fill="#ffffff" text-anchor="middle" letter-spacing="8">🧭 SHOWMEWAY</text>
-  <text x="256" y="480" font-family="'Noto Sans TC', sans-serif" font-size="16" font-weight="600" fill="url(#neonBlue)" text-anchor="middle" letter-spacing="4">下面一位</text>
+  <text x="256" y="445" font-family="'Plus Jakarta Sans', sans-serif" font-size="34" font-weight="800" fill="#ffffff" text-anchor="middle" letter-spacing="8">SHOWMEWAY</text>
+  <text x="256" y="480" font-family="'Noto Sans TC', sans-serif" font-size="16" font-weight="600" fill="url(#neonBlue)" text-anchor="middle" letter-spacing="4">下面一way</text>
 </svg>
