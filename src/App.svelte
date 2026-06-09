@@ -133,49 +133,66 @@ $effect(() => {
     document.title = tripData?.trip.name ?? "下面一way";
 });
 
-// Derived values for current active day (with date formatted for display)
-let activeDayData = $derived.by(() => {
-    if (!tripData) return null;
-    return tripData.days.find(d => d.day === currentDay) || tripData.days[0];
-});
-
 // Resolve the built-in phrase set and driver-card labels from `trip.lang`,
 // falling back to English when unset/unsupported.
 let langConfig = $derived(getLanguageConfig(tripData?.trip.lang));
 
-// --- Swipe to switch day (mobile gesture) ---
-let swipeStartX = 0;
-let swipeStartY = 0;
-let swipeTracking = false;
+// --- Switch day via a horizontal scroll-snap strip (native swipe / trackpad) ---
+// Each day is a full-width snap panel; the browser handles the gesture, so text
+// selection and vertical scroll never clash with paging. `currentDay` stays the
+// single source of truth: scrolling updates it, and DaySwitcher / auto-jump
+// changes scroll the strip to match.
+let dayStrip = $state<HTMLDivElement>();
+// While we animate a programmatic jump (e.g. a DaySwitcher tap), the scroll
+// handler must not react to intermediate panels — otherwise a multi-day jump
+// gets hijacked and halts partway. The lock releases on *arrival* (scrollLeft
+// reaches the target), not on a fixed timer, so it survives long animations.
+let stripScrollLock = false;
+let stripLockTimer: number;
+// Marks a `currentDay` change that came from the user's own scroll, so the sync
+// effect won't fire a competing `scrollTo` against the browser's native snap
+// (which otherwise causes a visible jitter once the swipe settles).
+let syncingFromScroll = false;
 
-// Move to an adjacent day by offset (+1 next / -1 previous), clamped to range
-function goToAdjacentDay(offset: number) {
-    if (!tripData) return;
-    const idx = tripData.days.findIndex(d => d.day === currentDay);
-    if (idx === -1) return;
-    const nextIdx = idx + offset;
-    if (nextIdx >= 0 && nextIdx < tripData.days.length) {
-        currentDay = tripData.days[nextIdx].day;
+function dayOffsetLeft(day: number): number | null {
+    const idx = tripData?.days.findIndex(d => d.day === day) ?? -1;
+    if (idx < 0 || !dayStrip) return null;
+    return idx * dayStrip.clientWidth;
+}
+
+function handleStripScroll() {
+    if (!dayStrip || !tripData) return;
+    if (stripScrollLock) {
+        // Release once we've reached the programmatic target for currentDay.
+        const target = dayOffsetLeft(currentDay);
+        if (target !== null && Math.abs(dayStrip.scrollLeft - target) < 2) stripScrollLock = false;
+        return;
+    }
+    const idx = Math.round(dayStrip.scrollLeft / dayStrip.clientWidth);
+    const day = tripData.days[idx]?.day;
+    if (day && day !== currentDay) {
+        syncingFromScroll = true;
+        currentDay = day;
     }
 }
 
-function handleSwipeStart(e: PointerEvent) {
-    if (activeTab !== "itinerary") return;
-    swipeStartX = e.clientX;
-    swipeStartY = e.clientY;
-    swipeTracking = true;
-}
-
-function handleSwipeEnd(e: PointerEvent) {
-    if (!swipeTracking) return;
-    swipeTracking = false;
-    const dx = e.clientX - swipeStartX;
-    const dy = e.clientY - swipeStartY;
-    // Require a mostly-horizontal gesture with enough travel to avoid clashing with vertical scroll
-    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-        goToAdjacentDay(dx < 0 ? 1 : -1);
+// Keep the strip aligned to `currentDay` (e.g. after a DaySwitcher tap). Skips
+// when the change came from scrolling, so the browser's snap isn't fought.
+$effect(() => {
+    const target = dayOffsetLeft(currentDay);
+    if (target === null || !dayStrip) return;
+    if (syncingFromScroll) {
+        syncingFromScroll = false;
+        return;
     }
-}
+    if (Math.abs(dayStrip.scrollLeft - target) > 2) {
+        stripScrollLock = true;
+        // Safety net: force-release if the scroll never lands exactly on target.
+        clearTimeout(stripLockTimer);
+        stripLockTimer = setTimeout(() => (stripScrollLock = false), 1000);
+        dayStrip.scrollTo({ left: target, behavior: "smooth" });
+    }
+});
 
 let timer: number;
 
@@ -548,24 +565,24 @@ function clearYaml() {
             <!-- Tab contents rendering -->
             <div class="animate-fade-in">
                 {#if activeTab === "itinerary"}
-                    {#if activeDayData}
-                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    {#if tripData.days.length > 0}
+                        <!-- Horizontal scroll-snap strip: one full-width panel per day. -->
                         <div
-                            class="touch-pan-y"
-                            onpointerdown={handleSwipeStart}
-                            onpointerup={handleSwipeEnd}
-                            onpointercancel={() => (swipeTracking = false)}
+                            bind:this={dayStrip}
+                            onscroll={handleStripScroll}
+                            class="flex overflow-x-auto overscroll-x-contain snap-x snap-mandatory items-start [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                         >
-                            {#key currentDay}
-                                <div class="animate-fade-in">
+                            {#each tripData.days as day (day.day)}
+                                <!-- snap-always: scroll-snap-stop forces one panel per swipe (no momentum skipping) -->
+                                <section class="snap-start snap-always shrink-0 w-full">
                                     <Timeline
-                                        dayData={activeDayData}
+                                        dayData={day}
                                         hotels={tripData.trip.hotels}
                                         mapProvider={tripData.trip.mapProvider}
                                         onCopy={handleCopy}
                                     />
-                                </div>
-                            {/key}
+                                </section>
+                            {/each}
                         </div>
                     {/if}
                 {:else if activeTab === "todo"}
