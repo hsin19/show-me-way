@@ -5,6 +5,7 @@ import {
     ClipboardList,
     Flame,
     Footprints,
+    Link,
     Maximize2,
     X,
     Zap,
@@ -73,38 +74,56 @@ const overnightHotel = $derived(
     </div>
 </div>
 
-<!-- Shared map link + "show enlarged" button for a place. A direct `mapLink`
-     (e.g. a naver.me short link) wins over a search built from `localName`. -->
+<!-- Map link + "show enlarged" button for a place. A direct `mapLink` (e.g. a
+     naver.me short link) wins over a search built from `localName`. Emits bare
+     chips so the caller can group them in one row with any extra `links`. -->
 {#snippet placeActions(localName: string | undefined, title: string, address?: string, mapLink?: string)}
     {@const href = mapLink ?? (localName ? mapSearch(localName, mapProvider) : undefined)}
     {@const isNaver = mapLink ? mapLink.includes("naver") : mapProvider === "naver"}
-    <div class="flex gap-2 mt-3 pt-3 border-t border-white/5">
-        {#if href}
-            <a
-                {href}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="flex items-center gap-1.5 bg-neon-blue/10 border border-neon-blue/20 text-neon-blue text-[11px] font-bold px-3 py-1.5 rounded-lg transition duration-300 hover:bg-neon-blue hover:text-black hover:shadow-[0_0_15px_rgba(0,240,255,0.25)]"
-            >
-                {#if isNaver}
-                    <NaverIcon size={13} class="shrink-0" aria-hidden="true" />
-                {:else}
-                    <GoogleMapsIcon size={13} class="shrink-0" aria-hidden="true" />
-                {/if}
-                Map
-            </a>
+    {#if href}
+        <a
+            {href}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-1.5 min-h-[44px] bg-neon-blue/10 border border-neon-blue/20 text-neon-blue text-[11px] font-bold px-3 py-1.5 rounded-lg transition duration-300 hover:bg-neon-blue hover:text-black hover:shadow-[0_0_15px_rgba(0,240,255,0.25)]"
+        >
+            {#if isNaver}
+                <NaverIcon size={13} class="shrink-0" aria-hidden="true" />
+            {:else}
+                <GoogleMapsIcon size={13} class="shrink-0" aria-hidden="true" />
+            {/if}
+            Map
+        </a>
+    {/if}
+    {#if localName}
+        <button
+            onclick={() => (enlarged = { title, localName, address })}
+            class="min-w-[44px] min-h-[44px] flex items-center justify-center bg-neon-blue/5 border border-neon-blue/15 text-neon-blue/70 rounded-lg transition duration-300 hover:bg-neon-blue hover:text-black hover:shadow-[0_0_15px_rgba(0,240,255,0.25)] cursor-pointer"
+            aria-label="放大顯示當地名稱"
+            title="放大給司機/店員看"
+        >
+            <Maximize2 size={14} aria-hidden="true" />
+        </button>
+    {/if}
+{/snippet}
+
+<!-- A single labeled link chip; map URLs get a matching brand icon. -->
+{#snippet linkChip(label: string, url: string)}
+    <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="inline-flex items-center gap-1.5 min-h-[44px] bg-neon-blue/10 border border-neon-blue/20 text-neon-blue text-[11px] font-bold px-3 py-1.5 rounded-lg transition duration-300 hover:bg-neon-blue hover:text-black hover:shadow-[0_0_15px_rgba(0,240,255,0.25)]"
+    >
+        {#if url.includes("naver")}
+            <NaverIcon size={13} class="shrink-0" aria-hidden="true" />
+        {:else if /maps\.app\.goo\.gl|google\.[^/]+\/maps|goo\.gl\/maps/.test(url)}
+            <GoogleMapsIcon size={13} class="shrink-0" aria-hidden="true" />
+        {:else}
+            <Link size={12} class="shrink-0" aria-hidden="true" />
         {/if}
-        {#if localName}
-            <button
-                onclick={() => (enlarged = { title, localName, address })}
-                class="min-w-[44px] min-h-[44px] flex items-center justify-center border border-card-border text-text-secondary rounded-lg transition-colors hover:bg-white/5 hover:text-text-primary cursor-pointer"
-                aria-label="放大顯示當地名稱"
-                title="放大給司機/店員看"
-            >
-                <Maximize2 size={14} aria-hidden="true" />
-            </button>
-        {/if}
-    </div>
+        {label}
+    </a>
 {/snippet}
 
 <!-- Timeline List -->
@@ -160,8 +179,13 @@ const overnightHotel = $derived(
                     </ul>
                 {/if}
 
-                {#if event.localName || event.mapLink}
-                    {@render placeActions(event.localName, event.title, undefined, event.mapLink)}
+                {#if event.localName || event.mapLink || (event.links && event.links.length > 0)}
+                    <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-white/5">
+                        {@render placeActions(event.localName, event.title, undefined, event.mapLink)}
+                        {#each event.links ?? [] as link (link.url)}
+                            {@render linkChip(link.label, link.url)}
+                        {/each}
+                    </div>
                 {/if}
             </div>
         </div>
@@ -179,7 +203,9 @@ const overnightHotel = $derived(
                 <p class="text-xs text-text-secondary leading-relaxed">{overnightHotel.name}</p>
 
                 {#if overnightHotel.localName || overnightHotel.mapLink}
-                    {@render placeActions(overnightHotel.localName, overnightHotel.name, overnightHotel.address, overnightHotel.mapLink)}
+                    <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-white/5">
+                        {@render placeActions(overnightHotel.localName, overnightHotel.name, overnightHotel.address, overnightHotel.mapLink)}
+                    </div>
                 {/if}
             </div>
         </div>

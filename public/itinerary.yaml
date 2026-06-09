@@ -32,6 +32,11 @@ days:
         type: must-go
         desc: 造訪當地熱門名店，開啟美食之旅。
         localName: 拉麵
+        links:
+          - label: 一蘭拉麵
+            url: 'https://maps.app.goo.gl/example1'
+          - label: 拉麵二郎
+            url: 'https://maps.app.goo.gl/example2'
   - day: 2
     date: '2026-10-02'
     region: 市區潮流探險

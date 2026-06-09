@@ -185,6 +185,24 @@
                 "mapLink": {
                   "type": "string",
                   "description": "地圖直接連結 (如 naver.me / maps.app.goo.gl 短網址)。有設定時會優先使用，比關鍵字搜尋更精準。"
+                },
+                "links": {
+                  "type": "array",
+                  "description": "額外的具名連結 (例如一個行程想放多個點)。地圖連結會自動顯示對應的品牌 icon。",
+                  "items": {
+                    "type": "object",
+                    "required": ["label", "url"],
+                    "properties": {
+                      "label": {
+                        "type": "string",
+                        "description": "連結顯示文字"
+                      },
+                      "url": {
+                        "type": "string",
+                        "description": "連結網址"
+                      }
+                    }
+                  }
                 }
               }
             }

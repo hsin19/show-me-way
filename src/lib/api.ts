@@ -13,6 +13,8 @@ export interface TimelineEvent {
     localName?: string;
     /** Direct map URL (e.g. a naver.me / maps.app.goo.gl short link). Preferred over searching `localName`. */
     mapLink?: string;
+    /** Extra labeled links for this event (e.g. several spots/points). Map URLs get a matching brand icon. */
+    links?: { label: string; url: string; }[];
     /**
      * Ephemeral, runtime-only identity used as a stable `{#each}` key while
      * editing. Assigned on load and stripped again on serialization, so it
