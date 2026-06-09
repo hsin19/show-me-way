@@ -561,6 +561,7 @@ function clearYaml() {
                                     <Timeline
                                         dayData={activeDayData}
                                         hotels={tripData.trip.hotels}
+                                        mapProvider={tripData.trip.mapProvider}
                                         onCopy={handleCopy}
                                     />
                                 </div>

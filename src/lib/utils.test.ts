@@ -8,6 +8,7 @@ import {
     formatDayDate,
     getCountdownText,
     getTodayIsoString,
+    mapSearch,
     parseLocalDate,
 } from "./utils";
 
@@ -79,5 +80,25 @@ describe("getCountdownText", () => {
     it("shows hours + minutes when under a day to go (before the trip starts)", () => {
         const now = new Date("2026-06-10T22:00:00+08:00");
         expect(getCountdownText(trip, now)).toBe("⏳ 即將出發 16時 0分");
+    });
+});
+
+describe("mapSearch", () => {
+    it("uses Naver when provider is 'naver'", () => {
+        expect(mapSearch("엘양호텔", "naver")).toBe("https://map.naver.com/p/search/%EC%97%98%EC%96%91%ED%98%B8%ED%85%94");
+    });
+
+    it("uses Google Maps for 'google'", () => {
+        expect(mapSearch("Tokyo Tower", "google")).toBe("https://www.google.com/maps/search/?api=1&query=Tokyo%20Tower");
+    });
+
+    it("falls back to Google Maps when provider is undefined or unknown", () => {
+        const googlePrefix = "https://www.google.com/maps/search/?api=1&query=";
+        expect(mapSearch("x")).toBe(`${googlePrefix}x`);
+        expect(mapSearch("x", "kakao")).toBe(`${googlePrefix}x`);
+    });
+
+    it("encodes the query string", () => {
+        expect(mapSearch("a b&c", "naver")).toBe("https://map.naver.com/p/search/a%20b%26c");
     });
 });

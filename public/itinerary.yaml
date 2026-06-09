@@ -5,12 +5,13 @@ trip:
   end: '2026-10-03'
   departure: '2026-10-01T08:00:00+08:00'
   lang: ja
+  currency: JPY
   hotels:
     - name: 極簡設計精選飯店
-      station: 新宿站步行 3 分鐘
       address: 東京都新宿區西新宿 1-1-1
       checkIn: '2026-10-01'
       checkOut: '2026-10-03'
+      localName: 極簡設計精選飯店
 days:
   - day: 1
     date: '2026-10-01'
@@ -30,7 +31,7 @@ days:
         title: 🍜 晚餐探店
         type: must-go
         desc: 造訪當地熱門名店，開啟美食之旅。
-        naverSearch: 拉麵
+        localName: 拉麵
   - day: 2
     date: '2026-10-02'
     region: 市區潮流探險

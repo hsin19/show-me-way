@@ -88,3 +88,18 @@ export function formatDateRange(startIso: string, endIso: string): string {
 
     return `${yyyy}.${startMM}.${startDD} – ${endMM}.${endDD}`;
 }
+
+/**
+ * Build a map-search URL for a place's local-language name. Which map service
+ * to use is a market/regulatory decision (e.g. Korea restricts Google Maps data,
+ * so Naver dominates), not a language one — so the caller passes the trip's
+ * explicit `mapProvider`. Unknown/undefined falls back to Google Maps, which
+ * works everywhere.
+ */
+export function mapSearch(query: string, provider?: string): string {
+    const q = encodeURIComponent(query);
+    if (provider === "naver") {
+        return `https://map.naver.com/p/search/${q}`;
+    }
+    return `https://www.google.com/maps/search/?api=1&query=${q}`;
+}

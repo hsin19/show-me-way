@@ -58,35 +58,30 @@ const localConfig = $derived.by(() => {
                 currencyCode: "JPY",
                 currencyName: "日圓",
                 currencySymbol: "¥",
-                defaultRate: 4.5,
             };
         case "KRW":
             return {
                 currencyCode: "KRW",
                 currencyName: "韓元",
                 currencySymbol: "₩",
-                defaultRate: 42.5,
             };
         case "TWD":
             return {
                 currencyCode: "TWD",
                 currencyName: "台幣",
                 currencySymbol: "NT$",
-                defaultRate: 1.0,
             };
         case "USD":
             return {
                 currencyCode: "USD",
                 currencyName: "美元",
                 currencySymbol: "$",
-                defaultRate: 30.0,
             };
         default:
             return {
                 currencyCode: code,
                 currencyName: code,
                 currencySymbol: "$",
-                defaultRate: 1.0,
             };
     }
 });

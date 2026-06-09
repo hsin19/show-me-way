@@ -81,7 +81,6 @@ function formatShortDate(dateStr: string): string {
                         <Calendar size={10} aria-hidden="true" />
                         <span>{formatShortDate(hotel.checkIn)} 入房 – {formatShortDate(hotel.checkOut)} 退房</span>
                     </div>
-                    <span class="text-xs text-text-secondary block pt-1">{hotel.station}</span>
                 </div>
 
                 <button
@@ -177,10 +176,6 @@ function formatShortDate(dateStr: string): string {
                 <strong class="text-neon-blue text-3xl block mt-2 drop-shadow-[0_0_8px_rgba(0,240,255,0.3)]">
                     {selectedHotel.address}
                 </strong>
-            </div>
-
-            <div class="text-sm text-text-secondary text-center mb-8">
-                * {selectedHotel.station}
             </div>
 
             <button

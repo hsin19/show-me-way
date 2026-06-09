@@ -3,23 +3,34 @@ import {
     BedDouble,
     CalendarCheck,
     ClipboardList,
-    Copy,
     Flame,
     Footprints,
-    MapPin,
+    Maximize2,
+    X,
     Zap,
 } from "@lucide/svelte";
 import type { DayItinerary } from "../api";
 import type { HotelInfo } from "../api";
-import { formatDayDate } from "../utils";
+import {
+    formatDayDate,
+    mapSearch,
+} from "../utils";
+import GoogleMapsIcon from "./icons/GoogleMapsIcon.svelte";
+import NaverIcon from "./icons/NaverIcon.svelte";
 
 interface Props {
     dayData: DayItinerary;
     hotels?: HotelInfo[];
+    /** Map service for this trip (e.g. 'naver'); defaults to Google Maps when unset. */
+    mapProvider?: string;
     onCopy: (text: string, msg: string) => void;
 }
 
-let { dayData, hotels = [], onCopy }: Props = $props();
+let { dayData, hotels = [], mapProvider, onCopy }: Props = $props();
+
+// Local-language name (and, for hotels, address) to show enlarged for a taxi
+// driver / local staff to read. `null` keeps the fullscreen overlay closed.
+let enlarged = $state<{ title: string; localName: string; address?: string; } | null>(null);
 
 // Dynamically get transport method, fallback to "步行 & 捷運"
 const transportText = $derived(dayData.transport || "步行 & 捷運");
@@ -31,6 +42,13 @@ const hotelText = $derived.by(() => {
     const activeHotel = hotels.find(h => date >= h.checkIn && date <= h.checkOut);
     return activeHotel ? activeHotel.name : "未安排住宿";
 });
+
+// Hotel where this day is an actual overnight stay. The checkout day is
+// excluded (date < checkOut), so no "回飯店" entry shows on the departure day.
+// Rendered as a synthetic timeline entry — never persisted into the YAML.
+const overnightHotel = $derived(
+    hotels.find(h => dayData.date >= h.checkIn && dayData.date < h.checkOut),
+);
 </script>
 
 <!-- Day Overview Card -->
@@ -54,6 +72,40 @@ const hotelText = $derived.by(() => {
         </div>
     </div>
 </div>
+
+<!-- Shared map link + "show enlarged" button for a place. A direct `mapLink`
+     (e.g. a naver.me short link) wins over a search built from `localName`. -->
+{#snippet placeActions(localName: string | undefined, title: string, address?: string, mapLink?: string)}
+    {@const href = mapLink ?? (localName ? mapSearch(localName, mapProvider) : undefined)}
+    {@const isNaver = mapLink ? mapLink.includes("naver") : mapProvider === "naver"}
+    <div class="flex gap-2 mt-3 pt-3 border-t border-white/5">
+        {#if href}
+            <a
+                {href}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="flex items-center gap-1.5 bg-neon-blue/10 border border-neon-blue/20 text-neon-blue text-[11px] font-bold px-3 py-1.5 rounded-lg transition duration-300 hover:bg-neon-blue hover:text-black hover:shadow-[0_0_15px_rgba(0,240,255,0.25)]"
+            >
+                {#if isNaver}
+                    <NaverIcon size={13} class="shrink-0" aria-hidden="true" />
+                {:else}
+                    <GoogleMapsIcon size={13} class="shrink-0" aria-hidden="true" />
+                {/if}
+                Map
+            </a>
+        {/if}
+        {#if localName}
+            <button
+                onclick={() => (enlarged = { title, localName, address })}
+                class="min-w-[44px] min-h-[44px] flex items-center justify-center border border-card-border text-text-secondary rounded-lg transition-colors hover:bg-white/5 hover:text-text-primary cursor-pointer"
+                aria-label="放大顯示當地名稱"
+                title="放大給司機/店員看"
+            >
+                <Maximize2 size={14} aria-hidden="true" />
+            </button>
+        {/if}
+    </div>
+{/snippet}
 
 <!-- Timeline List -->
 <div class="relative pl-6 before:content-[''] before:absolute before:top-2 before:left-[7px] before:w-[2px] before:h-[calc(100%-16px)] before:bg-gradient-to-b before:from-neon-blue/40 before:to-neon-pink/40">
@@ -108,28 +160,87 @@ const hotelText = $derived.by(() => {
                     </ul>
                 {/if}
 
-                {#if event.naverSearch}
-                    <div class="flex gap-2 mt-3 pt-3 border-t border-white/5">
-                        <a
-                            href="https://map.naver.com/p/search/{encodeURIComponent(event.naverSearch)}"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="flex items-center gap-1.5 bg-neon-blue/10 border border-neon-blue/20 text-neon-blue text-[11px] font-bold px-3 py-1.5 rounded-lg transition duration-300 hover:bg-neon-blue hover:text-black hover:shadow-[0_0_15px_rgba(0,240,255,0.25)]"
-                        >
-                            <MapPin size={12} aria-hidden="true" />
-                            NAVER 地圖搜尋
-                        </a>
-                        <button
-                            onclick={() => onCopy(event.naverSearch || "", "已複製韓文名稱，可貼到 Naver Map")}
-                            class="min-w-[44px] min-h-[44px] flex items-center justify-center border border-card-border text-text-secondary rounded-lg transition-colors hover:bg-white/5 hover:text-text-primary cursor-pointer"
-                            aria-label="複製韓文名稱"
-                            title="複製韓文名稱"
-                        >
-                            <Copy size={14} aria-hidden="true" />
-                        </button>
-                    </div>
+                {#if event.localName || event.mapLink}
+                    {@render placeActions(event.localName, event.title, undefined, event.mapLink)}
                 {/if}
             </div>
         </div>
     {/each}
+
+    {#if overnightHotel}
+        <!-- Auto-generated overnight stay entry (not persisted to YAML) -->
+        <div class="relative mb-6">
+            <div class="absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 border-neon-purple z-10"></div>
+            <div class="glass-panel rounded-2xl p-4 ml-2.5">
+                <div class="flex items-center gap-1.5 mb-1.5">
+                    <BedDouble size={15} class="text-neon-purple shrink-0" aria-hidden="true" />
+                    <span class="text-[15px] font-bold text-text-primary">回飯店休息</span>
+                </div>
+                <p class="text-xs text-text-secondary leading-relaxed">{overnightHotel.name}</p>
+
+                {#if overnightHotel.localName || overnightHotel.mapLink}
+                    {@render placeActions(overnightHotel.localName, overnightHotel.name, overnightHotel.address, overnightHotel.mapLink)}
+                {/if}
+            </div>
+        </div>
+    {/if}
+</div>
+
+<svelte:window onkeydown={(e => e.key === "Escape" && (enlarged = null))} />
+
+<!-- Fullscreen overlay: shows the local-language name large for a driver / local staff to read. -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+    onclick={() => (enlarged = null)}
+    class="
+        fixed inset-0 bg-black/95 z-[1000] flex items-center justify-center p-5 transition-opacity duration-300
+        {enlarged ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
+    "
+>
+    {#if enlarged}
+        {@const data = enlarged}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={data.title}
+            tabindex="-1"
+            onclick={(e => e.stopPropagation())}
+            class="bg-[#121422] border border-white/8 rounded-3xl w-full max-w-[400px] p-6 shadow-2xl overscroll-contain"
+        >
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-sm text-text-secondary">出示給司機 / 店員看（點字可複製）</h3>
+                <button
+                    onclick={() => (enlarged = null)}
+                    aria-label="關閉"
+                    class="text-text-secondary hover:text-text-primary cursor-pointer"
+                >
+                    <X size={24} aria-hidden="true" />
+                </button>
+            </div>
+
+            <div class="text-center break-words px-2">
+                <p class="text-sm text-text-secondary mb-3">{data.title}</p>
+                <button
+                    type="button"
+                    onclick={() => onCopy(data.localName, "已複製名稱")}
+                    class="text-white text-2xl font-black leading-normal block w-full break-words cursor-pointer transition active:scale-[0.98]"
+                    title="點一下複製"
+                >
+                    {data.localName}
+                </button>
+                {#if data.address}
+                    <button
+                        type="button"
+                        onclick={() => onCopy(data.address ?? "", "已複製地址")}
+                        class="text-neon-blue text-3xl font-black leading-normal block w-full break-words mt-3 cursor-pointer transition active:scale-[0.98] drop-shadow-[0_0_8px_rgba(0,240,255,0.3)]"
+                        title="點一下複製"
+                    >
+                        {data.address}
+                    </button>
+                {/if}
+            </div>
+        </div>
+    {/if}
 </div>

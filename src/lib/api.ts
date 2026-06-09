@@ -9,7 +9,10 @@ export interface TimelineEvent {
     type: "booked" | "must-go" | "option" | "standard";
     desc: string;
     bullets?: string[];
-    naverSearch?: string;
+    /** Place name in the destination's local language, used as the map-search query. */
+    localName?: string;
+    /** Direct map URL (e.g. a naver.me / maps.app.goo.gl short link). Preferred over searching `localName`. */
+    mapLink?: string;
     /**
      * Ephemeral, runtime-only identity used as a stable `{#each}` key while
      * editing. Assigned on load and stripped again on serialization, so it
@@ -29,10 +32,13 @@ export interface DayItinerary {
 
 export interface HotelInfo {
     name: string;
-    station: string;
     address: string;
     checkIn: string; // YYYY-MM-DD
     checkOut: string; // YYYY-MM-DD
+    /** Hotel name in the destination's local language, used as the map-search query. */
+    localName?: string;
+    /** Direct map URL (e.g. a naver.me / maps.app.goo.gl short link). Preferred over searching `localName`. */
+    mapLink?: string;
 }
 
 export interface PhraseInfo {
@@ -51,6 +57,12 @@ export interface TripData {
         lang?: string;
         /** Currency code (e.g. 'KRW', 'JPY', 'USD') for the ledger. */
         currency?: string;
+        /**
+         * Which map service the destination uses — a market/regulatory choice
+         * (e.g. 'naver' for Korea), not a language one. Defaults to Google Maps
+         * when unset. See `mapSearch` in `lib/utils.ts`.
+         */
+        mapProvider?: "naver" | "google";
         /** Customized wallets/cards (e.g. 'Suica', 'WOWPASS') for the ledger. */
         wallets?: string[];
         hotels: HotelInfo[];
