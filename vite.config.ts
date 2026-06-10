@@ -11,7 +11,9 @@ export default defineConfig({
         svelte(),
         tailwindcss(),
         VitePWA({
-            registerType: "autoUpdate",
+            // "prompt": the new service worker waits until the user accepts the
+            // in-app update banner, instead of taking over a page in active use.
+            registerType: "prompt",
             pwaAssets: {
                 disabled: false,
                 config: true,
@@ -26,13 +28,51 @@ export default defineConfig({
                 orientation: "portrait",
             },
             workbox: {
-                globPatterns: ["**/*.{js,css,html,svg,png,ico,webp}"],
+                globPatterns: ["**/*.{js,css,html,svg,png,ico,webp,yaml,json}"],
+                // itinerary.local.yaml is personal, untracked data that local
+                // builds copy into dist/ — it must never enter the precache
+                // manifest. The runtime route below caches it from the second
+                // online visit onward (the first-visit page is not yet
+                // controlled by the service worker).
+                globIgnores: ["**/itinerary.local*.yaml"],
                 cleanupOutdatedCaches: true,
                 // The SPA navigation fallback (navigateFallback defaults to
                 // index.html) otherwise hijacks navigations to raw data files
                 // and serves the app shell instead. Let .yaml/.json navigations
                 // hit the network so they can be opened directly in the browser.
                 navigateFallbackDenylist: [/\.ya?ml$/i, /\.json$/i],
+                runtimeCaching: [
+                    {
+                        // Catches itinerary.local.yaml (excluded from precache
+                        // above); precached YAML is served before this route.
+                        urlPattern: ({ sameOrigin, url }) => sameOrigin && /\.ya?ml$/i.test(url.pathname),
+                        handler: "NetworkFirst",
+                        options: {
+                            cacheName: "itinerary-yaml",
+                            networkTimeoutSeconds: 5,
+                            cacheableResponse: { statuses: [0, 200] },
+                        },
+                    },
+                    {
+                        urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+                        handler: "StaleWhileRevalidate",
+                        options: {
+                            cacheName: "google-fonts-stylesheets",
+                            cacheableResponse: { statuses: [0, 200] },
+                        },
+                    },
+                    {
+                        // No maxEntries: Noto Sans TC arrives as 100+ unicode-range
+                        // slices; eviction would punch holes in offline rendering.
+                        urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+                        handler: "CacheFirst",
+                        options: {
+                            cacheName: "google-fonts-webfonts",
+                            expiration: { maxAgeSeconds: 60 * 60 * 24 * 365 },
+                            cacheableResponse: { statuses: [0, 200] },
+                        },
+                    },
+                ],
             },
             devOptions: {
                 enabled: false,

@@ -11,6 +11,7 @@ import {
     ListTodo,
     Loader2,
     Luggage,
+    RefreshCw,
     Settings,
     Share2,
     TriangleAlert,
@@ -21,6 +22,7 @@ import {
     onDestroy,
     onMount,
 } from "svelte";
+import { registerSW } from "virtual:pwa-register";
 import {
     createChecklistItemId,
     type DayItinerary,
@@ -69,6 +71,28 @@ let loadError = $state<string | null>(null);
 // Toast Notification States
 let toastMessage = $state("");
 let isToastVisible = $state(false);
+
+// PWA update flow: registerType "prompt" keeps the new service worker waiting
+// until the user accepts, so an in-use page is never reloaded under them.
+let needRefresh = $state(false);
+const updateSW = registerSW({
+    onNeedRefresh() {
+        needRefresh = true;
+    },
+    onOfflineReady() {
+        triggerToast("已可離線使用");
+    },
+    onRegisteredSW(_swUrl, registration) {
+        if (!registration) return;
+        // A traveler may keep the app open for days; without polling, updates
+        // are only detected on a fresh navigation. Offline (the flagship
+        // scenario) update() rejects — swallow it and retry next interval.
+        window.setInterval(() => {
+            if (registration.installing || !navigator.onLine) return;
+            registration.update().catch(() => {});
+        }, 60 * 60 * 1000);
+    },
+});
 
 // Settings States
 let showSettings = $state(false);
@@ -759,6 +783,29 @@ function clearYaml() {
         <CheckCircle size={14} class="stroke-[3]" aria-hidden="true" />
         {toastMessage}
     </div>
+
+    <!-- PWA Update Prompt -->
+    {#if needRefresh}
+        <!-- z-[200]: above the nav (z-[100]) but below full-screen overlays
+             (z-[1000]) so it never intercepts taps meant for an open modal. -->
+        <div class="fixed bottom-[calc(88px+var(--safe-bottom))] left-1/2 -translate-x-1/2 z-[200] bg-[#121422] border border-neon-blue/40 rounded-full py-1.5 pl-4 pr-1.5 flex items-center gap-2 shadow-[0_4px_15px_rgba(0,240,255,0.2)] whitespace-nowrap animate-fade-in">
+            <span role="alert" class="text-xs font-bold text-text-primary">已有新版本，可立即更新</span>
+            <button
+                onclick={() => void updateSW(true)}
+                class="bg-neon-blue text-black text-xs font-bold rounded-full min-h-[44px] px-4 flex items-center gap-1.5 cursor-pointer"
+            >
+                <RefreshCw size={14} aria-hidden="true" />
+                立即更新
+            </button>
+            <button
+                onclick={() => (needRefresh = false)}
+                aria-label="稍後更新"
+                class="min-w-[44px] min-h-[44px] flex items-center justify-center text-text-secondary hover:text-text-primary cursor-pointer"
+            >
+                <X size={18} aria-hidden="true" />
+            </button>
+        </div>
+    {/if}
 
     <!-- Settings Overlay Modal -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->

@@ -229,10 +229,20 @@ export async function fetchItinerary(): Promise<TripData> {
         let yamlContent = localStorage.getItem(USER_YAML_KEY) || "";
 
         if (!yamlContent) {
-            // No user YAML in localStorage: try itinerary.local.yaml, then fall back to itinerary.yaml
-            let response = await fetch("./itinerary.local.yaml");
+            // No user YAML in localStorage: try itinerary.local.yaml, then fall back to itinerary.yaml.
+            // Offline, a missing file makes fetch reject outright (not a 404),
+            // so rejection must also fall through to the precached itinerary.yaml.
+            // The abort timeout bounds a hanging network, and must stay ABOVE the
+            // service worker's 5s networkTimeoutSeconds so the SW's cached copy
+            // of a real itinerary.local.yaml wins before we give up on it.
+            let response: Response | null = null;
+            try {
+                response = await fetch("./itinerary.local.yaml", { signal: AbortSignal.timeout(8000) });
+            } catch {
+                response = null;
+            }
 
-            if (!response.ok) {
+            if (!response?.ok) {
                 response = await fetch("./itinerary.yaml");
                 if (!response.ok) {
                     throw new Error("Neither itinerary.local.yaml nor itinerary.yaml was found.");
