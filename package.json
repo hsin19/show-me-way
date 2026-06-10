@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "pnpm@11.5.1",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -15,6 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "pnpm run format && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
+    "check:ci": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
     "prepare": "simple-git-hooks"
   },
   "simple-git-hooks": {

@@ -1,0 +1,39 @@
+version: 2
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    cooldown:
+      default-days: 7
+    ignore:
+      # 專案使用 Node 24（LTS），@types/node 跟隨同一個 major，不升到非 LTS 的 25.x
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+    groups:
+      svelte:
+        patterns:
+          - 'svelte'
+          - 'svelte-*'
+          - '@sveltejs/*'
+      vite:
+        patterns:
+          - 'vite'
+          - 'vite-*'
+          - 'vitest'
+          - '@vite-pwa/*'
+      tailwind:
+        patterns:
+          - 'tailwindcss'
+          - '@tailwindcss/*'
+      eslint:
+        patterns:
+          - 'eslint'
+          - 'eslint-*'
+          - '@eslint/*'
+          - 'typescript-eslint'
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
