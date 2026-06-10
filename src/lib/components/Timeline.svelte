@@ -16,18 +16,22 @@ import {
     formatDayDate,
     mapSearch,
 } from "../utils";
+import type { DailyWeather } from "../weather";
 import GoogleMapsIcon from "./icons/GoogleMapsIcon.svelte";
 import NaverIcon from "./icons/NaverIcon.svelte";
+import WeatherBadge from "./WeatherBadge.svelte";
 
 interface Props {
     dayData: DayItinerary;
     hotels?: HotelInfo[];
     /** Map service for this trip (e.g. 'naver'); defaults to Google Maps when unset. */
     mapProvider?: string;
+    /** This day's forecast; null/undefined (no city set, or beyond the 16-day horizon) hides the badge. */
+    weather?: DailyWeather | null;
     onCopy: (text: string, msg: string) => void;
 }
 
-let { dayData, hotels = [], mapProvider, onCopy }: Props = $props();
+let { dayData, hotels = [], mapProvider, weather = null, onCopy }: Props = $props();
 
 // Local-language name (and, for hotels, address) to show enlarged for a taxi
 // driver / local staff to read. `null` keeps the fullscreen overlay closed.
@@ -64,13 +68,16 @@ const overnightHotel = $derived(
         <Zap size={15} class="text-neon-orange shrink-0 mt-0.5" aria-hidden="true" />
         <span><strong class="text-text-primary">今日節奏：</strong>{dayData.pace}</span>
     </p>
-    <div class="flex gap-4 mt-4 pt-4 border-t border-white/5">
+    <div class="flex flex-wrap gap-4 mt-4 pt-4 border-t border-white/5">
         <div class="flex items-center gap-1.5 text-xs text-text-secondary">
             <Footprints size={14} class="shrink-0" aria-hidden="true" /> {transportText}
         </div>
         <div class="flex items-center gap-1.5 text-xs text-text-secondary">
             <BedDouble size={14} class="shrink-0" aria-hidden="true" /> {hotelText}
         </div>
+        {#if weather}
+            <WeatherBadge {weather} />
+        {/if}
     </div>
 </div>
 

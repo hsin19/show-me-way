@@ -28,6 +28,7 @@ Top-level keys: `trip` (required), `days` (required), and optional `todo`, `pack
 - `start` / `end` — `YYYY-MM-DD`.
 - `departure` — outbound flight time, ISO 8601 **with timezone offset**, e.g. `2026-06-11T14:00:00+08:00` (drives the home-screen countdown).
 - `lang` — optional language code (`ko` / `ja` / `en`). Selects the app's built-in survival phrases and taxi-driver prompt. Defaults to English (`en`) when omitted or unsupported. Phrases are no longer authored in YAML.
+- `city` — optional destination city for the daily weather badge. **Use an English name** (e.g. `Tokyo`, `Seoul`) — Chinese names often geocode to the wrong place or miss entirely. Weather is simply hidden when unset. Preserve an existing `city` when merging/updating.
 - `hotels[]` — each requires `name`, `station` (nearest metro + walking distance), `address` (local-language address for taxi drivers), `checkIn`, `checkOut` (both `YYYY-MM-DD`).
 
 ### days[] (required: day, date, region, pace, timeline)
@@ -35,6 +36,7 @@ Top-level keys: `trip` (required), `days` (required), and optional `todo`, `pack
 - `day` — integer, 1-based.
 - `date` — `YYYY-MM-DD`.
 - `region` — main area, e.g. `明洞 · 乙支路`.
+- `city` — optional; overrides `trip.city` for this day's weather lookup (multi-city trips), e.g. `Kyoto`. English names only.
 - `pace` — pace description, e.g. `慢活、需要早起`.
 - `transport` — optional; omit to default to 步行 & 捷運.
 - `timeline[]` — each requires `time`, `title`, `type`, `desc`; optional `bullets`, `naverSearch`.

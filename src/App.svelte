@@ -23,6 +23,7 @@ import {
 } from "svelte";
 import {
     createChecklistItemId,
+    type DayItinerary,
     fetchItinerary,
     saveTripData,
     serializeToYaml,
@@ -51,6 +52,11 @@ import {
     getTodayIsoString,
     parseLocalDate,
 } from "./lib/utils";
+import {
+    type DailyWeather,
+    type DailyWeatherByDate,
+    loadDailyWeather,
+} from "./lib/weather";
 
 // App State using Svelte 5 Runes
 let tripData = $state<TripData | null>(null);
@@ -136,6 +142,60 @@ $effect(() => {
 // Resolve the built-in phrase set and driver-card labels from `trip.lang`,
 // falling back to English when unset/unsupported.
 let langConfig = $derived(getLanguageConfig(tripData?.trip.lang));
+
+// --- Daily weather (Open-Meteo), keyed by the exact city string from the YAML ---
+let weatherByCity = $state<Record<string, DailyWeatherByDate>>({});
+
+// City for one day's weather: day.city → trip.city → none. Blank/whitespace
+// (and non-string values from hand-written YAML) count as unset and fall back.
+function resolveWeatherCity(day: DayItinerary, trip = tripData?.trip): string | null {
+    for (const city of [day.city, trip?.city]) {
+        if (typeof city === "string" && city.trim()) return city;
+    }
+    return null;
+}
+
+// Reset + fetch when the trip itself changes (load / YAML save).
+function loadTripWeather(data: TripData) {
+    weatherByCity = {};
+    refreshTripWeather(data);
+}
+
+// Fetch forecasts for every city the trip references, without clearing what's
+// already displayed. Cache-first (3h TTL in lib/weather.ts), so calling this
+// again is free until the data is actually stale.
+function refreshTripWeather(data: TripData) {
+    const cities: string[] = [];
+    for (const day of data.days) {
+        const city = resolveWeatherCity(day, data.trip);
+        if (city && !cities.includes(city)) cities.push(city);
+    }
+    for (const city of cities) {
+        loadDailyWeather(city, byDate => {
+            weatherByCity[city] = byDate;
+        });
+    }
+}
+
+// Refresh stale forecasts when the PWA is resumed from the background — during
+// a trip the app stays alive in the switcher for days, and onMount never
+// re-fires, so without this the forecast would be pinned to day 1's fetch.
+function handleVisibilityChange() {
+    if (document.visibilityState === "visible" && tripData) {
+        refreshTripWeather(tripData);
+    }
+}
+
+// Forecast for one day. Dates beyond the 16-day forecast horizon have no
+// entry, which hides the badge.
+function weatherForDay(day: DayItinerary): DailyWeather | null {
+    const city = resolveWeatherCity(day);
+    if (!city) return null;
+    return weatherByCity[city]?.[day.date] ?? null;
+}
+
+// Open-Meteo data is CC BY 4.0 — show the attribution whenever any badge does.
+let showWeatherAttribution = $derived(tripData?.days.some(d => weatherForDay(d)) ?? false);
 
 // --- Switch day via a horizontal scroll-snap strip (native swipe / trackpad) ---
 // Each day is a full-width snap panel; the browser handles the gesture, so text
@@ -244,6 +304,7 @@ async function loadTripData() {
     try {
         const data = await fetchItinerary();
         tripData = data;
+        loadTripWeather(data);
 
         // Fold any legacy per-list checked-state into the itinerary, then write
         // the unified data back so YAML becomes the single source of truth.
@@ -502,6 +563,7 @@ function clearYaml() {
 </script>
 
 <svelte:window onscroll={handleWindowScroll} onkeydown={handleWindowKeydown} />
+<svelte:document onvisibilitychange={handleVisibilityChange} />
 
 <div class="flex flex-col min-h-screen bg-[#0b0c13] text-text-primary pb-[calc(80px+var(--safe-bottom))] animate-fade-in">
     <!-- App Header -->
@@ -579,11 +641,22 @@ function clearYaml() {
                                         dayData={day}
                                         hotels={tripData.trip.hotels}
                                         mapProvider={tripData.trip.mapProvider}
+                                        weather={weatherForDay(day)}
                                         onCopy={handleCopy}
                                     />
                                 </section>
                             {/each}
                         </div>
+                        {#if showWeatherAttribution}
+                            <p class="text-center text-[10px] text-text-muted mt-2">
+                                天氣資料：<a
+                                    href="https://open-meteo.com/"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="underline hover:text-text-secondary transition"
+                                >Open-Meteo.com</a> (CC BY 4.0)
+                            </p>
+                        {/if}
                     {/if}
                 {:else if activeTab === "todo"}
                     <div class="mb-4">

@@ -6,6 +6,7 @@ trip:
   departure: '2026-10-01T08:00:00+08:00'
   lang: ja
   currency: JPY
+  city: Tokyo
   hotels:
     - name: 極簡設計精選飯店
       address: 東京都新宿區西新宿 1-1-1

@@ -27,6 +27,8 @@ export interface DayItinerary {
     day: number;
     date: string;
     region: string;
+    /** Overrides `trip.city` for this day's weather lookup (multi-city trips). See `lib/weather.ts`. */
+    city?: string;
     pace: string;
     transport?: string;
     timeline: TimelineEvent[];
@@ -65,6 +67,13 @@ export interface TripData {
          * when unset. See `mapSearch` in `lib/utils.ts`.
          */
         mapProvider?: "naver" | "google";
+        /**
+         * Destination city for the daily weather forecast, overridable per day
+         * via `DayItinerary.city`. English names (e.g. 'Tokyo', 'Seoul') geocode
+         * reliably; Chinese ones often miss or hit the wrong country — see
+         * `lib/weather.ts`. Weather is simply hidden when unset.
+         */
+        city?: string;
         /** Customized wallets/cards (e.g. 'Suica', 'WOWPASS') for the ledger. */
         wallets?: string[];
         hotels: HotelInfo[];
@@ -138,6 +147,16 @@ function normalizeTripData(raw: unknown): TripData {
     }
     if (!data.trip.start || !data.trip.end || !data.trip.departure || !Array.isArray(data.trip.hotels)) {
         throw new Error("trip 區塊缺少 start, end, departure 或 hotels 屬性");
+    }
+    // A bare-number city (e.g. `city: 123`) would crash weather lookups later;
+    // reject it here with a readable message instead.
+    if (data.trip.city != null && typeof data.trip.city !== "string") {
+        throw new Error("trip.city 必須是文字 (例如 'Tokyo')");
+    }
+    for (const day of data.days) {
+        if (day.city != null && typeof day.city !== "string") {
+            throw new Error("days[].city 必須是文字 (例如 'Tokyo')");
+        }
     }
 
     // Optional sections default to empty arrays. Note `phrases` is intentionally
