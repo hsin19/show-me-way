@@ -4,15 +4,16 @@ import {
     CalendarCheck,
     ClipboardList,
     Flame,
-    Footprints,
     Link,
     Maximize2,
+    Play,
     X,
     Zap,
 } from "@lucide/svelte";
 import type { DayItinerary } from "../api";
 import type { HotelInfo } from "../api";
 import {
+    classifyTimelineEvents,
     formatDayDate,
     mapSearch,
 } from "../utils";
@@ -28,25 +29,20 @@ interface Props {
     mapProvider?: string;
     /** This day's forecast; null/undefined (no city set, or beyond the 16-day horizon) hides the badge. */
     weather?: DailyWeather | null;
+    /** App's ticking clock; enables today's past/current/upcoming styling. Null disables. */
+    now?: Date | null;
     onCopy: (text: string, msg: string) => void;
 }
 
-let { dayData, hotels = [], mapProvider, weather = null, onCopy }: Props = $props();
+let { dayData, hotels = [], mapProvider, weather = null, now = null, onCopy }: Props = $props();
+
+// Per-event time status for today's panel only — classifyTimelineEvents
+// returns null for any other day, so non-today panels skip all styling.
+const eventStatuses = $derived(now ? classifyTimelineEvents(dayData.timeline, dayData.date, now) : null);
 
 // Local-language name (and, for hotels, address) to show enlarged for a taxi
 // driver / local staff to read. `null` keeps the fullscreen overlay closed.
 let enlarged = $state<{ title: string; localName: string; address?: string; } | null>(null);
-
-// Dynamically get transport method, fallback to "步行 & 捷運"
-const transportText = $derived(dayData.transport || "步行 & 捷運");
-
-// Dynamically calculate accommodation info
-const hotelText = $derived.by(() => {
-    // Find matching hotel based on day's date
-    const date = dayData.date;
-    const activeHotel = hotels.find(h => date >= h.checkIn && date <= h.checkOut);
-    return activeHotel ? activeHotel.name : "未安排住宿";
-});
 
 // Hotel where this day is an actual overnight stay. The checkout day is
 // excluded (date < checkOut), so no "回飯店" entry shows on the departure day.
@@ -68,17 +64,11 @@ const overnightHotel = $derived(
         <Zap size={15} class="text-neon-orange shrink-0 mt-0.5" aria-hidden="true" />
         <span><strong class="text-text-primary">今日節奏：</strong>{dayData.pace}</span>
     </p>
-    <div class="flex flex-wrap gap-4 mt-4 pt-4 border-t border-white/5">
-        <div class="flex items-center gap-1.5 text-xs text-text-secondary">
-            <Footprints size={14} class="shrink-0" aria-hidden="true" /> {transportText}
-        </div>
-        <div class="flex items-center gap-1.5 text-xs text-text-secondary">
-            <BedDouble size={14} class="shrink-0" aria-hidden="true" /> {hotelText}
-        </div>
-        {#if weather}
+    {#if weather}
+        <div class="flex flex-wrap gap-4 mt-4 pt-4 border-t border-white/5">
             <WeatherBadge {weather} />
-        {/if}
-    </div>
+        </div>
+    {/if}
 </div>
 
 <!-- Map link + "show enlarged" button for a place. A direct `mapLink` (e.g. a
@@ -135,8 +125,9 @@ const overnightHotel = $derived(
 
 <!-- Timeline List -->
 <div class="relative pl-6 before:content-[''] before:absolute before:top-2 before:left-[7px] before:w-[2px] before:h-[calc(100%-16px)] before:bg-gradient-to-b before:from-neon-blue/40 before:to-neon-pink/40">
-    {#each dayData.timeline as event (event._id ?? event.time + event.title)}
-        <div class="relative mb-6">
+    {#each dayData.timeline as event, i (event._id ?? event.time + event.title)}
+        {@const status = eventStatuses?.[i] ?? null}
+        <div class="relative mb-6 {status === 'past' ? 'opacity-60' : ''}" data-timeline-event={i}>
             <!-- Timeline Node Badge -->
             <div
                 class="
@@ -150,7 +141,7 @@ const overnightHotel = $derived(
             </div>
 
             <!-- Event Card (Glassmorphic) -->
-            <div class="glass-panel rounded-2xl p-4 ml-2.5 transition-transform duration-200 active:scale-[0.98]">
+            <div class="glass-panel rounded-2xl p-4 ml-2.5 transition-transform duration-200 active:scale-[0.98] {status === 'current' ? 'ring-2 ring-neon-blue/60 shadow-[0_0_18px_rgba(0,240,255,0.25)]' : ''}">
                 <div class="flex justify-between items-center mb-2">
                     <span
                         class="
@@ -163,13 +154,18 @@ const overnightHotel = $derived(
                     >
                         {event.time}
                     </span>
-                    {#if event.type === "booked"}
-                        <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-orange/15 text-neon-orange border border-neon-orange/30"><CalendarCheck size={11} aria-hidden="true" />預訂</span>
-                    {:else if event.type === "must-go"}
-                        <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-pink/15 text-neon-pink border border-neon-pink/30"><Flame size={11} aria-hidden="true" />必訪</span>
-                    {:else if event.type === "option"}
-                        <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-purple/15 text-neon-purple border border-neon-purple/30"><ClipboardList size={11} aria-hidden="true" />備選</span>
-                    {/if}
+                    <div class="flex items-center gap-1.5">
+                        {#if status === "current"}
+                            <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-blue/15 text-neon-blue border border-neon-blue/30"><Play size={11} aria-hidden="true" />進行中</span>
+                        {/if}
+                        {#if event.type === "booked"}
+                            <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-orange/15 text-neon-orange border border-neon-orange/30"><CalendarCheck size={11} aria-hidden="true" />預訂</span>
+                        {:else if event.type === "must-go"}
+                            <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-pink/15 text-neon-pink border border-neon-pink/30"><Flame size={11} aria-hidden="true" />必訪</span>
+                        {:else if event.type === "option"}
+                            <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-purple/15 text-neon-purple border border-neon-purple/30"><ClipboardList size={11} aria-hidden="true" />備選</span>
+                        {/if}
+                    </div>
                 </div>
 
                 <div class="mb-1.5">

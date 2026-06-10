@@ -41,7 +41,6 @@ Top-level keys: `trip` (required), `days` (required), and optional `todo`, `pack
 - `region` — main area, e.g. `明洞 · 乙支路`.
 - `city` — optional; overrides `trip.city` for this day's weather lookup (multi-city trips), e.g. `Kyoto`. English names only.
 - `pace` — pace description, e.g. `慢活、需要早起`.
-- `transport` — optional; omit to default to 步行 & 捷運.
 - `timeline[]` — each requires `time`, `title`, `type`, `desc`; optional `bullets`, `localName`, `mapLink`, `links`.
   - `time` — `HH:MM` or a range `14:00 - 15:30`.
   - `title` — short label; emoji prefix is idiomatic (✈️ 🏨 🍜 🛍️ ☕ 🎁).

@@ -13,7 +13,6 @@ import {
     Luggage,
     RefreshCw,
     Settings,
-    Share2,
     TriangleAlert,
     Wallet,
     X,
@@ -36,6 +35,7 @@ import DaySwitcher from "./lib/components/DaySwitcher.svelte";
 import Ledger from "./lib/components/Ledger.svelte";
 import TaxiHelper from "./lib/components/TaxiHelper.svelte";
 import Timeline from "./lib/components/Timeline.svelte";
+import TripOverview from "./lib/components/TripOverview.svelte";
 import { getLanguageConfig } from "./lib/phrases";
 import {
     buildShareUrl,
@@ -46,11 +46,13 @@ import {
     readShareTokenFromHash,
 } from "./lib/share";
 import {
-    formatDateRange,
+    findCurrentEventIndex,
     formatDayDate,
+    formatNextEventLabel,
     getCountdownText,
+    getNextEventInfo,
     getTodayIsoString,
-    parseLocalDate,
+    toLocalIsoDate,
 } from "./lib/utils";
 import {
     type DailyWeather,
@@ -70,7 +72,16 @@ let loadError = $state<string | null>(null);
 // sync). Named to stay distinct from the perf-time `now` locals in the scroll
 // handlers — the two timebases must never mix.
 let clockNow = $state(new Date());
-let countdownText = $derived(tripData ? getCountdownText(tripData.trip, clockNow) : "計算中…");
+// The day whose date is the local today — drives the overview capsule, the
+// DaySwitcher 今天 marker, and rolls over automatically with the clock tick.
+let todayData = $derived(tripData?.days.find(d => d.date === toLocalIsoDate(clockNow)) ?? null);
+let nextEvent = $derived(todayData ? getNextEventInfo(todayData.timeline, todayData.date, clockNow) : null);
+// Overview-panel capsule: during the trip surface today's next / in-progress
+// event; otherwise fall back to the countdown / trip-state label.
+let countdownText = $derived.by(() => {
+    if (nextEvent) return formatNextEventLabel(nextEvent);
+    return tripData ? getCountdownText(tripData.trip, clockNow) : "計算中…";
+});
 
 $effect(() => {
     const timer = window.setInterval(() => (clockNow = new Date()), 60000);
@@ -108,64 +119,11 @@ let showSettings = $state(false);
 let yamlInput = $state("");
 let validationError = $state<string | null>(null);
 
-// Scroll & Header Collapse States
-let isHeaderCollapsed = $state(false);
-let lastScrollTop = 0;
-let scrollTicking = false;
-// While collapsing/expanding, the header's own height change reflows the page and
-// clamps scrollY; lock toggles until this timestamp (> the 300ms transition) so that
-// animation-induced scroll changes can't flip the state back (the jitter source).
-let headerLockUntil = 0;
-// Ignore sub-threshold movement (sub-pixel events, iOS momentum/rubber-band)
-const SCROLL_DELTA = 8;
-
 function handleWindowKeydown(e: KeyboardEvent) {
     if (e.key === "Escape" && showSettings) {
         attemptCloseSettings();
     }
 }
-
-function handleWindowScroll() {
-    // Throttle to one evaluation per frame so a burst of scroll events
-    // (especially while the collapse animation is reflowing) can't thrash state.
-    if (scrollTicking) return;
-    scrollTicking = true;
-    requestAnimationFrame(() => {
-        const scrollTop = Math.max(0, window.scrollY); // clamp iOS rubber-band negatives
-        const now = performance.now();
-
-        // During a collapse/expand transition, ignore toggles but keep the baseline
-        // synced to the (clamping) scroll position so no stale delta fires afterwards.
-        if (now < headerLockUntil) {
-            lastScrollTop = scrollTop;
-            scrollTicking = false;
-            return;
-        }
-
-        const delta = scrollTop - lastScrollTop;
-        let next = isHeaderCollapsed;
-        if (scrollTop <= 30) {
-            next = false; // always reveal at the very top
-        } else if (Math.abs(delta) > SCROLL_DELTA) {
-            next = delta > 0; // down → collapse, up → expand
-            // Re-baseline only when a real move crosses the threshold, so slow
-            // scrolls accumulate instead of locking the comparison in place.
-            lastScrollTop = scrollTop;
-        }
-
-        if (next !== isHeaderCollapsed) {
-            isHeaderCollapsed = next;
-            headerLockUntil = now + 380; // cover the 300ms transition + margin
-        }
-        scrollTicking = false;
-    });
-}
-
-$effect(() => {
-    if (activeTab) {
-        isHeaderCollapsed = false;
-    }
-});
 
 // Reflect the loaded trip name in the browser tab title (falls back to the default).
 $effect(() => {
@@ -218,7 +176,12 @@ function handleVisibilityChange() {
     // Interval ticks are throttled/frozen in the background; bring the
     // countdown clock current immediately on resume.
     clockNow = new Date();
-    if (tripData) refreshTripWeather(tripData);
+    if (tripData) {
+        refreshTripWeather(tripData);
+        // Cross-midnight resume: hop to the new today. The strip realigns via
+        // the existing sync effect, whose settle then drives applyDayScroll.
+        if (getTodayIsoString() !== lastSyncedDate) syncToToday(tripData);
+    }
 }
 
 // Forecast for one day. Dates beyond the 16-day forecast horizon have no
@@ -249,13 +212,103 @@ let stripLockTimer: number;
 // (which otherwise causes a visible jitter once the swipe settles).
 let syncingFromScroll = false;
 
-function dayOffsetLeft(day: number): number | null {
+// Vertical auto-scroll once a day-switch settles: to the top, or to the
+// in-progress event when the settled day is today. `lastSettledDay` lives on
+// the component (not the strip) so the realign settle after a tab-switch
+// remount can't re-trigger a scroll for the same day.
+let lastSettledDay: number | null = null;
+let stripSettleTimer: number;
+// Debounce instead of `scrollend` (unsupported on older iOS Safari): the strip
+// is considered settled when scroll events stop AND it rests on a snap point.
+const STRIP_SETTLE_MS = 160;
+const EVENT_SCROLL_GAP = 8;
+// Armed by loadTripData; consumed by the initial-positioning effect below.
+let pendingInitialScroll = false;
+let headerEl = $state<HTMLElement>();
+
+// Day number ↔ strip panel index. Panel 0 is the trip overview (day 0); the
+// day panels follow in YAML order, shifted by one.
+function dayToIndex(day: number): number | null {
+    if (day === 0) return 0;
     const idx = tripData?.days.findIndex(d => d.day === day) ?? -1;
-    if (idx < 0 || !dayStrip) return null;
+    return idx < 0 ? null : idx + 1;
+}
+
+function indexToDay(idx: number): number | null {
+    if (idx === 0) return 0;
+    return tripData?.days[idx - 1]?.day ?? null;
+}
+
+function dayOffsetLeft(day: number): number | null {
+    const idx = dayToIndex(day);
+    if (idx === null || !dayStrip) return null;
     return idx * dayStrip.clientWidth;
 }
 
+function scrollBehavior(): "auto" | "smooth" {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+}
+
+// Vertical position for one day: today scrolls to its in-progress event
+// (none started yet → top), any other day scrolls to the top.
+function applyDayScroll(day: number, behavior: "auto" | "smooth" = scrollBehavior()) {
+    if (!tripData || !dayStrip) return;
+    const dayData = tripData.days.find(d => d.day === day);
+    if (!dayData) {
+        // The overview panel (day 0) always rests at the top.
+        if (day === 0) window.scrollTo({ top: 0, behavior });
+        return;
+    }
+    const now = new Date();
+    const eventIdx = dayData.date === toLocalIsoDate(now)
+        ? findCurrentEventIndex(dayData.timeline, now)
+        : null;
+    if (eventIdx === null) {
+        window.scrollTo({ top: 0, behavior });
+        return;
+    }
+    const panelIdx = dayToIndex(day);
+    const card = panelIdx === null
+        ? undefined
+        : dayStrip.children[panelIdx]
+            ?.querySelectorAll<HTMLElement>("[data-timeline-event]")[eventIdx];
+    if (!card) {
+        window.scrollTo({ top: 0, behavior });
+        return;
+    }
+    // The sticky header occupies flow space, so offsetting by its height as
+    // measured NOW self-corrects: however the header ends up (collapse on
+    // scroll-down, expand near the top), the content shift cancels exactly and
+    // the card lands right below the final header.
+    const headerH = headerEl?.offsetHeight ?? 0;
+    const top = Math.max(0, card.getBoundingClientRect().top + window.scrollY - headerH - EVENT_SCROLL_GAP);
+    window.scrollTo({ top, behavior });
+}
+
+function armStripSettle() {
+    clearTimeout(stripSettleTimer);
+    stripSettleTimer = window.setTimeout(onStripSettled, STRIP_SETTLE_MS);
+}
+
+function onStripSettled() {
+    if (!dayStrip || !tripData) return;
+    const width = dayStrip.clientWidth;
+    if (width <= 0) return;
+    const idx = Math.round(dayStrip.scrollLeft / width);
+    // Mid-pan rest (finger held between panels): not on a snap point — skip;
+    // releasing the finger restarts scroll events and re-arms the timer.
+    if (Math.abs(dayStrip.scrollLeft - idx * width) >= 2) return;
+    const day = indexToDay(idx);
+    if (day === null || day === lastSettledDay) return;
+    // A multi-day programmatic jump pausing on an intermediate panel: wait for
+    // the real arrival (the lock releases at the target).
+    if (stripScrollLock && day !== currentDay) return;
+    lastSettledDay = day;
+    applyDayScroll(day);
+}
+
 function handleStripScroll() {
+    armStripSettle(); // feeds both user swipes and programmatic smooth scrolls
     if (!dayStrip || !tripData) return;
     if (stripScrollLock) {
         // Release once we've reached the programmatic target for currentDay.
@@ -264,8 +317,8 @@ function handleStripScroll() {
         return;
     }
     const idx = Math.round(dayStrip.scrollLeft / dayStrip.clientWidth);
-    const day = tripData.days[idx]?.day;
-    if (day && day !== currentDay) {
+    const day = indexToDay(idx);
+    if (day !== null && day !== currentDay) {
         syncingFromScroll = true;
         currentDay = day;
     }
@@ -287,6 +340,19 @@ $effect(() => {
         stripLockTimer = setTimeout(() => (stripScrollLock = false), 1000);
         dayStrip.scrollTo({ left: target, behavior: "smooth" });
     }
+});
+
+// Initial positioning: when today is Day 1 the strip never scrolls (scrollLeft
+// is already 0), so settle detection can't fire — trigger explicitly once the
+// strip is mounted and trip data is ready. Also covers re-loads from Settings.
+$effect(() => {
+    if (!dayStrip || !tripData || !pendingInitialScroll) return;
+    pendingInitialScroll = false;
+    // Pre-claim the settle so the concurrent horizontal realign (when today
+    // isn't Day 1) doesn't double-fire the vertical scroll.
+    lastSettledDay = currentDay;
+    const day = currentDay;
+    requestAnimationFrame(() => applyDayScroll(day, "auto"));
 });
 
 onMount(async () => {
@@ -323,6 +389,23 @@ async function maybeImportSharedItinerary() {
     }
 }
 
+// Local date `currentDay` was last auto-synced to. A resume on the SAME date
+// must never override the user's manual day browsing; only an actual rollover
+// (cross-midnight background → foreground) re-syncs.
+let lastSyncedDate = "";
+
+// Auto-jump to today's itinerary if the trip is active.
+function syncToToday(data: TripData) {
+    if (!data.days || data.days.length === 0) return;
+    const todayStr = getTodayIsoString();
+    lastSyncedDate = todayStr;
+    const matchingDay = data.days.find(d => d.date === todayStr);
+
+    // Outside the trip dates, land on the overview panel (day 0) — that's
+    // where the countdown / wrap-up label lives.
+    currentDay = matchingDay ? matchingDay.day : 0;
+}
+
 async function loadTripData() {
     isLoading = true;
     loadError = null;
@@ -337,29 +420,11 @@ async function loadTripData() {
             persistTripData();
         }
 
-        // Auto-jump to today's itinerary if trip is active
-        if (data && data.days && data.days.length > 0) {
-            const todayStr = getTodayIsoString();
-            const matchingDay = data.days.find(d => d.date === todayStr);
-
-            if (matchingDay) {
-                currentDay = matchingDay.day;
-            } else {
-                // Default to Day 1 if before start, or last Day if after end
-                const today = new Date();
-                const lastDayDate = parseLocalDate(data.days[data.days.length - 1].date);
-                const lastDayEnd = new Date(lastDayDate.getTime() + 24 * 60 * 60 * 1000);
-
-                if (today > lastDayEnd) {
-                    currentDay = data.days[data.days.length - 1].day;
-                } else {
-                    currentDay = 1;
-                }
-            }
-        }
+        syncToToday(data);
+        pendingInitialScroll = true;
     } catch (err) {
         console.error("Failed to load trip data:", err);
-        loadError = "無法載入或解析行程資料。請點擊右上角設定確認 YAML 語法。";
+        loadError = "無法載入或解析行程資料。請開啟設定確認 YAML 語法。";
     } finally {
         isLoading = false;
     }
@@ -501,23 +566,21 @@ async function saveSettings() {
     }
 }
 
-// Generate a self-contained share link from the current editor content and
-// copy it to the clipboard. Validates first so we never share broken YAML.
-async function generateShareLink() {
+// Generate a self-contained share link from the currently loaded trip and
+// copy it to the clipboard. Triggered from the overview panel, so feedback
+// goes through toasts (there is no settings modal open to show errors in).
+async function shareCurrentTrip() {
+    if (!tripData) return;
     if (!isShareSupported()) {
-        validationError = "此瀏覽器不支援連結壓縮，無法產生分享連結。";
+        triggerToast("此瀏覽器不支援連結壓縮，無法產生分享連結");
         return;
     }
     try {
-        const parsed = validateYaml(yamlInput);
-        const url = await buildShareUrl(serializeToYaml(parsed));
-        validationError = null;
+        const url = await buildShareUrl(serializeToYaml(tripData));
         handleCopy(url, "分享連結已複製！網址較長，可用短網址服務縮短");
     } catch (err) {
         console.error("Failed to build share link:", err);
-        validationError = err instanceof Error
-            ? `無法產生分享連結：${err.message}`
-            : "無法產生分享連結，請檢查 YAML 內容。";
+        triggerToast("無法產生分享連結，請稍後再試");
     }
 }
 
@@ -578,51 +641,24 @@ function clearYaml() {
 }
 </script>
 
-<svelte:window onscroll={handleWindowScroll} onkeydown={handleWindowKeydown} />
+<svelte:window onkeydown={handleWindowKeydown} />
 <svelte:document onvisibilitychange={handleVisibilityChange} />
 
 <div class="flex flex-col min-h-screen bg-[#0b0c13] text-text-primary pb-[calc(80px+var(--safe-bottom))] animate-fade-in">
-    <!-- App Header -->
-    <header class="sticky top-0 z-[100] bg-[#0d0e15]/85 backdrop-blur-xl border-b border-white/5 pt-[calc(15px+var(--safe-top))] px-5 transition-[padding] duration-300 {isHeaderCollapsed ? 'pb-2' : 'pb-3'}">
-        <div class="max-w-3xl mx-auto w-full">
-            <div class="transition-[max-height,opacity,margin,transform] duration-300 ease-in-out overflow-hidden {isHeaderCollapsed ? 'max-h-0 opacity-0 mb-0 scale-95 pointer-events-none' : 'max-h-[80px] opacity-100 mb-3'}">
-                <div class="flex justify-between items-center">
-                    <div class="flex items-center gap-3">
-                        <div>
-                            <h1 class="text-lg font-black bg-gradient-to-r from-white to-[#cbd5e1] bg-clip-text text-transparent tracking-tight">
-                                {tripData ? tripData.trip.name : "下面一way"}
-                            </h1>
-                            <p class="text-[11px] text-text-secondary font-medium tracking-wide">
-                                {tripData ? formatDateRange(tripData.trip.start, tripData.trip.end) : "旅行規劃小助手"}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                        <div class="bg-neon-pink/12 border border-neon-pink/30 text-neon-pink text-[11px] font-bold px-3 py-1.5 rounded-full shadow-[0_0_15px_rgba(255,42,116,0.25)] text-shadow-[0_0_4px_rgba(255,42,116,0.3)]">
-                            {countdownText}
-                        </div>
-                        <button
-                            onclick={openSettings}
-                            class="min-w-[44px] min-h-[44px] flex items-center justify-center border border-card-border text-text-secondary rounded-xl hover:bg-white/5 hover:text-text-primary transition cursor-pointer"
-                            aria-label="開啟 YAML 設定"
-                            title="開啟 YAML 設定"
-                        >
-                            <Settings size={18} aria-hidden="true" />
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {#if tripData && activeTab === "itinerary"}
+    <!-- App Header: just the day switcher now — trip name, countdown and the
+         settings entry live on the overview panel (day 0) inside the strip. -->
+    {#if tripData && activeTab === "itinerary"}
+        <header bind:this={headerEl} class="sticky top-0 z-[100] bg-[#0d0e15]/85 backdrop-blur-xl border-b border-white/5 pt-[calc(12px+var(--safe-top))] px-5">
+            <div class="max-w-3xl mx-auto w-full">
                 <!-- Day Switcher component (Formats ISO dates to MM/DD(W) dynamically) -->
-                <DaySwitcher days={tripData.days.map(d => ({ day: d.day, date: formatDayDate(d.date) }))} bind:currentDay />
-            {/if}
-        </div>
-    </header>
+                <DaySwitcher days={tripData.days.map(d => ({ day: d.day, date: formatDayDate(d.date) }))} bind:currentDay todayDay={todayData?.day ?? null} />
+            </div>
+        </header>
+    {/if}
 
-    <!-- Main Content Area -->
-    <main class="flex-1 p-5 max-w-3xl mx-auto w-full">
+    <!-- Main Content Area: pads for the notch itself when the header is absent
+         (loading / error / non-itinerary tabs). -->
+    <main class="flex-1 p-5 max-w-3xl mx-auto w-full {tripData && activeTab === 'itinerary' ? '' : 'pt-[calc(20px+var(--safe-top))]'}">
         {#if isLoading}
             <div class="flex flex-col items-center justify-center py-20 gap-3">
                 <Loader2 class="animate-spin text-neon-blue" size={36} />
@@ -644,12 +680,24 @@ function clearYaml() {
             <div class="animate-fade-in">
                 {#if activeTab === "itinerary"}
                     {#if tripData.days.length > 0}
-                        <!-- Horizontal scroll-snap strip: one full-width panel per day. -->
+                        <!-- Horizontal scroll-snap strip: the trip overview (panel 0),
+                             then one full-width panel per day. -->
                         <div
                             bind:this={dayStrip}
                             onscroll={handleStripScroll}
                             class="flex overflow-x-auto overscroll-x-contain snap-x snap-mandatory items-start [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                         >
+                            <section class="snap-start snap-always shrink-0 w-full">
+                                <TripOverview
+                                    trip={tripData.trip}
+                                    days={tripData.days}
+                                    {countdownText}
+                                    weatherFor={weatherForDay}
+                                    onSelectDay={day => (currentDay = day)}
+                                    onShare={shareCurrentTrip}
+                                    onOpenSettings={openSettings}
+                                />
+                            </section>
                             {#each tripData.days as day (day.day)}
                                 <!-- snap-always: scroll-snap-stop forces one panel per swipe (no momentum skipping) -->
                                 <section class="snap-start snap-always shrink-0 w-full">
@@ -658,6 +706,7 @@ function clearYaml() {
                                         hotels={tripData.trip.hotels}
                                         mapProvider={tripData.trip.mapProvider}
                                         weather={weatherForDay(day)}
+                                        now={clockNow}
                                         onCopy={handleCopy}
                                     />
                                 </section>
@@ -895,13 +944,6 @@ function clearYaml() {
                     </ul>
                 </div>
             </div>
-
-            <button
-                onclick={generateShareLink}
-                class="shrink-0 w-full mt-3 bg-white/3 border border-neon-blue/30 text-neon-blue font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-neon-blue/10 transition active:scale-[0.98] cursor-pointer"
-            >
-                <Share2 size={14} aria-hidden="true" /> 產生並複製分享連結
-            </button>
 
             <div class="grid grid-cols-2 gap-2 mt-3 shrink-0">
                 <button

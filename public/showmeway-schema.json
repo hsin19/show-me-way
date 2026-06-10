@@ -152,10 +152,6 @@
             "type": "string",
             "description": "今日行程節奏描述，例如: 慢活、需要早起"
           },
-          "transport": {
-            "type": "string",
-            "description": "當日主要交通工具 (選填，未填預設為 步行 & 捷運)"
-          },
           "timeline": {
             "type": "array",
             "items": {

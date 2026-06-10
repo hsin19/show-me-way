@@ -30,7 +30,6 @@ export interface DayItinerary {
     /** Overrides `trip.city` for this day's weather lookup (multi-city trips). See `lib/weather.ts`. */
     city?: string;
     pace: string;
-    transport?: string;
     timeline: TimelineEvent[];
 }
 
