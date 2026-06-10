@@ -153,9 +153,34 @@ function normalizeTripData(raw: unknown): TripData {
     if (data.trip.city != null && typeof data.trip.city !== "string") {
         throw new Error("trip.city 必須是文字 (例如 'Tokyo')");
     }
-    for (const day of data.days) {
+    for (const [i, day] of data.days.entries()) {
+        // A bare `-` list item in hand-written YAML parses to null, and a
+        // string/number/array element would otherwise surface later as a
+        // cryptic English TypeError from `attachRuntimeIds`. Messages count by
+        // list position (not the `day` field, which may be missing/renumbered).
+        if (!day || typeof day !== "object" || Array.isArray(day)) {
+            throw new Error(`days 第 ${i + 1} 項必須是物件 (不可為空白列表項)`);
+        }
+        if (!Array.isArray(day.timeline)) {
+            throw new Error(`days 第 ${i + 1} 項缺少 timeline 列表`);
+        }
+        for (const [j, ev] of day.timeline.entries()) {
+            if (!ev || typeof ev !== "object" || Array.isArray(ev)) {
+                throw new Error(`days 第 ${i + 1} 項的 timeline 第 ${j + 1} 項必須是物件 (不可為空白列表項)`);
+            }
+        }
         if (day.city != null && typeof day.city !== "string") {
-            throw new Error("days[].city 必須是文字 (例如 'Tokyo')");
+            throw new Error(`days 第 ${i + 1} 項的 city 必須是文字 (例如 'Tokyo')`);
+        }
+    }
+    // Checklist items get `_id`s too, so a null / plain-string item would crash
+    // `attachRuntimeIds` just the same.
+    for (const [listName, list] of [["todo", data.todo], ["packing", data.packing]] as const) {
+        if (!Array.isArray(list)) continue;
+        for (const [j, item] of list.entries()) {
+            if (!item || typeof item !== "object" || Array.isArray(item)) {
+                throw new Error(`${listName} 第 ${j + 1} 項必須是物件 (例如 - text: '項目內容')`);
+            }
         }
     }
 
@@ -223,34 +248,38 @@ export function createChecklistItemId(prefix: "todo" | "pack"): string {
     return `${prefix}-${runtimeIdSeq++}`;
 }
 
+/**
+ * Fetch the default itinerary YAML text: itinerary.local.yaml first, then the
+ * bundled itinerary.yaml. Shared by `fetchItinerary` and the settings editor so
+ * their fallback behavior can't drift.
+ *
+ * Offline, a missing file makes fetch reject outright (not a 404), so rejection
+ * must also fall through to the precached itinerary.yaml. The abort timeout
+ * bounds a hanging network, and must stay ABOVE the service worker's 5s
+ * networkTimeoutSeconds so the SW's cached copy of a real itinerary.local.yaml
+ * wins before we give up on it.
+ */
+export async function fetchDefaultYamlText(): Promise<string> {
+    let response: Response | null = null;
+    try {
+        response = await fetch("./itinerary.local.yaml", { signal: AbortSignal.timeout(8000) });
+    } catch {
+        // Offline / timed out — fall through to the bundled default below.
+    }
+
+    if (!response?.ok) {
+        response = await fetch("./itinerary.yaml");
+        if (!response.ok) {
+            throw new Error("Neither itinerary.local.yaml nor itinerary.yaml was found.");
+        }
+    }
+    return response.text();
+}
+
 // Load and parse itinerary YAML from local storage or fallback file
 export async function fetchItinerary(): Promise<TripData> {
     try {
-        let yamlContent = localStorage.getItem(USER_YAML_KEY) || "";
-
-        if (!yamlContent) {
-            // No user YAML in localStorage: try itinerary.local.yaml, then fall back to itinerary.yaml.
-            // Offline, a missing file makes fetch reject outright (not a 404),
-            // so rejection must also fall through to the precached itinerary.yaml.
-            // The abort timeout bounds a hanging network, and must stay ABOVE the
-            // service worker's 5s networkTimeoutSeconds so the SW's cached copy
-            // of a real itinerary.local.yaml wins before we give up on it.
-            let response: Response | null = null;
-            try {
-                response = await fetch("./itinerary.local.yaml", { signal: AbortSignal.timeout(8000) });
-            } catch {
-                response = null;
-            }
-
-            if (!response?.ok) {
-                response = await fetch("./itinerary.yaml");
-                if (!response.ok) {
-                    throw new Error("Neither itinerary.local.yaml nor itinerary.yaml was found.");
-                }
-            }
-            yamlContent = await response.text();
-        }
-
+        const yamlContent = localStorage.getItem(USER_YAML_KEY) || await fetchDefaultYamlText();
         return normalizeTripData(parseYaml(yamlContent));
     } catch (error) {
         console.error("[API] Error parsing YAML itinerary:", error);

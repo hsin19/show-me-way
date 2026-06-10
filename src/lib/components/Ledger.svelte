@@ -6,7 +6,10 @@ import {
     Trash2,
     Wallet,
 } from "@lucide/svelte";
-import { onMount } from "svelte";
+import {
+    onMount,
+    untrack,
+} from "svelte";
 import { loadExchangeRates } from "../exchange";
 
 interface ExpenseItem {
@@ -158,33 +161,45 @@ $effect(() => {
     }
 });
 
-// Keep exchange rate and initial values updated when activeCurrency changes
+// Keep exchange rate and initial values updated when activeCurrency changes.
+// `untrack` keeps `activeCurrency` as this effect's ONLY dependency: the body
+// reads `exchangeRate` and (via `convert`) the bound input values, which would
+// otherwise re-run it on every keystroke — re-reading localStorage and rounding
+// the user's typed value away. (A writable-$derived rewrite reintroduces that
+// overwrite bug; don't switch to it.)
 let lastCurrency = "";
 $effect(() => {
-    const rateKey = `exchange_rate_${activeCurrency}`;
-    const savedRate = localStorage.getItem(rateKey);
-    if (savedRate) {
-        exchangeRate = parseFloat(savedRate);
-    } else {
-        exchangeRate = activeCurrency === "TWD" ? 1.0 : 0.0;
-    }
+    const currency = activeCurrency;
+    untrack(() => {
+        const rateKey = `exchange_rate_${currency}`;
+        const savedRate = localStorage.getItem(rateKey);
+        if (savedRate) {
+            exchangeRate = parseFloat(savedRate);
+        } else {
+            exchangeRate = currency === "TWD" ? 1.0 : 0.0;
+        }
 
-    if (activeCurrency !== lastCurrency) {
-        foreignValue = activeCurrency === "TWD" ? "1000" : (exchangeRate > 0 ? Math.round(100 * exchangeRate).toString() : "100");
-        lastCurrency = activeCurrency;
-    }
-    convert("foreign");
+        if (currency !== lastCurrency) {
+            foreignValue = currency === "TWD" ? "1000" : (exchangeRate > 0 ? Math.round(100 * exchangeRate).toString() : "100");
+            lastCurrency = currency;
+        }
+        convert("foreign");
 
-    // Fetch live rate from network/cache (TWD as base currency)
-    if (activeCurrency !== "TWD") {
-        loadExchangeRates("TWD", data => {
-            const targetCode = activeCurrency.toLowerCase();
-            const ratesRecord = data["twd"] as Record<string, number> | undefined;
-            const rate = ratesRecord?.[targetCode];
-            if (rate && typeof rate === "number") {
+        // Fetch live rate from network/cache (TWD as base currency). The
+        // callback sticks to the captured `currency` so a rate that resolves
+        // after another currency switch can't be written under the wrong key.
+        if (currency !== "TWD") {
+            loadExchangeRates("TWD", data => {
+                const ratesRecord = data["twd"] as Record<string, number> | undefined;
+                const rate = ratesRecord?.[currency.toLowerCase()];
+                if (!rate || typeof rate !== "number") return;
+                const fetchedRate = parseFloat(rate.toFixed(4));
+                localStorage.setItem(rateKey, fetchedRate.toString());
+                // A late callback after another currency switch must not
+                // clobber the live inputs — persisting its own key is enough.
+                if (currency !== activeCurrency) return;
                 const prevRate = exchangeRate;
-                exchangeRate = parseFloat(rate.toFixed(4));
-                localStorage.setItem(rateKey, exchangeRate.toString());
+                exchangeRate = fetchedRate;
                 // If the previous rate was unset, reinitialize the default input value
                 if (prevRate === 0 && foreignValue === "100") {
                     foreignValue = Math.round(100 * exchangeRate).toString();
@@ -192,12 +207,12 @@ $effect(() => {
                 } else {
                     convert("rate");
                 }
-            }
-        });
-    } else {
-        exchangeRate = 1.0;
-        convert("rate");
-    }
+            });
+        } else {
+            exchangeRate = 1.0;
+            convert("rate");
+        }
+    });
 });
 
 function saveLedger() {

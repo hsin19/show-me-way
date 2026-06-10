@@ -14,7 +14,7 @@ The source of truth for structure is `public/showmeway-schema.json`. The quick r
 1. **Ask for the output path first.** Inquire where the user wants to save the generated YAML file. Suggest `public/itinerary.local.yaml` as the default destination, but allow them to specify a custom target path (e.g. in `Downloads/` or another local path).
 2. **Read existing data if applicable.** If the target output file already exists, read it. Decide with the user whether you are **merging** into the current trip or **replacing** it. Never silently discard existing days/hotels.
 3. **Extract structured facts from the notes.** Pull out: trip name, start/end dates, departure flight time, hotels, and a per-day timeline. Ask the user only for missing fields that are *required* (see below) and cannot be inferred. Don't over-ask — infer sensible values for optional fields.
-4. **Normalize.** Apply the conventions below (dates, ids, event `type`, time ranges, `naverSearch`).
+4. **Normalize.** Apply the conventions below (dates, ids, event `type`, time ranges, `localName`/`mapLink`).
 5. **Write the YAML** to the chosen target path, with the schema modeline on line 1 (see Output rules).
 6. **Verify** with the checks in the Verification section before reporting done.
 
@@ -28,8 +28,11 @@ Top-level keys: `trip` (required), `days` (required), and optional `todo`, `pack
 - `start` / `end` — `YYYY-MM-DD`.
 - `departure` — outbound flight time, ISO 8601 **with timezone offset**, e.g. `2026-06-11T14:00:00+08:00` (drives the home-screen countdown).
 - `lang` — optional language code (`ko` / `ja` / `en`). Selects the app's built-in survival phrases and taxi-driver prompt. Defaults to English (`en`) when omitted or unsupported. Phrases are no longer authored in YAML.
-- `city` — optional destination city for the daily weather badge. **Use an English name** (e.g. `Tokyo`, `Seoul`) — Chinese names often geocode to the wrong place or miss entirely. Weather is simply hidden when unset. Preserve an existing `city` when merging/updating.
-- `hotels[]` — each requires `name`, `station` (nearest metro + walking distance), `address` (local-language address for taxi drivers), `checkIn`, `checkOut` (both `YYYY-MM-DD`).
+- `city` — optional destination city for the daily weather badge. **Use an English name** (e.g. `Tokyo`, `Seoul`) — Chinese names often geocode to the wrong place or miss entirely. Weather is simply hidden when unset (or an empty string). Preserve an existing `city` when merging/updating.
+- `currency` — optional currency code (e.g. `JPY`, `KRW`, `USD`) driving the ledger's converter, default wallets and quick amounts. Defaults to TWD when omitted.
+- `mapProvider` — optional `naver` | `google`; which map service place searches open in (Korea effectively requires `naver`). Defaults to Google Maps.
+- `wallets[]` — optional custom wallet/card names for the ledger (e.g. `Suica`, `WOWPASS`); omit to use the currency's defaults.
+- `hotels[]` — each requires `name`, `address` (local-language address for taxi drivers), `checkIn`, `checkOut` (both `YYYY-MM-DD`); optional `localName` (local-language hotel name, used as the map-search query) and `mapLink` (direct map URL, preferred over searching `localName`).
 
 ### days[] (required: day, date, region, pace, timeline)
 
@@ -39,12 +42,14 @@ Top-level keys: `trip` (required), `days` (required), and optional `todo`, `pack
 - `city` — optional; overrides `trip.city` for this day's weather lookup (multi-city trips), e.g. `Kyoto`. English names only.
 - `pace` — pace description, e.g. `慢活、需要早起`.
 - `transport` — optional; omit to default to 步行 & 捷運.
-- `timeline[]` — each requires `time`, `title`, `type`, `desc`; optional `bullets`, `naverSearch`.
+- `timeline[]` — each requires `time`, `title`, `type`, `desc`; optional `bullets`, `localName`, `mapLink`, `links`.
   - `time` — `HH:MM` or a range `14:00 - 15:30`.
   - `title` — short label; emoji prefix is idiomatic (✈️ 🏨 🍜 🛍️ ☕ 🎁).
   - `type` — one of `booked` (預訂/橘), `must-go` (必訪/粉), `standard` (一般/藍), `option` (備選/紫).
   - `bullets[]` — optional string notes (may contain HTML like `<i>`).
-  - `naverSearch` — optional NAVER Map search keyword for that spot.
+  - `localName` — optional place name in the destination's local language; used as the map-search query and for the enlarge-for-the-driver view.
+  - `mapLink` — optional direct map URL (e.g. a `naver.me` / `maps.app.goo.gl` short link); preferred over searching `localName`.
+  - `links[]` — optional extra labeled links `{ label, url }` (e.g. several spots for one event); map URLs get a matching brand icon automatically.
 
 ### todo[] / packing[] (each item requires text; optional checked)
 

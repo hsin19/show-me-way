@@ -18,14 +18,12 @@ import {
     Wallet,
     X,
 } from "@lucide/svelte";
-import {
-    onDestroy,
-    onMount,
-} from "svelte";
+import { onMount } from "svelte";
 import { registerSW } from "virtual:pwa-register";
 import {
     createChecklistItemId,
     type DayItinerary,
+    fetchDefaultYamlText,
     fetchItinerary,
     saveTripData,
     serializeToYaml,
@@ -64,9 +62,20 @@ import {
 let tripData = $state<TripData | null>(null);
 let currentDay = $state(1);
 let activeTab = $state("itinerary"); // itinerary | todo | taxi | calc
-let countdownText = $state("計算中…");
 let isLoading = $state(true);
 let loadError = $state<string | null>(null);
+
+// Countdown clock: the interval only ticks `clockNow`; the label re-derives
+// from it, so it also updates immediately when a new trip is saved (no manual
+// sync). Named to stay distinct from the perf-time `now` locals in the scroll
+// handlers — the two timebases must never mix.
+let clockNow = $state(new Date());
+let countdownText = $derived(tripData ? getCountdownText(tripData.trip, clockNow) : "計算中…");
+
+$effect(() => {
+    const timer = window.setInterval(() => (clockNow = new Date()), 60000);
+    return () => clearInterval(timer);
+});
 
 // Toast Notification States
 let toastMessage = $state("");
@@ -205,9 +214,11 @@ function refreshTripWeather(data: TripData) {
 // a trip the app stays alive in the switcher for days, and onMount never
 // re-fires, so without this the forecast would be pinned to day 1's fetch.
 function handleVisibilityChange() {
-    if (document.visibilityState === "visible" && tripData) {
-        refreshTripWeather(tripData);
-    }
+    if (document.visibilityState !== "visible") return;
+    // Interval ticks are throttled/frozen in the background; bring the
+    // countdown clock current immediately on resume.
+    clockNow = new Date();
+    if (tripData) refreshTripWeather(tripData);
 }
 
 // Forecast for one day. Dates beyond the 16-day forecast horizon have no
@@ -278,18 +289,12 @@ $effect(() => {
     }
 });
 
-let timer: number;
-
 onMount(async () => {
     // 0. If opened via a share link, offer to import it before loading.
     await maybeImportSharedItinerary();
 
     // 1. Fetch Trip Itinerary
     await loadTripData();
-
-    // 2. Start Countdown Timer
-    updateCountdown();
-    timer = window.setInterval(updateCountdown, 60000);
 });
 
 // If the URL hash carries a shared itinerary, decode it and ask before
@@ -317,10 +322,6 @@ async function maybeImportSharedItinerary() {
         clearShareHash();
     }
 }
-
-onDestroy(() => {
-    if (timer) clearInterval(timer);
-});
 
 async function loadTripData() {
     isLoading = true;
@@ -453,13 +454,10 @@ async function openSettings() {
     if (customYaml) {
         yamlInput = customYaml;
     } else {
-        // Load default template for editing
+        // Load default template for editing — same offline-safe fallback chain
+        // as the initial load (see fetchDefaultYamlText).
         try {
-            let res = await fetch("./itinerary.local.yaml");
-            if (!res.ok) {
-                res = await fetch("./itinerary.yaml");
-            }
-            yamlInput = await res.text();
+            yamlInput = await fetchDefaultYamlText();
         } catch {
             yamlInput = "";
         }
@@ -532,12 +530,6 @@ async function resetToLocalDefault() {
         triggerToast("已恢復為預設行程…");
         await loadTripData();
     }
-}
-
-// Travel Countdown Calculator
-function updateCountdown() {
-    if (!tripData) return;
-    countdownText = getCountdownText(tripData.trip);
 }
 
 // Global Clipboard Copy

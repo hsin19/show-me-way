@@ -8,8 +8,8 @@ This repository is a Svelte 5 travel itinerary PWA. Agents should treat local sk
 - Stack: Svelte 5 runes, TypeScript, Vite, Tailwind CSS v4, `vite-plugin-pwa`, `js-yaml`, Vitest.
 - Package manager: `pnpm`.
 - Mount entry: `src/main.ts` mounts the root component `src/App.svelte`.
-- Shared logic: `src/lib/api.ts`, `src/lib/utils.ts`.
-- Components in `src/lib/components/`: `Timeline.svelte` (day event list), `DaySwitcher.svelte` (day navigation), `Checklist.svelte` (packing/todo lists), `Ledger.svelte` (expense tracking with exchange rate), `TaxiHelper.svelte` (taxi phrase helper).
+- Shared logic in `src/lib/`: `api.ts` (YAML load/save/validate), `utils.ts` (date/map helpers), `exchange.ts` (exchange-rate cache), `weather.ts` (Open-Meteo daily forecast cache), `share.ts` (compressed share links), `phrases.ts` (built-in phrase sets).
+- Components in `src/lib/components/`: `Timeline.svelte` (day event list), `DaySwitcher.svelte` (day navigation), `Checklist.svelte` (packing/todo lists), `Ledger.svelte` (expense tracking with exchange rate), `TaxiHelper.svelte` (taxi phrase helper), `WeatherBadge.svelte` (daily weather badge); brand map icons live in `src/lib/components/icons/`.
 - User-facing language is primarily Traditional Chinese. Keep UI copy and validation errors consistent with that tone.
 
 ## Skills-First Svelte Workflow
@@ -45,9 +45,9 @@ Itinerary data is YAML. Loading priority:
 
 The schema lives at `public/showmeway-schema.json` (served with the site so the modeline `$schema` URL resolves). Keep TypeScript interfaces in `src/lib/api.ts`, schema fields, and example YAML aligned when changing itinerary structure.
 
-`serializeToYaml` strips runtime-only timeline event `_id` values and re-adds the YAML schema modeline. Do not persist `_id` into YAML fixtures or exports.
+`serializeToYaml` strips runtime-only `_id` values (timeline events and checklist items, plus any legacy checklist `id`) and re-adds the YAML schema modeline. Do not persist `_id` into YAML fixtures or exports.
 
-Other `localStorage` keys exist for component state: `exchange_rate` (`Ledger`) and per-list checklist state (`Checklist`). These are separate from itinerary YAML persistence.
+Other `localStorage` keys exist outside the itinerary YAML: `ledger_expenses` and `exchange_rate_<currency>` (`Ledger`), `showmeway_exchange_rates_<base>` (rate cache in `src/lib/exchange.ts`), and `showmeway_geocode_<city>` / `showmeway_weather_<city>` (weather cache in `src/lib/weather.ts`, 3h forecast TTL). Checklist checked-state lives inside the itinerary YAML itself; the legacy `todo_state` / `packing_state` keys are migrated once and removed by `App.svelte` — do not reintroduce them.
 
 ## Svelte And UI Guidelines
 

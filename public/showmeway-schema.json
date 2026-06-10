@@ -42,7 +42,7 @@
         },
         "city": {
           "type": "string",
-          "description": "目的地城市，用於查詢每日天氣預報 (選填，未設定時不顯示天氣)。請使用英文名稱 (例如: Tokyo, Seoul, Osaka)，中文名稱常查不到或比對到錯誤國家。可在個別 day 以 city 覆蓋 (多城市行程)。"
+          "description": "目的地城市，用於查詢每日天氣預報 (選填，未設定或留空字串時不顯示天氣)。請使用英文名稱 (例如: Tokyo, Seoul, Osaka)，中文名稱常查不到或比對到錯誤國家。可在個別 day 以 city 覆蓋 (多城市行程)。"
         },
         "wallets": {
           "type": "array",
