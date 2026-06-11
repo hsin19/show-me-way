@@ -7,6 +7,7 @@ import {
     Compass,
     Copy,
     DollarSign,
+    Lightbulb,
     ListChecks,
     ListTodo,
     Loader2,
@@ -324,6 +325,25 @@ function handleStripScroll() {
     }
 }
 
+// Desktop: Chrome often swallows vertical wheel events over the snap-x strip
+// instead of chaining them to the page, so the itinerary won't scroll under a
+// mouse wheel. Redirect dominant-vertical wheel to the window ourselves. This
+// needs preventDefault, hence a manually-attached non-passive listener
+// (Svelte's `onwheel` attribute is passive).
+$effect(() => {
+    const strip = dayStrip;
+    if (!strip) return;
+    const onWheel = (e: WheelEvent) => {
+        if (e.ctrlKey) return; // pinch-zoom gesture
+        if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return; // horizontal pan stays native
+        e.preventDefault();
+        // deltaMode 1 = lines (Firefox); approximate a line as 16px.
+        window.scrollBy({ top: e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY, behavior: "auto" });
+    };
+    strip.addEventListener("wheel", onWheel, { passive: false });
+    return () => strip.removeEventListener("wheel", onWheel);
+});
+
 // Keep the strip aligned to `currentDay` (e.g. after a DaySwitcher tap). Skips
 // when the change came from scrolling, so the browser's snap isn't fought.
 $effect(() => {
@@ -334,11 +354,22 @@ $effect(() => {
         return;
     }
     if (Math.abs(dayStrip.scrollLeft - target) > 2) {
+        const strip = dayStrip;
+        const startLeft = strip.scrollLeft;
         stripScrollLock = true;
-        // Safety net: force-release if the scroll never lands exactly on target.
+        // Safety net doubles as a fallback: Chrome silently cancels smooth
+        // scrolls on snap-mandatory containers (e.g. right after a remount),
+        // leaving the chip and the panel desynced. If nothing moved at all by
+        // the deadline, jump instantly; if the user grabbed the strip mid-
+        // animation (scrollLeft moved), leave their position alone.
         clearTimeout(stripLockTimer);
-        stripLockTimer = setTimeout(() => (stripScrollLock = false), 1000);
-        dayStrip.scrollTo({ left: target, behavior: "smooth" });
+        stripLockTimer = setTimeout(() => {
+            stripScrollLock = false;
+            if (strip.isConnected && Math.abs(strip.scrollLeft - startLeft) < 2) {
+                strip.scrollTo({ left: target, behavior: "auto" });
+            }
+        }, 1000);
+        strip.scrollTo({ left: target, behavior: scrollBehavior() });
     }
 });
 
@@ -352,6 +383,13 @@ $effect(() => {
     // isn't Day 1) doesn't double-fire the vertical scroll.
     lastSettledDay = currentDay;
     const day = currentDay;
+    // Align the strip instantly: a fresh load should land on today without an
+    // animation, and the smooth realign above is best-effort only (Chrome may
+    // cancel it on a snap container that is still laying out).
+    const target = dayOffsetLeft(day);
+    if (target !== null && Math.abs(dayStrip.scrollLeft - target) > 2) {
+        dayStrip.scrollTo({ left: target, behavior: "auto" });
+    }
     requestAnimationFrame(() => applyDayScroll(day, "auto"));
 });
 
@@ -681,13 +719,17 @@ function clearYaml() {
                 {#if activeTab === "itinerary"}
                     {#if tripData.days.length > 0}
                         <!-- Horizontal scroll-snap strip: the trip overview (panel 0),
-                             then one full-width panel per day. -->
+                             then one full-width panel per day. The row is as tall as
+                             its tallest panel, so off-screen panels are capped to one
+                             viewport (max-h-dvh): they stay visible while swiping, but
+                             a short day no longer gets dead scroll space below it from
+                             a longer sibling. -->
                         <div
                             bind:this={dayStrip}
                             onscroll={handleStripScroll}
                             class="flex overflow-x-auto overscroll-x-contain snap-x snap-mandatory items-start [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                         >
-                            <section class="snap-start snap-always shrink-0 w-full">
+                            <section class="snap-start snap-always shrink-0 w-full {currentDay === 0 ? '' : 'max-h-dvh overflow-hidden'}">
                                 <TripOverview
                                     trip={tripData.trip}
                                     days={tripData.days}
@@ -700,7 +742,7 @@ function clearYaml() {
                             </section>
                             {#each tripData.days as day (day.day)}
                                 <!-- snap-always: scroll-snap-stop forces one panel per swipe (no momentum skipping) -->
-                                <section class="snap-start snap-always shrink-0 w-full">
+                                <section class="snap-start snap-always shrink-0 w-full {currentDay === day.day ? '' : 'max-h-dvh overflow-hidden'}">
                                     <Timeline
                                         dayData={day}
                                         hotels={tripData.trip.hotels}
@@ -925,13 +967,16 @@ function clearYaml() {
 
                 <!-- Validation Error Message -->
                 {#if validationError}
-                    <div class="text-[10px] text-neon-pink bg-neon-pink/10 border border-neon-pink/20 p-2.5 rounded-lg font-mono">
-                        ❌ {validationError}
+                    <div class="flex items-start gap-1.5 text-[10px] text-neon-pink bg-neon-pink/10 border border-neon-pink/20 p-2.5 rounded-lg font-mono">
+                        <TriangleAlert size={12} class="shrink-0 mt-px" aria-hidden="true" />
+                        <span>{validationError}</span>
                     </div>
                 {/if}
 
                 <div class="shrink-0 text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2 space-y-1">
-                    💡 行程僅存於本機、不會上傳。
+                    <p class="flex items-center gap-1">
+                        <Lightbulb size={12} class="shrink-0 text-neon-blue" aria-hidden="true" />行程僅存於本機、不會上傳。
+                    </p>
                     <ul class="list-disc pl-4 mt-1 space-y-1.5">
                         <li>貼上 YAML 行程內容，或他人的分享連結，按下方儲存即可。</li>
                         <li>清空並儲存會還原為預設的 <a href="./itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-neon-blue underline hover:text-white transition">itinerary.yaml</a>。</li>

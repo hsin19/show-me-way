@@ -54,20 +54,15 @@ export default defineConfig({
                         },
                     },
                     {
-                        urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-                        handler: "StaleWhileRevalidate",
-                        options: {
-                            cacheName: "google-fonts-stylesheets",
-                            cacheableResponse: { statuses: [0, 200] },
-                        },
-                    },
-                    {
-                        // No maxEntries: Noto Sans TC arrives as 100+ unicode-range
-                        // slices; eviction would punch holes in offline rendering.
-                        urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+                        // Self-hosted fonts: Noto Sans TC is 100+ unicode-range
+                        // slices fetched on demand, so the files stay out of the
+                        // precache (size) and get cached as they are used. Hashed
+                        // filenames make CacheFirst safe; no maxEntries, because
+                        // eviction would punch holes in offline rendering.
+                        urlPattern: ({ sameOrigin, url }) => sameOrigin && /\.woff2?$/i.test(url.pathname),
                         handler: "CacheFirst",
                         options: {
-                            cacheName: "google-fonts-webfonts",
+                            cacheName: "app-fonts",
                             expiration: { maxAgeSeconds: 60 * 60 * 24 * 365 },
                             cacheableResponse: { statuses: [0, 200] },
                         },

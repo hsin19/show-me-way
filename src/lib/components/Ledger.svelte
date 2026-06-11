@@ -1,7 +1,9 @@
 <script lang="ts">
 import {
     ArrowLeftRight,
+    Banknote,
     Calculator,
+    CreditCard,
     Plus,
     Trash2,
     Wallet,
@@ -437,9 +439,9 @@ function handleAddWallet() {
         >
             <optgroup label="支出">
                 {#each activeWallets as wallet (wallet)}
-                    <option value={wallet}>{wallet} 支出 💳</option>
+                    <option value={wallet}>{wallet} 支出</option>
                 {/each}
-                <option value="Cash">現金 支出 💵</option>
+                <option value="Cash">現金 支出</option>
             </optgroup>
             <optgroup label="儲值 / 兌換">
                 {#each activeWallets as wallet (wallet)}
@@ -485,11 +487,16 @@ function handleAddWallet() {
                 <li class="flex justify-between items-center text-xs py-2 border-b border-white/3 last:border-0">
                     <div class="flex flex-col">
                         <span class="font-bold text-text-primary">{item.name}</span>
-                        <span class="text-[10px] text-text-muted">
+                        <span class="text-[10px] text-text-muted flex items-center gap-1">
+                            {#if item.type === "Cash" || item.type === "Deposit-Cash"}
+                                <Banknote size={11} class="shrink-0" aria-hidden="true" />
+                            {:else}
+                                <CreditCard size={11} class="shrink-0" aria-hidden="true" />
+                            {/if}
                             {
                                 item.type.startsWith("Deposit")
-                                ? (item.type === "Deposit-Cash" ? "💵 現金兌換" : `💳 ${item.type.replace("Deposit-", "")} 加值`)
-                                : (item.type === "Cash" ? "💵 現金支付" : `💳 ${item.type} 支付`)
+                                ? (item.type === "Deposit-Cash" ? "現金兌換" : `${item.type.replace("Deposit-", "")} 加值`)
+                                : (item.type === "Cash" ? "現金支付" : `${item.type} 支付`)
                             }
                         </span>
                     </div>
