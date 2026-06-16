@@ -19,22 +19,32 @@ export default defineConfig({
                 config: true,
             },
             manifest: {
+                id: "/show-me-way/",
+                lang: "zh-TW",
+                dir: "ltr",
                 name: "下面一way 行程小助手",
                 short_name: "下面一way",
                 description: "下面一way！你的旅行行程離線隨身小助手",
-                background_color: "#0a0b10",
-                theme_color: "#0a0b10",
+                categories: ["travel", "navigation"],
+                background_color: "#0b0c13",
+                theme_color: "#0b0c13",
                 display: "standalone",
                 orientation: "portrait",
             },
             workbox: {
-                globPatterns: ["**/*.{js,css,html,svg,png,ico,webp,yaml,json}"],
+                // Data files are enumerated exactly instead of *.yaml/*.json so
+                // that files dropped into public/ later do not silently enter
+                // every user's precache. woff2 deliberately stays out: fonts go
+                // through the runtimeCaching route below.
+                globPatterns: ["**/*.{js,css,html,svg,png,ico,webp}", "itinerary.yaml", "showmeway-schema.json"],
                 // itinerary.local.yaml is personal, untracked data that local
                 // builds copy into dist/ — it must never enter the precache
                 // manifest. The runtime route below caches it from the second
                 // online visit onward (the first-visit page is not yet
-                // controlled by the service worker).
-                globIgnores: ["**/itinerary.local*.yaml"],
+                // controlled by the service worker). Apple splash screens are
+                // huge PNGs only ever fetched at install time, so they are
+                // kept out of the precache as well.
+                globIgnores: ["**/itinerary.local*.yaml", "**/apple-splash-*.png"],
                 cleanupOutdatedCaches: true,
                 // The SPA navigation fallback (navigateFallback defaults to
                 // index.html) otherwise hijacks navigations to raw data files

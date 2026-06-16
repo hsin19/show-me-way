@@ -10,6 +10,8 @@ updates:
       # 專案使用 Node 24（LTS），@types/node 跟隨同一個 major，不升到非 LTS 的 25.x
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
+      # tsgo 實驗用 preview，每日發 dev 版——鎖精確版本、需要時手動升
+      - dependency-name: '@typescript/native-preview'
     groups:
       svelte:
         patterns:
@@ -22,6 +24,7 @@ updates:
           - 'vite-*'
           - 'vitest'
           - '@vite-pwa/*'
+          - 'workbox-*'
       tailwind:
         patterns:
           - 'tailwindcss'
@@ -37,3 +40,9 @@ updates:
     directory: '/'
     schedule:
       interval: 'weekly'
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns:
+          - '*'

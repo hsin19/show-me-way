@@ -15,6 +15,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -29,6 +30,12 @@ jobs:
         with:
           node-version-file: '.node-version'
           cache: 'pnpm'
+
+      - name: Cache dprint plugins
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/dprint
+          key: dprint-${{ runner.os }}-${{ hashFiles('.dprint.jsonc') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
