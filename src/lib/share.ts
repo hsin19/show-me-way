@@ -97,7 +97,11 @@ export function parseShareToken(input: string): string | null {
     if (hashIndex === -1) return null;
     const fragment = input.slice(hashIndex + 1).trim();
     if (!fragment) return null;
-    return new URLSearchParams(fragment).get(SHARE_HASH_PARAM);
+    const token = new URLSearchParams(fragment).get(SHARE_HASH_PARAM);
+    // Tokens are base64url. Anything else is a false sniff — e.g. a pasted
+    // export YAML whose modeline `#` plus an `&s=` inside a mapLink would
+    // otherwise be mistaken for a share link and fail to save.
+    return token && /^[A-Za-z0-9_-]+$/.test(token) ? token : null;
 }
 
 /** Read the share token from the current URL hash, or null if none present. */

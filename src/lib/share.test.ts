@@ -73,6 +73,14 @@ describe("parseShareToken", () => {
         expect(parseShareToken("https://example.com/#other=1")).toBeNull();
     });
 
+    it("rejects false sniffs from export YAML carrying &s= inside a URL field", () => {
+        const exportYaml = "# yaml-language-server: $schema=https://example.com/schema.json\n"
+            + "trip:\n  name: '測試'\n  hotels: []\ndays:\n"
+            + "  - day: 1\n    timeline:\n"
+            + "      - title: '店'\n        mapLink: 'https://example.com/?a=1&s=xyz'\n";
+        expect(parseShareToken(exportYaml)).toBeNull();
+    });
+
     it("round-trips through buildShareUrl output", async () => {
         vi.stubGlobal("location", { origin: "https://hsin19.github.io", pathname: "/show-me-way/" });
         const url = await buildShareUrl(SAMPLE_YAML);

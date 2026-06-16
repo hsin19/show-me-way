@@ -2,6 +2,17 @@ import {
     dump as dumpYaml,
     load as parseYaml,
 } from "js-yaml";
+import { ledgerTypeLabel } from "./ledger";
+
+/** Reservation confirmation shown as a tap-to-copy chip and an enlarged counter-facing view. */
+export interface ConfirmationInfo {
+    /** Confirmation / booking code. Numeric codes must be quoted in YAML so leading zeros survive. */
+    code: string;
+    /** Name the reservation is under (e.g. passport spelling). */
+    name?: string;
+    /** Short note, e.g. which document to present at the counter. */
+    note?: string;
+}
 
 export interface TimelineEvent {
     time: string;
@@ -13,8 +24,14 @@ export interface TimelineEvent {
     localName?: string;
     /** Direct map URL (e.g. a naver.me / maps.app.goo.gl short link). Preferred over searching `localName`. */
     mapLink?: string;
-    /** Extra labeled links for this event (e.g. several spots/points). Map URLs get a matching brand icon. */
+    /** Extra labeled links for this event (e.g. several spots/points). Map URLs get a matching brand icon. For pick-one backup places, use `alternatives` instead. */
     links?: { label: string; url: string; }[];
+    /** Backup place choices (e.g. fallback restaurants): each carries a local-language name (enlargeable for asking directions) and a switch-decision note. Shown as a collapsed list at the card's tail. For plain supplementary URLs of the same event, use `links` instead. */
+    alternatives?: { title: string; localName?: string; mapLink?: string; note?: string; }[];
+    /** Manual check-in state. Persisted into YAML, so progress travels with share links. Unset = not visited yet. */
+    status?: "done" | "skipped";
+    /** Reservation confirmation code (typically for `booked` events). */
+    confirmation?: ConfirmationInfo;
     /**
      * Ephemeral, runtime-only identity used as a stable `{#each}` key while
      * editing. Assigned on load and stripped again on serialization, so it
@@ -42,12 +59,19 @@ export interface HotelInfo {
     localName?: string;
     /** Direct map URL (e.g. a naver.me / maps.app.goo.gl short link). Preferred over searching `localName`. */
     mapLink?: string;
+    /** Reservation confirmation code shown on the hotel card. */
+    confirmation?: ConfirmationInfo;
 }
+
+/** Situational category for a survival phrase; used by the TaxiHelper filter chips. */
+export type PhraseCategory = "basic" | "transport" | "dining" | "shopping" | "help";
 
 export interface PhraseInfo {
     zh: string;
     text: string;
     rom: string;
+    /** Optional category; uncategorized phrases only show under the 全部 filter. */
+    cat?: PhraseCategory;
 }
 
 export interface TripData {
@@ -69,8 +93,8 @@ export interface TripData {
         /**
          * Destination city for the daily weather forecast, overridable per day
          * via `DayItinerary.city`. English names (e.g. 'Tokyo', 'Seoul') geocode
-         * reliably; Chinese ones often miss or hit the wrong country — see
-         * `lib/weather.ts`. Weather is simply hidden when unset.
+         * reliably; only some CJK names resolve. A ', XX' country suffix
+         * disambiguates — see `lib/weather.ts`. Weather is simply hidden when unset.
          */
         city?: string;
         /** Customized wallets/cards (e.g. 'Suica', 'WOWPASS') for the ledger. */
@@ -124,6 +148,52 @@ function attachRuntimeIds(data: TripData): TripData {
 }
 
 /**
+ * Validate an optional `confirmation` block (timeline events and hotels).
+ * An unquoted numeric `code:` would lose leading zeros to YAML number parsing,
+ * so a non-string code is rejected with a how-to-fix message instead of coerced.
+ */
+function validateConfirmation(value: unknown, where: string): void {
+    if (value == null) return;
+    if (typeof value !== "object" || Array.isArray(value)) {
+        throw new Error(`${where}的 confirmation 必須是物件 (包含 code 屬性)`);
+    }
+    const conf = value as Partial<Record<"code" | "name" | "note", unknown>>;
+    if (conf.code == null) {
+        throw new Error(`${where}的 confirmation 缺少 code 屬性`);
+    }
+    if (typeof conf.code !== "string") {
+        throw new Error(`${where}的 confirmation 的 code 必須是文字 (數字代碼請加引號，例如 code: '012345')`);
+    }
+    for (const field of ["name", "note"] as const) {
+        if (conf[field] != null && typeof conf[field] !== "string") {
+            throw new Error(`${where}的 confirmation 的 ${field} 必須是文字`);
+        }
+    }
+}
+
+/** Validate an optional `alternatives` list: each entry needs a string `title`; other fields are optional strings. */
+function validateAlternatives(value: unknown, where: string): void {
+    if (value == null) return;
+    if (!Array.isArray(value)) {
+        throw new Error(`${where}的 alternatives 必須是列表`);
+    }
+    for (const [k, alt] of value.entries()) {
+        if (!alt || typeof alt !== "object" || Array.isArray(alt)) {
+            throw new Error(`${where}的 alternatives 第 ${k + 1} 項必須是物件 (不可為空白列表項)`);
+        }
+        const fields = alt as Partial<Record<"title" | "localName" | "mapLink" | "note", unknown>>;
+        if (fields.title == null) {
+            throw new Error(`${where}的 alternatives 第 ${k + 1} 項缺少 title 屬性`);
+        }
+        for (const field of ["title", "localName", "mapLink", "note"] as const) {
+            if (fields[field] != null && typeof fields[field] !== "string") {
+                throw new Error(`${where}的 alternatives 第 ${k + 1} 項的 ${field} 必須是文字`);
+            }
+        }
+    }
+}
+
+/**
  * Validate the required shape of a parsed itinerary object and normalize
  * optional sections (todo / packing) to empty arrays so downstream components
  * can always iterate safely. Any legacy top-level `phrases` is ignored —
@@ -147,6 +217,30 @@ function normalizeTripData(raw: unknown): TripData {
     if (!data.trip.start || !data.trip.end || !data.trip.departure || !Array.isArray(data.trip.hotels)) {
         throw new Error("trip 區塊缺少 start, end, departure 或 hotels 屬性");
     }
+    // Same bare-`-` hazard as days/timeline: a null or malformed hotel entry
+    // would otherwise crash later while rendering Timeline / TaxiHelper.
+    for (const [i, hotel] of data.trip.hotels.entries()) {
+        if (!hotel || typeof hotel !== "object" || Array.isArray(hotel)) {
+            throw new Error(`hotels 第 ${i + 1} 項必須是物件 (不可為空白列表項)`);
+        }
+        const fields: Partial<Record<"name" | "address" | "checkIn" | "checkOut", unknown>> = hotel;
+        for (const field of ["name", "address", "checkIn", "checkOut"] as const) {
+            const value = fields[field];
+            if (value == null) {
+                throw new Error(`hotels 第 ${i + 1} 項缺少 ${field} 屬性`);
+            }
+            // js-yaml parses an unquoted YYYY-MM-DD as a UTC-midnight Date;
+            // UTC getters recover the date exactly as written, in any timezone.
+            if ((field === "checkIn" || field === "checkOut") && value instanceof Date) {
+                fields[field] = `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, "0")}-${String(value.getUTCDate()).padStart(2, "0")}`;
+                continue;
+            }
+            if (typeof value !== "string") {
+                throw new Error(`hotels 第 ${i + 1} 項的 ${field} 必須是文字`);
+            }
+        }
+        validateConfirmation((hotel as { confirmation?: unknown; }).confirmation, `hotels 第 ${i + 1} 項`);
+    }
     // A bare-number city (e.g. `city: 123`) would crash weather lookups later;
     // reject it here with a readable message instead.
     if (data.trip.city != null && typeof data.trip.city !== "string") {
@@ -167,6 +261,12 @@ function normalizeTripData(raw: unknown): TripData {
             if (!ev || typeof ev !== "object" || Array.isArray(ev)) {
                 throw new Error(`days 第 ${i + 1} 項的 timeline 第 ${j + 1} 項必須是物件 (不可為空白列表項)`);
             }
+            const evStatus: unknown = (ev as { status?: unknown; }).status;
+            if (evStatus != null && evStatus !== "done" && evStatus !== "skipped") {
+                throw new Error(`days 第 ${i + 1} 項的 timeline 第 ${j + 1} 項的 status 必須是 'done' 或 'skipped'`);
+            }
+            validateConfirmation((ev as { confirmation?: unknown; }).confirmation, `days 第 ${i + 1} 項的 timeline 第 ${j + 1} 項`);
+            validateAlternatives((ev as { alternatives?: unknown; }).alternatives, `days 第 ${i + 1} 項的 timeline 第 ${j + 1} 項`);
         }
         if (day.city != null && typeof day.city !== "string") {
             throw new Error(`days 第 ${i + 1} 項的 city 必須是文字 (例如 'Tokyo')`);
@@ -236,6 +336,104 @@ export function serializeToYaml(data: TripData): string {
  */
 export function saveTripData(data: TripData): void {
     localStorage.setItem(USER_YAML_KEY, serializeToYaml(data));
+}
+
+export const YAML_BACKUPS_KEY = "showmeway_yaml_backups";
+const MAX_YAML_BACKUPS = 5;
+
+export interface YamlBackup {
+    savedAt: string; // ISO date-time
+    yaml: string;
+}
+
+/** List saved YAML backups, newest first. Unreadable storage yields []. */
+export function listYamlBackups(): YamlBackup[] {
+    try {
+        const raw = localStorage.getItem(YAML_BACKUPS_KEY);
+        if (!raw) return [];
+        const parsed: unknown = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((entry): entry is YamlBackup =>
+            !!entry && typeof entry === "object"
+            && typeof (entry as YamlBackup).savedAt === "string"
+            && typeof (entry as YamlBackup).yaml === "string"
+        );
+    } catch {
+        return [];
+    }
+}
+
+/** YAML content of one backup, looked up by its `savedAt` timestamp. */
+export function getYamlBackup(savedAt: string): string | null {
+    return listYamlBackups().find(b => b.savedAt === savedAt)?.yaml ?? null;
+}
+
+/**
+ * Snapshot the current user YAML before a destructive overwrite (share-link
+ * import, settings save, reset to default, backup restore). Keeps the newest
+ * MAX_YAML_BACKUPS entries and skips when the content matches the latest
+ * snapshot. A failed write (e.g. quota) only warns — it must never block the
+ * overwrite itself.
+ */
+export function backupCurrentYaml(): void {
+    const yaml = localStorage.getItem(USER_YAML_KEY);
+    if (!yaml) return;
+    const backups = listYamlBackups();
+    if (backups[0]?.yaml === yaml) return;
+    backups.unshift({ savedAt: new Date().toISOString(), yaml });
+    try {
+        localStorage.setItem(YAML_BACKUPS_KEY, JSON.stringify(backups.slice(0, MAX_YAML_BACKUPS)));
+    } catch (err) {
+        console.warn("[API] Failed to save YAML backup:", err);
+    }
+}
+
+/**
+ * Download text content as a file on the user's device — the only channel
+ * that gets data out of localStorage and off this single device. Works via
+ * a temporary object URL on an `a[download]` anchor (no dependencies); on
+ * iOS 16.4+ standalone PWAs this lands in the Files app / share sheet.
+ */
+export function downloadTextFile(filename: string, content: string, mimeType: string): void {
+    const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    // Deferred revoke: the download starts asynchronously from the URL.
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+function escapeCsvField(value: string): string {
+    return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
+}
+
+/**
+ * Build a CSV export of the expense records in `ledger_expenses` (the key is
+ * owned by `Ledger.svelte`). zh-TW headers plus a UTF-8 BOM so Excel decodes
+ * the Chinese text correctly. Returns null when there is nothing to export
+ * (no records, or unreadable storage — same degradation as the Ledger itself).
+ */
+export function buildLedgerCsv(): string | null {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(localStorage.getItem("ledger_expenses") ?? "[]");
+    } catch {
+        return null;
+    }
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    const lines = ["日期,項目,金額,類別"];
+    for (const item of parsed as Partial<Record<"date" | "name" | "amount" | "type", unknown>>[]) {
+        lines.push([
+            escapeCsvField(typeof item?.date === "string" ? item.date : ""),
+            escapeCsvField(typeof item?.name === "string" ? item.name : ""),
+            typeof item?.amount === "number" ? String(item.amount) : "",
+            escapeCsvField(ledgerTypeLabel(typeof item?.type === "string" ? item.type : "")),
+        ].join(","));
+    }
+    return "\uFEFF" + lines.join("\r\n") + "\r\n";
 }
 
 /**

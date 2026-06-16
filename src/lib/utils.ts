@@ -173,7 +173,7 @@ function formatEventMinutes(minutes: number): string {
  * itself when nothing further is scheduled (kind "current").
  */
 export function getNextEventInfo(
-    events: ReadonlyArray<{ time: string; title: string; }>,
+    events: ReadonlyArray<{ time: string; title: string; status?: "done" | "skipped"; }>,
     dayDate: string,
     now: Date = new Date(),
 ): NextEventInfo | null {
@@ -181,6 +181,8 @@ export function getNextEventInfo(
     const currentIdx = findCurrentEventIndex(events, now);
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
     for (let i = (currentIdx ?? -1) + 1; i < events.length; i++) {
+        // Manually resolved events are never announced as what's next.
+        if (events[i].status) continue;
         const start = parseEventStartMinutes(events[i].time);
         if (start === null) continue;
         return {
@@ -192,7 +194,9 @@ export function getNextEventInfo(
             minutesUntil: Math.max(0, start - nowMinutes),
         };
     }
-    if (currentIdx === null) return null;
+    // A checked-off / skipped anchor is no longer "in progress" — fall back to
+    // the countdown label instead of contradicting the card's strikethrough.
+    if (currentIdx === null || events[currentIdx].status) return null;
     return {
         kind: "current",
         title: events[currentIdx].title,
@@ -227,6 +231,61 @@ export function formatDateRange(startIso: string, endIso: string): string {
 }
 
 /**
+ * Is `date` a night spent at this hotel? Check-in day yes, checkout day NO
+ * (`date < checkOut`) — on a changeover day the checkout hotel and the next
+ * check-in hotel share the date, and the night belongs to the new one. Single
+ * source for the 回飯店 node, the 今晚住宿 report line, and TaxiHelper's
+ * "current stay" badge, so all three agree (no double-highlight on move days).
+ */
+export function isOvernightStay(
+    hotel: { checkIn: string; checkOut: string; },
+    date: string,
+): boolean {
+    return date >= hotel.checkIn && date < hotel.checkOut;
+}
+
+/** Is `date` this hotel's checkout day? Drives the auto-inserted 退房 node. */
+export function isCheckoutDay(hotel: { checkOut: string; }, date: string): boolean {
+    return date === hotel.checkOut;
+}
+
+/**
+ * Compose the plain-text 報平安 report for one day: trip name / Day N / date /
+ * region, tonight's hotel with its address, and a one-line-per-event timeline
+ * summary. Plain text so it pastes cleanly into LINE etc. Tonight's hotel uses
+ * `isOvernightStay` — the checkout day belongs to the next stay (or to none).
+ */
+export function buildDayReport(
+    dayData: {
+        day: number;
+        date: string;
+        region: string;
+        timeline: ReadonlyArray<{ time: string; title: string; status?: "done" | "skipped"; }>;
+    },
+    hotels: ReadonlyArray<{ name: string; address: string; checkIn: string; checkOut: string; }>,
+    tripName: string,
+): string {
+    const lines = [`【${tripName}】Day ${dayData.day}｜${formatDayDate(dayData.date)}｜${dayData.region}`];
+    const hotel = hotels.find(h => isOvernightStay(h, dayData.date));
+    if (hotel) {
+        lines.push(`今晚住宿：${hotel.name}`, `地址：${hotel.address}`);
+    } else {
+        lines.push("今晚住宿：未安排");
+    }
+    lines.push("", "今日行程：");
+    if (dayData.timeline.length === 0) {
+        lines.push("（無安排）");
+    } else {
+        for (const event of dayData.timeline) {
+            const line = `・${[event.time, event.title].filter(Boolean).join(" ")}`;
+            // Check-in marks travel with the report so family sees real progress.
+            lines.push(event.status === "done" ? `${line} ✓` : event.status === "skipped" ? `${line}（略過）` : line);
+        }
+    }
+    return lines.join("\n");
+}
+
+/**
  * Build a map-search URL for a place's local-language name. Which map service
  * to use is a market/regulatory decision (e.g. Korea restricts Google Maps data,
  * so Naver dominates), not a language one — so the caller passes the trip's
@@ -239,4 +298,15 @@ export function mapSearch(query: string, provider?: string): string {
         return `https://map.naver.com/p/search/${q}`;
     }
     return `https://www.google.com/maps/search/?api=1&query=${q}`;
+}
+
+/**
+ * Build a transit-directions URL to a place. Omitting `origin` makes Google
+ * Maps start from the user's current location — no geolocation permission
+ * needed on our side. Naver's directions URL format is unstable, so it falls
+ * back to the regular search page (`mapSearch`).
+ */
+export function mapDirections(query: string, provider?: string): string {
+    if (provider === "naver") return mapSearch(query, provider);
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}&travelmode=transit`;
 }

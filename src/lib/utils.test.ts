@@ -4,6 +4,7 @@ import {
     it,
 } from "vitest";
 import {
+    buildDayReport,
     classifyTimelineEvents,
     findCurrentEventIndex,
     formatDateRange,
@@ -12,6 +13,9 @@ import {
     getCountdownText,
     getNextEventInfo,
     getTodayIsoString,
+    isCheckoutDay,
+    isOvernightStay,
+    mapDirections,
     mapSearch,
     parseEventStartMinutes,
     parseLocalDate,
@@ -219,11 +223,136 @@ describe("getNextEventInfo / formatNextEventLabel", () => {
         expect(getNextEventInfo([], today, now)).toBeNull();
     });
 
+    it("skips manually resolved events when announcing what's next", () => {
+        const withSkipped = [
+            { time: "08:00", title: "早餐" },
+            { time: "14:00", title: "景福宮", status: "skipped" as const },
+            { time: "16:00", title: "市場" },
+        ];
+        const info = getNextEventInfo(withSkipped, today, new Date(2026, 5, 11, 12, 30));
+        expect(info).toEqual({ kind: "upcoming", title: "市場", time: "16:00", minutesUntil: 210 });
+    });
+
+    it("falls back to null instead of 'current' when the anchor is checked off", () => {
+        const allDone = [
+            { time: "08:00", title: "早餐", status: "done" as const },
+            { time: "14:00", title: "景福宮", status: "done" as const },
+        ];
+        expect(getNextEventInfo(allDone, today, new Date(2026, 5, 11, 23, 0))).toBeNull();
+    });
+
     it("formats the capsule label", () => {
         expect(formatNextEventLabel({ kind: "upcoming", title: "景福宮", time: "14:00", minutesUntil: 90 }))
             .toBe("接下來 14:00 景福宮");
         expect(formatNextEventLabel({ kind: "current", title: "景福宮", time: "14:00" }))
             .toBe("進行中：景福宮");
+    });
+});
+
+describe("isOvernightStay", () => {
+    const hotel = { checkIn: "2026-06-11", checkOut: "2026-06-14" };
+
+    it("counts the check-in day and nights up to (not including) checkout", () => {
+        expect(isOvernightStay(hotel, "2026-06-11")).toBe(true); // check-in day
+        expect(isOvernightStay(hotel, "2026-06-13")).toBe(true); // last night
+        expect(isOvernightStay(hotel, "2026-06-14")).toBe(false); // checkout day
+        expect(isOvernightStay(hotel, "2026-06-10")).toBe(false); // before
+        expect(isOvernightStay(hotel, "2026-06-15")).toBe(false); // after
+    });
+
+    it("assigns a changeover day to the next hotel only (no double stay)", () => {
+        const a = { checkIn: "2026-06-11", checkOut: "2026-06-14" };
+        const b = { checkIn: "2026-06-14", checkOut: "2026-06-16" };
+        const changeover = "2026-06-14";
+        expect(isOvernightStay(a, changeover)).toBe(false);
+        expect(isOvernightStay(b, changeover)).toBe(true);
+    });
+});
+
+describe("isCheckoutDay", () => {
+    it("is true only on the checkout date", () => {
+        const hotel = { checkOut: "2026-06-14" };
+        expect(isCheckoutDay(hotel, "2026-06-14")).toBe(true);
+        expect(isCheckoutDay(hotel, "2026-06-13")).toBe(false);
+        expect(isCheckoutDay(hotel, "2026-06-15")).toBe(false);
+    });
+
+    it("on a changeover day fires for the departing hotel while the next hotel is the overnight stay", () => {
+        const a = { checkIn: "2026-06-11", checkOut: "2026-06-14" };
+        const b = { checkIn: "2026-06-14", checkOut: "2026-06-16" };
+        const changeover = "2026-06-14";
+        expect(isCheckoutDay(a, changeover)).toBe(true); // 退房 A 顯示在頂端
+        expect(isOvernightStay(b, changeover)).toBe(true); // 回飯店 B 顯示在底端
+    });
+});
+
+describe("buildDayReport", () => {
+    const hotels = [
+        { name: "弘大公寓", address: "首爾麻浦區楊花路 123", checkIn: "2026-06-11", checkOut: "2026-06-14" },
+        { name: "明洞飯店", address: "首爾中區明洞街 45", checkIn: "2026-06-14", checkOut: "2026-06-16" },
+    ];
+
+    it("composes header, tonight's hotel with address, and the timeline summary", () => {
+        const day = {
+            day: 1,
+            date: "2026-06-11",
+            region: "弘大・延南洞",
+            timeline: [
+                { time: "09:30", title: "早餐" },
+                { time: "整天", title: "自由活動" },
+            ],
+        };
+        expect(buildDayReport(day, hotels, "首爾自由行")).toBe(
+            [
+                "【首爾自由行】Day 1｜06/11(四)｜弘大・延南洞",
+                "今晚住宿：弘大公寓",
+                "地址：首爾麻浦區楊花路 123",
+                "",
+                "今日行程：",
+                "・09:30 早餐",
+                "・整天 自由活動",
+            ].join("\n"),
+        );
+    });
+
+    it("marks checked-off and skipped events so the report mirrors real progress", () => {
+        const day = {
+            day: 1,
+            date: "2026-06-11",
+            region: "弘大",
+            timeline: [
+                { time: "09:30", title: "早餐", status: "done" as const },
+                { time: "12:00", title: "拉麵店", status: "skipped" as const },
+                { time: "14:00", title: "景福宮" },
+            ],
+        };
+        const report = buildDayReport(day, hotels, "首爾自由行");
+        expect(report).toContain("・09:30 早餐 ✓");
+        expect(report).toContain("・12:00 拉麵店（略過）");
+        expect(report).toContain("・14:00 景福宮");
+        expect(report).not.toContain("景福宮 ✓");
+    });
+
+    it("assigns the changeover night to the next hotel (checkout day excluded)", () => {
+        const day = { day: 4, date: "2026-06-14", region: "明洞", timeline: [{ time: "10:00", title: "換飯店" }] };
+        expect(buildDayReport(day, hotels, "首爾自由行")).toContain("今晚住宿：明洞飯店");
+    });
+
+    it("reports 未安排 when no hotel covers the night (e.g. departure day)", () => {
+        const day = { day: 6, date: "2026-06-16", region: "回程", timeline: [{ time: "18:00", title: "回程班機" }] };
+        expect(buildDayReport(day, hotels, "首爾自由行")).toContain("今晚住宿：未安排");
+    });
+
+    it("handles an empty timeline and an empty hotel list", () => {
+        const day = { day: 2, date: "2026-06-12", region: "自由活動", timeline: [] };
+        const report = buildDayReport(day, [], "首爾自由行");
+        expect(report).toContain("今晚住宿：未安排");
+        expect(report).toContain("今日行程：\n（無安排）");
+    });
+
+    it("omits a blank time from the event line", () => {
+        const day = { day: 3, date: "2026-06-13", region: "弘大", timeline: [{ time: "", title: "睡到自然醒" }] };
+        expect(buildDayReport(day, hotels, "首爾自由行")).toContain("・睡到自然醒");
     });
 });
 
@@ -283,5 +412,28 @@ describe("mapSearch", () => {
 
     it("encodes the query string", () => {
         expect(mapSearch("a b&c", "naver")).toBe("https://map.naver.com/p/search/a%20b%26c");
+    });
+});
+
+describe("mapDirections", () => {
+    it("builds a Google transit-directions URL with the destination encoded", () => {
+        expect(mapDirections("東京タワー & 周辺", "google")).toBe(
+            "https://www.google.com/maps/dir/?api=1&destination=%E6%9D%B1%E4%BA%AC%E3%82%BF%E3%83%AF%E3%83%BC%20%26%20%E5%91%A8%E8%BE%BA&travelmode=transit",
+        );
+    });
+
+    it("omits origin so the route starts from the current location", () => {
+        expect(mapDirections("Tokyo Tower")).not.toContain("origin=");
+    });
+
+    it("falls back to the Naver search page (no stable directions URL)", () => {
+        expect(mapDirections("엘양호텔", "naver")).toBe(mapSearch("엘양호텔", "naver"));
+        expect(mapDirections("엘양호텔", "naver")).toBe("https://map.naver.com/p/search/%EC%97%98%EC%96%91%ED%98%B8%ED%85%94");
+    });
+
+    it("uses Google for undefined or unknown providers", () => {
+        const googlePrefix = "https://www.google.com/maps/dir/?api=1&destination=";
+        expect(mapDirections("x")).toBe(`${googlePrefix}x&travelmode=transit`);
+        expect(mapDirections("x", "kakao")).toBe(`${googlePrefix}x&travelmode=transit`);
     });
 });

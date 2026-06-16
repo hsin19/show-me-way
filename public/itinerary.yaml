@@ -1,4 +1,4 @@
-﻿# yaml-language-server: $schema=https://hsin19.github.io/show-me-way/showmeway-schema.json
+# yaml-language-server: $schema=https://hsin19.github.io/show-me-way/showmeway-schema.json
 trip:
   name: 我的探索之旅 (範本)
   start: '2026-10-01'
@@ -13,6 +13,10 @@ trip:
       checkIn: '2026-10-01'
       checkOut: '2026-10-03'
       localName: 極簡設計精選飯店
+      confirmation:
+        code: 'BK-20261001'
+        name: 'WANG XIAO MING'
+        note: 入住時出示護照
 days:
   - day: 1
     date: '2026-10-01'
@@ -23,6 +27,9 @@ days:
         title: ✈️ 前往目的地
         type: booked
         desc: 搭乘班機前往你的夢想城市。
+        status: done
+        confirmation:
+          code: 'ABC123'
       - time: '14:00'
         title: 🏨 飯店 Check-in
         type: standard
@@ -31,12 +38,18 @@ days:
         title: 🍜 晚餐探店
         type: must-go
         desc: 造訪當地熱門名店，開啟美食之旅。
-        localName: 拉麵
+        localName: 一蘭 新宿店
+        mapLink: 'https://maps.app.goo.gl/example1'
         links:
-          - label: 一蘭拉麵
-            url: 'https://maps.app.goo.gl/example1'
-          - label: 拉麵二郎
-            url: 'https://maps.app.goo.gl/example2'
+          - label: 美食街攻略
+            url: 'https://example.com/food-guide'
+        alternatives:
+          - title: 拉麵二郎
+            localName: ラーメン二郎
+            mapLink: 'https://maps.app.goo.gl/example2'
+            note: 排隊超過 30 分鐘就換這間
+          - title: 商場美食街
+            note: 雨天備案，免排隊
   - day: 2
     date: '2026-10-02'
     region: 市區潮流探險
@@ -50,6 +63,7 @@ days:
         title: ☕ 下午茶時光
         type: option
         desc: 在網紅咖啡廳點杯咖啡與招牌甜點，稍作休息。
+        status: skipped
   - day: 3
     date: '2026-10-03'
     region: 伴手禮採購與回程

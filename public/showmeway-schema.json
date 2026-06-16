@@ -33,7 +33,7 @@
         },
         "currency": {
           "type": "string",
-          "description": "目的地貨幣代碼，例如: KRW, JPY, USD (選填，未設定時將自動依目的地語言或預設推導)"
+          "description": "記帳功能使用的貨幣代碼 (例如: KRW, JPY, USD)。未設定時預設為 TWD。"
         },
         "mapProvider": {
           "type": "string",
@@ -42,7 +42,7 @@
         },
         "city": {
           "type": "string",
-          "description": "目的地城市，用於查詢每日天氣預報 (選填，未設定或留空字串時不顯示天氣)。請使用英文名稱 (例如: Tokyo, Seoul, Osaka)，中文名稱常查不到或比對到錯誤國家。可在個別 day 以 city 覆蓋 (多城市行程)。"
+          "description": "目的地城市，用於查詢每日天氣預報 (選填，未設定或留空字串時不顯示天氣)。建議使用英文名稱 (例如: Tokyo, Seoul, Osaka)；中文名稱僅部分可查 (東京、京都可，首爾、大阪、釜山等查不到或比對錯國家)。同名城市可加兩碼國碼後綴消歧 (例如: 'Springfield, US')。可在個別 day 以 city 覆蓋 (多城市行程)。"
         },
         "wallets": {
           "type": "array",
@@ -82,6 +82,25 @@
               "mapLink": {
                 "type": "string",
                 "description": "地圖直接連結 (如 naver.me / maps.app.goo.gl 短網址)。有設定時會優先使用，比關鍵字搜尋更精準。"
+              },
+              "confirmation": {
+                "type": "object",
+                "required": ["code"],
+                "description": "訂房確認資訊 (選填)。設定後飯店卡會顯示確認碼 chip，點一下複製，並可放大出示給櫃台。",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "description": "訂房確認碼/訂單編號。純數字代碼請加引號 (例如 '012345')，避免被解析成數字而遺失前導零。"
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "訂位人姓名 (選填)，建議與護照拼音一致。"
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "補充備註 (選填)，例如「入住時出示護照」。"
+                  }
+                }
               }
             }
           }
@@ -146,7 +165,7 @@
           },
           "city": {
             "type": "string",
-            "description": "當日所在城市，覆蓋 trip.city 的天氣查詢 (選填，多城市行程用)。請使用英文名稱 (例如: Kyoto)。留空字串視同未設定，回退至 trip.city。"
+            "description": "當日所在城市，覆蓋 trip.city 的天氣查詢 (選填，多城市行程用)。建議使用英文名稱 (例如: Kyoto)，可加兩碼國碼後綴消歧 (例如: 'Springfield, US')。留空字串視同未設定，回退至 trip.city。"
           },
           "pace": {
             "type": "string",
@@ -175,6 +194,11 @@
                   "type": "string",
                   "description": "詳細說明描述"
                 },
+                "status": {
+                  "type": "string",
+                  "enum": ["done", "skipped"],
+                  "description": "打卡狀態 (選填)：done=已完成, skipped=略過。未設定表示尚未造訪。通常由 App 內的打卡按鈕寫入，並隨 YAML 與分享連結保留進度。"
+                },
                 "bullets": {
                   "type": "array",
                   "items": {
@@ -190,9 +214,28 @@
                   "type": "string",
                   "description": "地圖直接連結 (如 naver.me / maps.app.goo.gl 短網址)。有設定時會優先使用，比關鍵字搜尋更精準。"
                 },
+                "confirmation": {
+                  "type": "object",
+                  "required": ["code"],
+                  "description": "訂位確認資訊 (選填，通常用於 booked 事件)。設定後事件卡會顯示確認碼 chip，點一下複製，並可放大出示給櫃台。",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "訂位確認碼/訂單編號。純數字代碼請加引號 (例如 '012345')，避免被解析成數字而遺失前導零。"
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "訂位人姓名 (選填)，建議與護照拼音一致。"
+                    },
+                    "note": {
+                      "type": "string",
+                      "description": "補充備註 (選填)，例如「報到時出示護照」。"
+                    }
+                  }
+                },
                 "links": {
                   "type": "array",
-                  "description": "額外的具名連結 (例如一個行程想放多個點)。地圖連結會自動顯示對應的品牌 icon。",
+                  "description": "同一事件的補充連結 (選填)，例如官網、攻略文，或同一行程想放的多個點。地圖連結會自動顯示對應的品牌 icon。若是「擇一前往」的備選地點 (如備案餐廳)，請改用 alternatives。",
                   "items": {
                     "type": "object",
                     "required": ["label", "url"],
@@ -204,6 +247,32 @@
                       "url": {
                         "type": "string",
                         "description": "連結網址"
+                      }
+                    }
+                  }
+                },
+                "alternatives": {
+                  "type": "array",
+                  "description": "備選地點清單 (選填)，例如備案餐廳：每筆是一個候選地點，含當地語言店名 (可放大出示問路) 與備註 (如「排隊超過 30 分鐘就換」)，供現場換點決策。在事件卡尾端以折疊清單顯示。若只是同一事件的補充連結或多個點，請改用 links。",
+                  "items": {
+                    "type": "object",
+                    "required": ["title"],
+                    "properties": {
+                      "title": {
+                        "type": "string",
+                        "description": "備選地點名稱"
+                      },
+                      "localName": {
+                        "type": "string",
+                        "description": "地點的當地語言名稱 (選填)，可放大出示問路，也作為地圖搜尋關鍵字"
+                      },
+                      "mapLink": {
+                        "type": "string",
+                        "description": "地圖直接連結 (選填，如 naver.me / maps.app.goo.gl 短網址)。有設定時會優先使用，比關鍵字搜尋更精準。"
+                      },
+                      "note": {
+                        "type": "string",
+                        "description": "換點決策備註 (選填)，例如「排隊超過 30 分鐘就換」。"
                       }
                     }
                   }
