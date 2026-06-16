@@ -1,9 +1,7 @@
 <script lang="ts">
-import {
-    Check,
-    Plus,
-    Trash2,
-} from "@lucide/svelte";
+import Check from "@lucide/svelte/icons/check";
+import Plus from "@lucide/svelte/icons/plus";
+import Trash2 from "@lucide/svelte/icons/trash-2";
 import type { Component } from "svelte";
 
 import type { ChecklistItem } from "../api";

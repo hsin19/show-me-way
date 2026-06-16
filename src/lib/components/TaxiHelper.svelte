@@ -1,16 +1,22 @@
 <script lang="ts">
-import {
-    BedDouble,
-    Calendar,
-    Copy,
-    Maximize2,
-    MessageSquareText,
-    X,
-} from "@lucide/svelte";
+import BedDouble from "@lucide/svelte/icons/bed-double";
+import Calendar from "@lucide/svelte/icons/calendar";
+import Copy from "@lucide/svelte/icons/copy";
+import Maximize2 from "@lucide/svelte/icons/maximize-2";
+import MessageSquareText from "@lucide/svelte/icons/message-square-text";
+import Ticket from "@lucide/svelte/icons/ticket";
+import X from "@lucide/svelte/icons/x";
 import { onMount } from "svelte";
 import type { HotelInfo } from "../api";
-import type { PhraseInfo } from "../api";
-import { getTodayIsoString } from "../utils";
+import type {
+    PhraseCategory,
+    PhraseInfo,
+} from "../api";
+import {
+    getTodayIsoString,
+    isOvernightStay,
+} from "../utils";
+import { acquireScreenWakeLock } from "../wakelock";
 
 interface Props {
     hotels: HotelInfo[];
@@ -18,9 +24,11 @@ interface Props {
     driverPrompt: string;
     copyAddressLabel: string;
     onCopy: (text: string, msg: string) => void;
+    /** Show a hotel's confirmation code enlarged; the overlay is a single app-level instance. */
+    onEnlarge: (card: { kind: "confirmation"; title: string; code: string; name?: string; note?: string; }) => void;
 }
 
-let { hotels, phrases, driverPrompt, copyAddressLabel, onCopy }: Props = $props();
+let { hotels, phrases, driverPrompt, copyAddressLabel, onCopy, onEnlarge }: Props = $props();
 
 let showFullscreen = $state(false);
 let selectedHotel = $state<HotelInfo | null>(null);
@@ -30,10 +38,12 @@ onMount(() => {
     todayStr = getTodayIsoString();
 });
 
-// Check if a hotel is currently active today
+// Highlight tonight's hotel. Same overnight semantics as Timeline / the 報平安
+// report (checkout day belongs to the next hotel), so a changeover day never
+// marks both hotels as current.
 function isCurrentStay(hotel: HotelInfo): boolean {
     if (!todayStr) return false;
-    return todayStr >= hotel.checkIn && todayStr <= hotel.checkOut;
+    return isOvernightStay(hotel, todayStr);
 }
 
 function openFullscreen(hotel: HotelInfo) {
@@ -46,6 +56,29 @@ function closeFullscreen() {
     selectedHotel = null;
 }
 
+// Keep the screen on while the address is being shown to a driver. The overlay
+// is persistent DOM toggled by opacity, so watch the open state, not mounting.
+// Unsupported browsers (iOS standalone < 18.4) no-op — see lib/wakelock.ts.
+$effect(() => {
+    if (!showFullscreen) return;
+    return acquireScreenWakeLock();
+});
+
+// Move focus into the dialog on open and hand it back to the trigger on
+// close. The dialog itself is inside {#if selectedHotel}, so the closed
+// state never sits in the Tab order.
+let dialogEl = $state<HTMLDivElement>();
+let returnFocus: HTMLElement | null = null;
+$effect(() => {
+    if (showFullscreen) {
+        returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        dialogEl?.focus();
+    } else {
+        returnFocus?.focus();
+        returnFocus = null;
+    }
+});
+
 // Format YYYY-MM-DD to display MM/DD
 function formatShortDate(dateStr: string): string {
     const parts = dateStr.split("-");
@@ -54,6 +87,27 @@ function formatShortDate(dateStr: string): string {
     }
     return dateStr;
 }
+
+const CATEGORY_LABELS: Record<PhraseCategory, string> = {
+    basic: "基本",
+    transport: "交通",
+    dining: "點餐",
+    shopping: "購物",
+    help: "求助",
+};
+const CATEGORY_ORDER = Object.keys(CATEGORY_LABELS) as PhraseCategory[];
+
+let phraseFilter = $state<PhraseCategory | "all">("all");
+// Chips only list categories present in the deck; if the deck changes and the
+// selected category disappears, fall back to 全部 instead of an empty list.
+let availableCats = $derived(CATEGORY_ORDER.filter(cat => phrases.some(p => p.cat === cat)));
+let filterChips = $derived<(PhraseCategory | "all")[]>(["all", ...availableCats]);
+let activeFilter = $derived(
+    phraseFilter !== "all" && !availableCats.includes(phraseFilter) ? "all" : phraseFilter,
+);
+let filteredPhrases = $derived(
+    activeFilter === "all" ? phrases : phrases.filter(p => p.cat === activeFilter),
+);
 </script>
 
 <!-- Hotels List -->
@@ -97,6 +151,30 @@ function formatShortDate(dateStr: string): string {
                 {hotel.address}
             </div>
 
+            {#if hotel.confirmation}
+                {@const confirmation = hotel.confirmation}
+                <div class="flex flex-wrap gap-2 my-3">
+                    <button
+                        type="button"
+                        onclick={() => onCopy(confirmation.code, "已複製確認碼")}
+                        class="inline-flex items-center gap-1.5 min-h-[44px] bg-neon-orange/10 border border-neon-orange/20 text-neon-orange text-[11px] font-bold px-3 py-1.5 rounded-lg transition duration-300 hover:bg-neon-orange hover:text-black hover:shadow-[0_0_15px_rgba(255,123,0,0.25)] cursor-pointer"
+                        title="點一下複製確認碼"
+                    >
+                        <Ticket size={13} class="shrink-0" aria-hidden="true" />
+                        {confirmation.code}
+                    </button>
+                    <button
+                        type="button"
+                        onclick={() => onEnlarge({ kind: "confirmation", title: hotel.name, code: confirmation.code, name: confirmation.name, note: confirmation.note })}
+                        class="min-w-[44px] min-h-[44px] flex items-center justify-center bg-neon-orange/5 border border-neon-orange/15 text-neon-orange/70 rounded-lg transition duration-300 hover:bg-neon-orange hover:text-black hover:shadow-[0_0_15px_rgba(255,123,0,0.25)] cursor-pointer"
+                        aria-label="放大顯示確認碼"
+                        title="放大出示給櫃台看"
+                    >
+                        <Maximize2 size={14} aria-hidden="true" />
+                    </button>
+                </div>
+            {/if}
+
             <button
                 onclick={() => openFullscreen(hotel)}
                 class="w-full bg-gradient-to-r from-neon-blue to-neon-purple text-black font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition active:scale-[0.98] cursor-pointer shadow-[0_0_10px_rgba(0,240,255,0.15)]"
@@ -114,8 +192,31 @@ function formatShortDate(dateStr: string): string {
         <h3 class="text-base font-bold text-text-primary mb-4 flex items-center gap-2">
             <MessageSquareText size={18} class="text-neon-blue" aria-hidden="true" />實用常用語
         </h3>
+
+        {#if availableCats.length > 0}
+            <div class="overflow-x-auto no-scrollbar mb-3">
+                <div class="flex gap-2">
+                    {#each filterChips as cat (cat)}
+                        <button
+                            type="button"
+                            aria-pressed={activeFilter === cat}
+                            onclick={() => (phraseFilter = cat)}
+                            class="
+                                flex-none min-h-[44px] px-4 rounded-xl border text-xs font-bold transition duration-300 cursor-pointer
+                                {activeFilter === cat
+                                ? 'bg-gradient-to-br from-neon-blue/15 to-neon-pink/10 border-neon-blue text-neon-blue shadow-[0_0_15px_rgba(0,240,255,0.25)]'
+                                : 'bg-white/3 border-card-border text-text-secondary hover:bg-white/5'}
+                            "
+                        >
+                            {cat === "all" ? "全部" : CATEGORY_LABELS[cat]}
+                        </button>
+                    {/each}
+                </div>
+            </div>
+        {/if}
+
         <div class="grid grid-cols-1 gap-3">
-            {#each phrases as p (p.zh)}
+            {#each filteredPhrases as p (p.zh + p.text)}
                 <button
                     type="button"
                     onclick={() => onCopy(p.text, `已複製：${p.text} (${p.zh})`)}
@@ -150,9 +251,10 @@ function formatShortDate(dateStr: string): string {
     {#if selectedHotel}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
+            bind:this={dialogEl}
             role="dialog"
             aria-modal="true"
-            aria-label={driverPrompt}
+            aria-label="全螢幕顯示飯店地址"
             tabindex="-1"
             onclick={(e => e.stopPropagation())}
             class="

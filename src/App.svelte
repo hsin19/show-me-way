@@ -1,35 +1,42 @@
 <script lang="ts">
-import {
-    Calendar,
-    Car,
-    CheckCircle,
-    CheckSquare,
-    Compass,
-    Copy,
-    DollarSign,
-    Lightbulb,
-    ListChecks,
-    ListTodo,
-    Loader2,
-    Luggage,
-    RefreshCw,
-    Settings,
-    TriangleAlert,
-    Wallet,
-    X,
-} from "@lucide/svelte";
+import Calendar from "@lucide/svelte/icons/calendar";
+import Car from "@lucide/svelte/icons/car";
+import CheckCircle from "@lucide/svelte/icons/check-circle";
+import CheckSquare from "@lucide/svelte/icons/check-square";
+import Compass from "@lucide/svelte/icons/compass";
+import Copy from "@lucide/svelte/icons/copy";
+import DollarSign from "@lucide/svelte/icons/dollar-sign";
+import Download from "@lucide/svelte/icons/download";
+import History from "@lucide/svelte/icons/history";
+import Lightbulb from "@lucide/svelte/icons/lightbulb";
+import ListChecks from "@lucide/svelte/icons/list-checks";
+import ListTodo from "@lucide/svelte/icons/list-todo";
+import Loader2 from "@lucide/svelte/icons/loader-2";
+import Luggage from "@lucide/svelte/icons/luggage";
+import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+import Settings from "@lucide/svelte/icons/settings";
+import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+import Wallet from "@lucide/svelte/icons/wallet";
+import X from "@lucide/svelte/icons/x";
 import { onMount } from "svelte";
+import { fade } from "svelte/transition";
 import { registerSW } from "virtual:pwa-register";
 import {
+    backupCurrentYaml,
+    buildLedgerCsv,
     createChecklistItemId,
     type DayItinerary,
+    downloadTextFile,
     fetchDefaultYamlText,
     fetchItinerary,
+    getYamlBackup,
+    listYamlBackups,
     saveTripData,
     serializeToYaml,
     type TripData,
     USER_YAML_KEY,
     validateYaml,
+    type YamlBackup,
 } from "./lib/api";
 import Checklist from "./lib/components/Checklist.svelte";
 import DaySwitcher from "./lib/components/DaySwitcher.svelte";
@@ -46,7 +53,9 @@ import {
     parseShareToken,
     readShareTokenFromHash,
 } from "./lib/share";
+import type { ToastInput } from "./lib/toast";
 import {
+    buildDayReport,
     findCurrentEventIndex,
     formatDayDate,
     formatNextEventLabel,
@@ -55,6 +64,7 @@ import {
     getTodayIsoString,
     toLocalIsoDate,
 } from "./lib/utils";
+import { acquireScreenWakeLock } from "./lib/wakelock";
 import {
     type DailyWeather,
     type DailyWeatherByDate,
@@ -91,11 +101,30 @@ $effect(() => {
 
 // Toast Notification States
 let toastMessage = $state("");
+let toastAction = $state<{ label: string; onAction: () => void; } | null>(null);
 let isToastVisible = $state(false);
+let toastTimer: number;
 
 // PWA update flow: registerType "prompt" keeps the new service worker waiting
 // until the user accepts, so an in-use page is never reloaded under them.
 let needRefresh = $state(false);
+let swRegistration: ServiceWorkerRegistration | undefined;
+// Shared between the hourly interval and the visibilitychange path — a single
+// timestamp, or a foreground check would be repeated by the next interval tick.
+let lastSwUpdateCheck = 0;
+const SW_UPDATE_CHECK_MS = 60 * 60 * 1000;
+
+// A traveler may keep the app open for days; without polling, updates are only
+// detected on a fresh navigation. Background intervals are throttled or frozen
+// on phones, so the visibilitychange resume path calls this too. Offline (the
+// flagship scenario) update() rejects — swallow it and retry next check.
+function checkForSwUpdate() {
+    if (!swRegistration || swRegistration.installing || !navigator.onLine) return;
+    if (Date.now() - lastSwUpdateCheck < SW_UPDATE_CHECK_MS) return;
+    lastSwUpdateCheck = Date.now();
+    swRegistration.update().catch(() => {});
+}
+
 const updateSW = registerSW({
     onNeedRefresh() {
         needRefresh = true;
@@ -105,13 +134,10 @@ const updateSW = registerSW({
     },
     onRegisteredSW(_swUrl, registration) {
         if (!registration) return;
-        // A traveler may keep the app open for days; without polling, updates
-        // are only detected on a fresh navigation. Offline (the flagship
-        // scenario) update() rejects — swallow it and retry next interval.
-        window.setInterval(() => {
-            if (registration.installing || !navigator.onLine) return;
-            registration.update().catch(() => {});
-        }, 60 * 60 * 1000);
+        swRegistration = registration;
+        // register() itself just checked for updates; start the throttle now.
+        lastSwUpdateCheck = Date.now();
+        window.setInterval(checkForSwUpdate, SW_UPDATE_CHECK_MS);
     },
 });
 
@@ -119,11 +145,52 @@ const updateSW = registerSW({
 let showSettings = $state(false);
 let yamlInput = $state("");
 let validationError = $state<string | null>(null);
+let yamlBackups = $state<YamlBackup[]>([]);
+
+// Enlarged card shown to a driver (local-language name / address) or to a
+// counter clerk (reservation confirmation code). Lives at the app level so all
+// panels share one overlay — opening it twice can never stack. `null` = closed.
+type EnlargedCard =
+    | { kind: "place"; title: string; localName: string; address?: string; }
+    | { kind: "confirmation"; title: string; code: string; name?: string; note?: string; };
+let enlargedCard = $state<EnlargedCard | null>(null);
+
+// Keep the screen on while the card is being shown to a driver. Unsupported
+// browsers (iOS standalone < 18.4) silently no-op — see lib/wakelock.ts.
+$effect(() => {
+    if (!enlargedCard) return;
+    return acquireScreenWakeLock();
+});
+
+// Dialog focus management: remember the trigger when a dialog opens, move
+// focus onto the dialog container (not the first field — focusing the YAML
+// textarea would pop the mobile keyboard), and hand focus back on close.
+// One effect per dialog covers every open/close path (backdrop, Esc, save).
+function manageDialogFocus(isOpen: () => boolean, dialog: () => HTMLElement | undefined) {
+    let returnFocus: HTMLElement | null = null;
+    $effect(() => {
+        if (isOpen()) {
+            returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            dialog()?.focus();
+        } else {
+            returnFocus?.focus();
+            returnFocus = null;
+        }
+    });
+}
+
+let enlargedCardEl = $state<HTMLDivElement>();
+let settingsDialogEl = $state<HTMLDivElement>();
+manageDialogFocus(() => !!enlargedCard, () => enlargedCardEl);
+manageDialogFocus(() => showSettings, () => settingsDialogEl);
 
 function handleWindowKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape" && showSettings) {
-        attemptCloseSettings();
+    if (e.key !== "Escape") return;
+    if (enlargedCard) {
+        enlargedCard = null;
+        return;
     }
+    if (showSettings) attemptCloseSettings();
 }
 
 // Reflect the loaded trip name in the browser tab title (falls back to the default).
@@ -136,7 +203,7 @@ $effect(() => {
 let langConfig = $derived(getLanguageConfig(tripData?.trip.lang));
 
 // --- Daily weather (Open-Meteo), keyed by the exact city string from the YAML ---
-let weatherByCity = $state<Record<string, DailyWeatherByDate>>({});
+let weatherByCity = $state<Record<string, { byDate: DailyWeatherByDate; fetchedAt: number; }>>({});
 
 // City for one day's weather: day.city → trip.city → none. Blank/whitespace
 // (and non-string values from hand-written YAML) count as unset and fall back.
@@ -163,8 +230,13 @@ function refreshTripWeather(data: TripData) {
         if (city && !cities.includes(city)) cities.push(city);
     }
     for (const city of cities) {
-        loadDailyWeather(city, byDate => {
-            weatherByCity[city] = byDate;
+        // Merge: a refresh starts at the city's local today, but past trip days
+        // already on screen must keep their badges from the previous payload.
+        loadDailyWeather(city, (byDate, fetchedAt) => {
+            weatherByCity[city] = {
+                byDate: { ...weatherByCity[city]?.byDate, ...byDate },
+                fetchedAt,
+            };
         });
     }
 }
@@ -177,6 +249,7 @@ function handleVisibilityChange() {
     // Interval ticks are throttled/frozen in the background; bring the
     // countdown clock current immediately on resume.
     clockNow = new Date();
+    checkForSwUpdate();
     if (tripData) {
         refreshTripWeather(tripData);
         // Cross-midnight resume: hop to the new today. The strip realigns via
@@ -190,11 +263,30 @@ function handleVisibilityChange() {
 function weatherForDay(day: DayItinerary): DailyWeather | null {
     const city = resolveWeatherCity(day);
     if (!city) return null;
-    return weatherByCity[city]?.[day.date] ?? null;
+    return weatherByCity[city]?.byDate[day.date] ?? null;
 }
 
 // Open-Meteo data is CC BY 4.0 — show the attribution whenever any badge does.
 let showWeatherAttribution = $derived(tripData?.days.some(d => weatherForDay(d)) ?? false);
+
+// Offline-staleness note on the attribution line. The 24h threshold must stay
+// above the 3h refresh TTL so routine background refreshes are never flagged.
+// Deriving from clockNow keeps the age current on ticks and foreground resume.
+const STALE_WEATHER_MS = 1000 * 60 * 60 * 24;
+let staleWeatherHours = $derived.by(() => {
+    if (!tripData) return null;
+    let oldest: number | null = null;
+    for (const day of tripData.days) {
+        const city = resolveWeatherCity(day, tripData.trip);
+        if (!city) continue;
+        const entry = weatherByCity[city];
+        if (!entry || !entry.byDate[day.date]) continue;
+        if (oldest === null || entry.fetchedAt < oldest) oldest = entry.fetchedAt;
+    }
+    if (oldest === null) return null;
+    const age = clockNow.getTime() - oldest;
+    return age >= STALE_WEATHER_MS ? Math.floor(age / (1000 * 60 * 60)) : null;
+});
 
 // --- Switch day via a horizontal scroll-snap strip (native swipe / trackpad) ---
 // Each day is a full-width snap panel; the browser handles the gesture, so text
@@ -226,6 +318,13 @@ const EVENT_SCROLL_GAP = 8;
 // Armed by loadTripData; consumed by the initial-positioning effect below.
 let pendingInitialScroll = false;
 let headerEl = $state<HTMLElement>();
+// Rescue for a strip stuck between snap points (WebKit occasionally drops the
+// snap animation mid-glide): once scroll events stop off a snap point and no
+// finger is on the strip, nudge it to the nearest panel instead of waiting
+// for the user to drag it straight themselves.
+let stripTouchActive = false;
+let stripRescueTimer: number;
+const STRIP_RESCUE_MS = 250;
 
 // Day number ↔ strip panel index. Panel 0 is the trip overview (day 0); the
 // day panels follow in YAML order, shifted by one.
@@ -261,9 +360,14 @@ function applyDayScroll(day: number, behavior: "auto" | "smooth" = scrollBehavio
         return;
     }
     const now = new Date();
-    const eventIdx = dayData.date === toLocalIsoDate(now)
+    let eventIdx = dayData.date === toLocalIsoDate(now)
         ? findCurrentEventIndex(dayData.timeline, now)
         : null;
+    // A checked-off / skipped anchor would land on a struck-through card —
+    // advance to the first unresolved event, same semantics as the capsule.
+    while (eventIdx !== null && dayData.timeline[eventIdx].status) {
+        eventIdx = eventIdx + 1 < dayData.timeline.length ? eventIdx + 1 : null;
+    }
     if (eventIdx === null) {
         window.scrollTo({ top: 0, behavior });
         return;
@@ -296,9 +400,13 @@ function onStripSettled() {
     const width = dayStrip.clientWidth;
     if (width <= 0) return;
     const idx = Math.round(dayStrip.scrollLeft / width);
-    // Mid-pan rest (finger held between panels): not on a snap point — skip;
-    // releasing the finger restarts scroll events and re-arms the timer.
-    if (Math.abs(dayStrip.scrollLeft - idx * width) >= 2) return;
+    // Not on a snap point: either a mid-pan rest (finger still down — the
+    // rescue bails) or a genuinely stuck strip (snap dropped — rescue snaps it
+    // to the nearest panel after a grace period).
+    if (Math.abs(dayStrip.scrollLeft - idx * width) >= 2) {
+        scheduleStripRescue();
+        return;
+    }
     const day = indexToDay(idx);
     if (day === null || day === lastSettledDay) return;
     // A multi-day programmatic jump pausing on an intermediate panel: wait for
@@ -308,7 +416,37 @@ function onStripSettled() {
     applyDayScroll(day);
 }
 
+function scheduleStripRescue() {
+    clearTimeout(stripRescueTimer);
+    stripRescueTimer = window.setTimeout(() => {
+        const strip = dayStrip;
+        if (!strip || stripTouchActive || stripScrollLock) return;
+        const width = strip.clientWidth;
+        if (width <= 0) return;
+        const target = Math.round(strip.scrollLeft / width) * width;
+        if (Math.abs(strip.scrollLeft - target) < 2) return;
+        const startLeft = strip.scrollLeft;
+        strip.scrollTo({ left: target, behavior: scrollBehavior() });
+        // A cancelled smooth scroll emits no events (same WebKit caveat as the
+        // realign effect) — if nothing moved by the deadline, jump instantly.
+        window.setTimeout(() => {
+            if (strip.isConnected && !stripTouchActive && Math.abs(strip.scrollLeft - startLeft) < 2) {
+                strip.scrollTo({ left: target, behavior: "auto" });
+            }
+        }, 400);
+    }, STRIP_RESCUE_MS);
+}
+
+function handleStripTouchEnd(e: TouchEvent) {
+    if (e.touches.length > 0) return;
+    stripTouchActive = false;
+    // A release with no momentum and a dropped snap emits no further scroll
+    // events, so nothing else would ever re-check — schedule the rescue here.
+    scheduleStripRescue();
+}
+
 function handleStripScroll() {
+    clearTimeout(stripRescueTimer); // movement = gesture or snap still working
     armStripSettle(); // feeds both user swipes and programmatic smooth scrolls
     if (!dayStrip || !tripData) return;
     if (stripScrollLock) {
@@ -415,6 +553,7 @@ async function maybeImportSharedItinerary() {
             ? "偵測到分享的行程。要以此行程「覆蓋」目前裝置上的行程嗎？（原行程將被取代）"
             : "偵測到分享的行程，要載入嗎？";
         if (confirm(message)) {
+            backupCurrentYaml();
             // Canonicalize (strip runtime ids, re-add schema line) before storing.
             localStorage.setItem(USER_YAML_KEY, serializeToYaml(parsed));
             triggerToast("已載入分享的行程");
@@ -530,8 +669,39 @@ function addChecklistItem(list: "todo" | "packing", text: string) {
 
 function deleteChecklistItem(list: "todo" | "packing", id: string) {
     if (!tripData) return;
+    const index = tripData[list].findIndex(i => i._id === id);
+    if (index < 0) return;
+    const removed = { ...tripData[list][index] };
     tripData[list] = tripData[list].filter(i => i._id !== id);
     persistTripData();
+    const label = removed.text.length > 10 ? `${removed.text.slice(0, 10)}…` : removed.text;
+    triggerToast({
+        message: `已刪除「${label}」`,
+        actionLabel: "復原",
+        onAction: () => {
+            if (!tripData) return;
+            // The list may have changed since the delete (e.g. another item
+            // removed) — reinsert the snapshot at its original position,
+            // clamped to the current length.
+            const next = [...tripData[list]];
+            next.splice(Math.min(index, next.length), 0, removed);
+            tripData[list] = next;
+            persistTripData();
+        },
+    });
+}
+
+// --- Timeline event check-in (done / skipped); `undefined` clears the mark ---
+function setEventStatus(id: string, nextStatus: "done" | "skipped" | undefined) {
+    if (!tripData) return;
+    for (const day of tripData.days) {
+        const event = day.timeline.find(e => e._id === id);
+        if (!event) continue;
+        if (nextStatus === undefined) delete event.status;
+        else event.status = nextStatus;
+        persistTripData();
+        return;
+    }
 }
 
 function addTripWallet(name: string) {
@@ -552,6 +722,7 @@ let yamlSnapshot = "";
 async function openSettings() {
     showSettings = true;
     validationError = null;
+    yamlBackups = listYamlBackups();
 
     const customYaml = localStorage.getItem(USER_YAML_KEY);
     if (customYaml) {
@@ -590,6 +761,7 @@ async function saveSettings() {
         // of runtime/legacy ids. This is what makes the layout look the same
         // every time Settings is reopened.
         const tidied = serializeToYaml(parsed);
+        backupCurrentYaml();
         localStorage.setItem(USER_YAML_KEY, tidied);
         yamlInput = tidied;
         yamlSnapshot = tidied;
@@ -605,8 +777,8 @@ async function saveSettings() {
 }
 
 // Generate a self-contained share link from the currently loaded trip and
-// copy it to the clipboard. Triggered from the overview panel, so feedback
-// goes through toasts (there is no settings modal open to show errors in).
+// offer it through the native share sheet (clipboard fallback). Triggered from
+// the overview panel, so feedback goes through toasts (no settings modal open).
 async function shareCurrentTrip() {
     if (!tripData) return;
     if (!isShareSupported()) {
@@ -615,16 +787,111 @@ async function shareCurrentTrip() {
     }
     try {
         const url = await buildShareUrl(serializeToYaml(tripData));
-        handleCopy(url, "分享連結已複製！網址較長，可用短網址服務縮短");
+        await shareOrCopy({ url }, url, "分享連結已複製！網址較長，可用短網址服務縮短");
     } catch (err) {
         console.error("Failed to build share link:", err);
         triggerToast("無法產生分享連結，請稍後再試");
     }
 }
 
+// 今日報平安: share one day's plain-text report. Uses the same native share
+// sheet (with clipboard fallback) as the trip-link share above.
+async function shareDayReport(dayData: DayItinerary) {
+    if (!tripData) return;
+    const text = buildDayReport(dayData, tripData.trip.hotels, tripData.trip.name);
+    await shareOrCopy({ text }, text, "已複製今日行程，可直接貼上分享");
+}
+
+// --- File export: the escape hatch for the localStorage single-point-of-loss
+// risk — gets the trip YAML and the ledger records off this device as files. ---
+function exportDateStamp(): string {
+    return toLocalIsoDate(new Date()).replaceAll("-", "");
+}
+
+function exportTripYaml() {
+    if (!tripData) {
+        triggerToast("目前沒有可匯出的行程");
+        return;
+    }
+    try {
+        downloadTextFile(`show-me-way-行程-${exportDateStamp()}.yaml`, serializeToYaml(tripData), "application/yaml;charset=utf-8");
+        triggerToast("已匯出行程 YAML");
+    } catch (err) {
+        console.error("Failed to export trip YAML:", err);
+        triggerToast("匯出失敗，請稍後再試");
+    }
+}
+
+function exportLedgerCsv() {
+    try {
+        const csv = buildLedgerCsv();
+        if (csv === null) {
+            triggerToast("尚無記帳紀錄可匯出");
+            return;
+        }
+        downloadTextFile(`show-me-way-記帳-${exportDateStamp()}.csv`, csv, "text/csv;charset=utf-8");
+        triggerToast("已匯出記帳 CSV");
+    } catch (err) {
+        console.error("Failed to export ledger CSV:", err);
+        triggerToast("匯出失敗，請稍後再試");
+    }
+}
+
+// zh-TW timestamp for the backup list, e.g. "06/11(四) 14:30".
+function formatBackupTime(savedAt: string): string {
+    const date = new Date(savedAt);
+    if (isNaN(date.getTime())) return savedAt;
+    const hh = String(date.getHours()).padStart(2, "0");
+    const mm = String(date.getMinutes()).padStart(2, "0");
+    return `${formatDayDate(toLocalIsoDate(date))} ${hh}:${mm}`;
+}
+
+// Restore an auto-backup. Validation runs before anything else so a failed
+// restore never touches the backup ring; the snapshot of the current YAML is
+// taken right before the overwrite. The backup content is read out first, or
+// a full ring could evict the very entry being restored.
+async function restoreYamlBackup(savedAt: string) {
+    // Unsaved editor edits never reach USER_YAML_KEY, so no snapshot can
+    // recover them — they are the only truly unrecoverable content here.
+    if (yamlInput !== yamlSnapshot && !confirm("尚有未儲存的變更，還原備份將捨棄這些變更，確定繼續嗎？")) {
+        return;
+    }
+    const yaml = getYamlBackup(savedAt);
+    if (!yaml) {
+        triggerToast("找不到此備份");
+        yamlBackups = listYamlBackups();
+        return;
+    }
+    try {
+        validateYaml(yaml);
+    } catch (err) {
+        // A backup saved under older, looser validation rules can fail here.
+        // Load it into the editor so the exact error can guide a manual fix.
+        console.error("Backup YAML validation failed:", err);
+        yamlInput = yaml;
+        validationError = err instanceof Error ? err.message : "YAML 格式錯誤，請檢查縮排！";
+        yamlBackups = listYamlBackups();
+        triggerToast("此備份內容無效，已載入編輯器，請修正後再儲存");
+        return;
+    }
+    if (!confirm("要以此備份覆蓋目前的行程嗎？")) return;
+    backupCurrentYaml();
+    localStorage.setItem(USER_YAML_KEY, yaml);
+    showSettings = false;
+    validationError = null;
+    triggerToast("已還原備份的行程");
+    await loadTripData();
+}
+
 // Reset to Local default
 async function resetToLocalDefault() {
+    // Unsaved editor edits never reach USER_YAML_KEY (and may hold an invalid
+    // backup loaded for repair) — same guard as restoreYamlBackup.
+    if (yamlInput !== yamlSnapshot && !confirm("尚有未儲存的變更，回復預設將捨棄這些變更，確定繼續嗎？")) {
+        return;
+    }
     if (confirm("要清除自訂 YAML，並恢復為專案預設的行程嗎？")) {
+        backupCurrentYaml();
         localStorage.removeItem(USER_YAML_KEY);
         showSettings = false;
         validationError = null;
@@ -653,13 +920,46 @@ function handleCopy(text: string, successMsg = "已複製") {
     });
 }
 
-// Trigger Toast Notification
-function triggerToast(msg: string) {
-    toastMessage = msg;
+// Share via the native share sheet when available, otherwise fall back to the
+// clipboard. Keeps every "分享" action consistent: a user-cancelled share sheet
+// stays silent, while a missing API or a real failure degrades to a copy.
+async function shareOrCopy(data: { url?: string; text?: string; title?: string; }, copyText: string, copyMsg: string) {
+    if (typeof navigator.share === "function") {
+        try {
+            await navigator.share(data);
+            return;
+        } catch (err) {
+            // User cancel (closed the sheet) is silent by design; real failures
+            // (busy sheet, permission) degrade to the clipboard path below.
+            if ((err as DOMException)?.name === "AbortError") return;
+        }
+    }
+    handleCopy(copyText, copyMsg);
+}
+
+// Trigger Toast Notification: a plain message, or an action variant
+// ({ message, actionLabel, onAction }) used for undo — that one stays up
+// longer so the button can actually be reached.
+function triggerToast(toast: ToastInput) {
+    const opts = typeof toast === "string" ? { message: toast } : toast;
+    toastMessage = opts.message;
+    toastAction = opts.actionLabel && opts.onAction
+        ? { label: opts.actionLabel, onAction: opts.onAction }
+        : null;
     isToastVisible = true;
-    setTimeout(() => {
+    // Back-to-back toasts must restart the clock, or the first timer would
+    // hide the second toast early and cut an undo window short.
+    clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => {
         isToastVisible = false;
-    }, 2500);
+    }, toastAction ? 4500 : 2500);
+}
+
+function handleToastAction() {
+    const action = toastAction?.onAction;
+    clearTimeout(toastTimer);
+    isToastVisible = false;
+    action?.();
 }
 
 // Select all text in the YAML editor
@@ -682,7 +982,7 @@ function clearYaml() {
 <svelte:window onkeydown={handleWindowKeydown} />
 <svelte:document onvisibilitychange={handleVisibilityChange} />
 
-<div class="flex flex-col min-h-screen bg-[#0b0c13] text-text-primary pb-[calc(80px+var(--safe-bottom))] animate-fade-in">
+<div class="flex flex-col min-h-screen bg-bg-main text-text-primary pb-[calc(80px+var(--safe-bottom))] animate-fade-in">
     <!-- App Header: just the day switcher now — trip name, countdown and the
          settings entry live on the overview panel (day 0) inside the strip. -->
     {#if tripData && activeTab === "itinerary"}
@@ -724,9 +1024,17 @@ function clearYaml() {
                              viewport (max-h-dvh): they stay visible while swiping, but
                              a short day no longer gets dead scroll space below it from
                              a longer sibling. -->
+                        <!-- svelte-ignore a11y_no_static_element_interactions (touch
+                             handlers only observe the gesture for snap rescue) -->
                         <div
                             bind:this={dayStrip}
                             onscroll={handleStripScroll}
+                            ontouchstart={() => {
+                                stripTouchActive = true;
+                                clearTimeout(stripRescueTimer);
+                            }}
+                            ontouchend={handleStripTouchEnd}
+                            ontouchcancel={handleStripTouchEnd}
                             class="flex overflow-x-auto overscroll-x-contain snap-x snap-mandatory items-start [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                         >
                             <section class="snap-start snap-always shrink-0 w-full {currentDay === 0 ? '' : 'max-h-dvh overflow-hidden'}">
@@ -749,6 +1057,9 @@ function clearYaml() {
                                         mapProvider={tripData.trip.mapProvider}
                                         weather={weatherForDay(day)}
                                         now={clockNow}
+                                        onEnlarge={card => (enlargedCard = card)}
+                                        onSetEventStatus={setEventStatus}
+                                        onShareDay={() => shareDayReport(day)}
                                         onCopy={handleCopy}
                                     />
                                 </section>
@@ -761,7 +1072,7 @@ function clearYaml() {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     class="underline hover:text-text-secondary transition"
-                                >Open-Meteo.com</a> (CC BY 4.0)
+                                >Open-Meteo.com</a> (CC BY 4.0){#if staleWeatherHours !== null}（{staleWeatherHours} 小時前）{/if}
                             </p>
                         {/if}
                     {/if}
@@ -801,6 +1112,7 @@ function clearYaml() {
                         driverPrompt={langConfig.driverPrompt}
                         copyAddressLabel={langConfig.copyAddressLabel}
                         onCopy={handleCopy}
+                        onEnlarge={card => (enlargedCard = card)}
                     />
                 {:else if activeTab === "calc"}
                     <div class="mb-4">
@@ -854,24 +1166,36 @@ function clearYaml() {
         </div>
     </nav>
 
-    <!-- Global Toast Notification -->
+    <!-- Global Toast Notification: sits between the nav (64px+safe) and the
+         update banner (148px+safe). pointer-events-none on the pill so a
+         passing notice never intercepts taps aimed at the banner below the
+         z-[2000] layer; only the undo action button re-enables them. -->
     <div
         role="status"
         aria-live="polite"
         class="
-            fixed bottom-[85px] left-1/2 -translate-x-1/2 bg-neon-blue text-black font-bold text-xs py-2.5 px-5 rounded-full z-[2000] shadow-[0_4px_15px_rgba(0,240,255,0.3)] transition-[opacity,transform] duration-300 flex items-center gap-1.5
+            pointer-events-none fixed bottom-[calc(96px+var(--safe-bottom))] left-1/2 -translate-x-1/2 bg-neon-blue text-black font-bold text-xs py-2.5 px-5 rounded-full z-[2000] shadow-[0_4px_15px_rgba(0,240,255,0.3)] transition-[opacity,transform] duration-300 flex items-center gap-1.5
             {isToastVisible ? 'opacity-100 translate-y-0 visible' : 'opacity-0 translate-y-5 invisible'}
         "
     >
         <CheckCircle size={14} class="stroke-[3]" aria-hidden="true" />
         {toastMessage}
+        {#if toastAction}
+            <button
+                onclick={handleToastAction}
+                class="pointer-events-auto min-w-[44px] min-h-[44px] -my-3.5 -mr-4 pl-2 pr-3.5 flex items-center justify-center font-black underline underline-offset-2 cursor-pointer"
+            >
+                {toastAction.label}
+            </button>
+        {/if}
     </div>
 
     <!-- PWA Update Prompt -->
     {#if needRefresh}
         <!-- z-[200]: above the nav (z-[100]) but below full-screen overlays
-             (z-[1000]) so it never intercepts taps meant for an open modal. -->
-        <div class="fixed bottom-[calc(88px+var(--safe-bottom))] left-1/2 -translate-x-1/2 z-[200] bg-[#121422] border border-neon-blue/40 rounded-full py-1.5 pl-4 pr-1.5 flex items-center gap-2 shadow-[0_4px_15px_rgba(0,240,255,0.2)] whitespace-nowrap animate-fade-in">
+             (z-[1000]) so it never intercepts taps meant for an open modal.
+             148px+safe keeps it clear of the toast at 96px+safe. -->
+        <div class="fixed bottom-[calc(148px+var(--safe-bottom))] left-1/2 -translate-x-1/2 z-[200] bg-[#121422] border border-neon-blue/40 rounded-full py-1.5 pl-4 pr-1.5 flex items-center gap-2 shadow-[0_4px_15px_rgba(0,240,255,0.2)] whitespace-nowrap animate-fade-in">
             <span role="alert" class="text-xs font-bold text-text-primary">已有新版本，可立即更新</span>
             <button
                 onclick={() => void updateSW(true)}
@@ -890,11 +1214,92 @@ function clearYaml() {
         </div>
     {/if}
 
-    <!-- Settings Overlay Modal -->
+    <!-- Fullscreen enlarged-card overlay: a place's local-language name (and
+         hotel address) for a driver / local staff, or a reservation
+         confirmation code for a check-in counter. -->
+    {#if enlargedCard}
+        {@const data = enlargedCard}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+            transition:fade={{ duration: 300 }}
+            onoutrostart={e => e.currentTarget.classList.add("pointer-events-none")}
+            onclick={() => (enlargedCard = null)}
+            class="fixed inset-0 bg-black/95 z-[1000] flex items-center justify-center p-5"
+        >
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <div
+                bind:this={enlargedCardEl}
+                role="dialog"
+                aria-modal="true"
+                aria-label="放大顯示：{data.title}"
+                tabindex="-1"
+                onclick={(e => e.stopPropagation())}
+                class="bg-[#121422] border border-white/8 rounded-3xl w-full max-w-[400px] p-6 shadow-2xl overscroll-contain"
+            >
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-sm text-text-secondary">
+                        {data.kind === "confirmation" ? "出示給櫃台人員看（點碼可複製）" : "出示給司機 / 店員看（點字可複製）"}
+                    </h3>
+                    <button
+                        onclick={() => (enlargedCard = null)}
+                        aria-label="關閉"
+                        class="min-w-[44px] min-h-[44px] -my-2.5 -mr-2.5 flex items-center justify-center text-text-secondary hover:text-text-primary cursor-pointer"
+                    >
+                        <X size={24} aria-hidden="true" />
+                    </button>
+                </div>
+
+                <div class="text-center break-words px-2">
+                    <p class="text-sm text-text-secondary mb-3">{data.title}</p>
+                    {#if data.kind === "confirmation"}
+                        <button
+                            type="button"
+                            onclick={() => handleCopy(data.code, "已複製確認碼")}
+                            class="text-neon-blue text-4xl font-black leading-normal tracking-widest block w-full break-all cursor-pointer transition active:scale-[0.98] drop-shadow-[0_0_8px_rgba(0,240,255,0.3)]"
+                            title="點一下複製"
+                        >
+                            {data.code}
+                        </button>
+                        {#if data.name}
+                            <p class="text-white text-2xl font-black leading-normal break-words mt-3">{data.name}</p>
+                        {/if}
+                        {#if data.note}
+                            <p class="text-xs text-text-secondary leading-relaxed mt-3">{data.note}</p>
+                        {/if}
+                    {:else}
+                        <button
+                            type="button"
+                            onclick={() => handleCopy(data.localName, "已複製名稱")}
+                            class="text-white text-2xl font-black leading-normal block w-full break-words cursor-pointer transition active:scale-[0.98]"
+                            title="點一下複製"
+                        >
+                            {data.localName}
+                        </button>
+                        {#if data.address}
+                            <button
+                                type="button"
+                                onclick={() => handleCopy(data.address ?? "", "已複製地址")}
+                                class="text-neon-blue text-3xl font-black leading-normal block w-full break-words mt-3 cursor-pointer transition active:scale-[0.98] drop-shadow-[0_0_8px_rgba(0,240,255,0.3)]"
+                                title="點一下複製"
+                            >
+                                {data.address}
+                            </button>
+                        {/if}
+                    {/if}
+                </div>
+            </div>
+        </div>
+    {/if}
+
+    <!-- Settings Overlay Modal: persistent DOM toggled by opacity (an {#if}
+         would drop the fade), so the closed state must be inert to stay out
+         of the Tab order and the accessibility tree. -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
         onclick={attemptCloseSettings}
+        inert={!showSettings}
         class="
             fixed inset-0 bg-black/95 z-[1000] flex items-center justify-center p-5 transition-opacity duration-300
             {showSettings ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
@@ -902,6 +1307,7 @@ function clearYaml() {
     >
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
+            bind:this={settingsDialogEl}
             role="dialog"
             aria-modal="true"
             aria-label="自訂 YAML 行程設定"
@@ -932,24 +1338,27 @@ function clearYaml() {
                 <div class="flex-1 min-h-0 flex flex-col gap-1.5">
                     <div class="flex justify-between items-center">
                         <label for="yaml-editor" class="font-bold text-text-primary">行程資料 (YAML)</label>
+                        <!-- 44px hot zones. Width grows in-flow (no -mx) so adjacent
+                             zones can't overlap; -mb is capped at the 6px gap so the
+                             zones stop at the textarea below (pt-1.5 re-centers text). -->
                         <div class="flex items-center gap-2.5">
                             <button
                                 onclick={selectAllYaml}
-                                class="text-[11px] py-1.5 px-1 -my-1 text-text-secondary hover:text-neon-blue flex items-center gap-0.5 cursor-pointer font-medium transition"
+                                class="text-[11px] min-w-[44px] min-h-[44px] -mt-3 -mb-1.5 pt-1.5 px-1 text-text-secondary hover:text-neon-blue flex items-center justify-center gap-0.5 cursor-pointer font-medium transition"
                             >
                                 全選
                             </button>
                             <span class="text-[9px] text-white/10 select-none">|</span>
                             <button
                                 onclick={clearYaml}
-                                class="text-[11px] py-1.5 px-1 -my-1 text-text-secondary hover:text-neon-pink flex items-center gap-0.5 cursor-pointer font-medium transition"
+                                class="text-[11px] min-w-[44px] min-h-[44px] -mt-3 -mb-1.5 pt-1.5 px-1 text-text-secondary hover:text-neon-pink flex items-center justify-center gap-0.5 cursor-pointer font-medium transition"
                             >
                                 清空
                             </button>
                             <span class="text-[9px] text-white/10 select-none">|</span>
                             <button
                                 onclick={() => handleCopy(yamlInput, "已複製編輯器中的 YAML")}
-                                class="text-[11px] py-1.5 px-1 -my-1 text-text-secondary hover:text-neon-blue flex items-center gap-1 cursor-pointer font-medium transition"
+                                class="text-[11px] min-w-[44px] min-h-[44px] -mt-3 -mb-1.5 pt-1.5 px-1 text-text-secondary hover:text-neon-blue flex items-center justify-center gap-1 cursor-pointer font-medium transition"
                             >
                                 <Copy size={12} aria-hidden="true" /> 複製
                             </button>
@@ -987,6 +1396,52 @@ function clearYaml() {
                             </div>
                         </li>
                     </ul>
+                </div>
+
+                <!-- Auto-backup restore list: snapshots taken before each destructive overwrite -->
+                <div class="shrink-0 text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2">
+                    <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
+                        <History size={12} class="shrink-0 text-neon-blue" aria-hidden="true" />還原備份
+                    </p>
+                    {#if yamlBackups.length === 0}
+                        <p class="mt-1.5">尚無自動備份。覆蓋行程前會自動保留最近 5 份。</p>
+                    {:else}
+                        <ul class="mt-1.5 space-y-1.5 max-h-[140px] overflow-y-auto overscroll-contain">
+                            {#each yamlBackups as backup (backup.savedAt)}
+                                <li>
+                                    <button
+                                        onclick={() => restoreYamlBackup(backup.savedAt)}
+                                        class="w-full min-h-[44px] flex items-center justify-between gap-2 px-3 rounded-lg bg-white/3 border border-card-border text-[11px] text-text-secondary hover:text-neon-blue hover:bg-white/5 transition cursor-pointer"
+                                    >
+                                        <span class="font-mono">{formatBackupTime(backup.savedAt)}</span>
+                                        <span class="text-[10px] font-bold">還原</span>
+                                    </button>
+                                </li>
+                            {/each}
+                        </ul>
+                    {/if}
+                </div>
+
+                <!-- File export: data leaves the device as files (backups above still live in the same localStorage) -->
+                <div class="shrink-0 text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2">
+                    <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
+                        <Download size={12} class="shrink-0 text-neon-blue" aria-hidden="true" />匯出資料
+                    </p>
+                    <p class="mt-1.5">下載成檔案保存，避免裝置遺失或清除瀏覽器資料時一併消失。</p>
+                    <div class="grid grid-cols-2 gap-2 mt-1.5">
+                        <button
+                            onclick={exportTripYaml}
+                            class="min-h-[44px] flex items-center justify-center gap-1 px-3 rounded-lg bg-white/3 border border-card-border text-[11px] font-bold text-text-secondary hover:text-neon-blue hover:bg-white/5 transition cursor-pointer"
+                        >
+                            匯出行程 YAML
+                        </button>
+                        <button
+                            onclick={exportLedgerCsv}
+                            class="min-h-[44px] flex items-center justify-center gap-1 px-3 rounded-lg bg-white/3 border border-card-border text-[11px] font-bold text-text-secondary hover:text-neon-blue hover:bg-white/5 transition cursor-pointer"
+                        >
+                            匯出記帳 CSV
+                        </button>
+                    </div>
                 </div>
             </div>
 

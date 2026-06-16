@@ -1,32 +1,34 @@
 <script lang="ts">
+import ArrowLeftRight from "@lucide/svelte/icons/arrow-left-right";
+import Banknote from "@lucide/svelte/icons/banknote";
+import Calculator from "@lucide/svelte/icons/calculator";
+import CreditCard from "@lucide/svelte/icons/credit-card";
+import Plus from "@lucide/svelte/icons/plus";
+import Trash2 from "@lucide/svelte/icons/trash-2";
+import Wallet from "@lucide/svelte/icons/wallet";
+import { untrack } from "svelte";
 import {
-    ArrowLeftRight,
-    Banknote,
-    Calculator,
-    CreditCard,
-    Plus,
-    Trash2,
-    Wallet,
-} from "@lucide/svelte";
+    EXCHANGE_CACHE_TTL,
+    loadExchangeRates,
+} from "../exchange";
 import {
-    onMount,
-    untrack,
-} from "svelte";
-import { loadExchangeRates } from "../exchange";
-
-interface ExpenseItem {
-    id: string;
-    name: string;
-    amount: number;
-    type: string; // WOWPASS | Cash | Deposit-WOWPASS | Deposit-Cash
-    date: string;
-}
+    computeLedgerTotals,
+    computeQuickAmounts,
+    computeWalletBalances,
+    type ExpenseItem,
+    foreignToTwd,
+    getCurrencyConfig,
+    ledgerTypeLabel,
+    twdToForeign,
+} from "../ledger";
+import type { ToastInput } from "../toast";
+import { toLocalIsoDate } from "../utils";
 
 interface Props {
     currency?: string;
     wallets?: string[];
     onAddWallet?: (name: string) => void;
-    onToast: (msg: string) => void;
+    onToast: (toast: ToastInput) => void;
 }
 
 let { currency, wallets = [], onAddWallet, onToast }: Props = $props();
@@ -55,102 +57,58 @@ const defaultWallets = $derived.by(() => {
 const activeWallets = $derived(wallets.length > 0 ? wallets : defaultWallets);
 
 // Localized config based on active currency
-const localConfig = $derived.by(() => {
-    const code = activeCurrency;
-    switch (code) {
-        case "JPY":
-            return {
-                currencyCode: "JPY",
-                currencyName: "日圓",
-                currencySymbol: "¥",
-            };
-        case "KRW":
-            return {
-                currencyCode: "KRW",
-                currencyName: "韓元",
-                currencySymbol: "₩",
-            };
-        case "TWD":
-            return {
-                currencyCode: "TWD",
-                currencyName: "台幣",
-                currencySymbol: "NT$",
-            };
-        case "USD":
-            return {
-                currencyCode: "USD",
-                currencyName: "美元",
-                currencySymbol: "$",
-            };
-        default:
-            return {
-                currencyCode: code,
-                currencyName: code,
-                currencySymbol: "$",
-            };
-    }
-});
+const localConfig = $derived(getCurrencyConfig(activeCurrency));
 
 // Currency States
 let exchangeRate = $state(1.0);
 let foreignValue = $state("1000");
 let twdValue = $state("");
+let rateInfo = $state<{ date: string; offline: boolean; } | null>(null);
 
 // Ledger States
-let expenseHistory = $state<ExpenseItem[]>([]);
+function loadSavedExpenses(): ExpenseItem[] {
+    try {
+        const saved = localStorage.getItem("ledger_expenses");
+        return saved ? JSON.parse(saved) as ExpenseItem[] : [];
+    } catch (e) {
+        console.warn("Failed to read saved expenses", e);
+        return [];
+    }
+}
+
+// Initialized at declaration (not onMount) so the first render never flashes
+// an empty list. $state.raw: never mutate in place — always reassign a new array.
+let expenseHistory = $state.raw<ExpenseItem[]>(loadSavedExpenses());
+
+// The undo toast outlives this component (tab switch unmounts it) — its
+// restore writes localStorage and pings this event so the live instance,
+// whichever one it is, refreshes its view.
+const LEDGER_SYNC_EVENT = "showmeway:ledger-sync";
+$effect(() => {
+    const reload = () => (expenseHistory = loadSavedExpenses());
+    window.addEventListener(LEDGER_SYNC_EVENT, reload);
+    return () => window.removeEventListener(LEDGER_SYNC_EVENT, reload);
+});
 let expenseName = $state("");
 let expenseAmount = $state("");
 let expenseType = $state("Cash");
 let newWalletName = $state("");
 
-// Derived values
-let totalDeposited = $derived(
-    expenseHistory
-        .filter(item => item.type.startsWith("Deposit"))
-        .reduce((sum, item) => sum + item.amount, 0),
-);
-let totalSpent = $derived(
-    expenseHistory
-        .filter(item => !item.type.startsWith("Deposit"))
-        .reduce((sum, item) => sum + item.amount, 0),
-);
-let balance = $derived(totalDeposited - totalSpent);
+// Derived values (pure math lives in src/lib/ledger.ts)
+const totals = $derived(computeLedgerTotals(expenseHistory));
+const totalDeposited = $derived(totals.totalDeposited);
+const totalSpent = $derived(totals.totalSpent);
+const balance = $derived(totals.balance);
 
-// Dynamically compute quickAmounts based on TWD values and exchange rate
-const quickAmounts = $derived.by(() => {
-    if (activeCurrency === "TWD" || exchangeRate <= 0) {
-        return [100, 200, 500, 1000, 2000, 5000];
-    }
-    const rawAmounts = [50, 100, 250, 500, 1000, 2000].map(twd => twd * exchangeRate);
-    const rounded = rawAmounts.map(val => {
-        if (val < 1) return parseFloat(val.toFixed(1));
-        if (val < 5) return Math.round(val);
-        if (val < 50) return Math.round(val / 5) * 5;
-        if (val < 100) return Math.round(val / 10) * 10;
-        if (val < 1000) return Math.round(val / 50) * 50;
-        if (val < 10000) return Math.round(val / 500) * 500;
-        return Math.round(val / 5000) * 5000;
-    });
-    return [...new Set(rounded)];
-});
+const walletBalances = $derived(computeWalletBalances(expenseHistory, activeWallets));
+
+const quickAmounts = $derived(computeQuickAmounts(activeCurrency, exchangeRate));
 
 function formatQuickAmount(amount: number): string {
     const symbol = localConfig.currencySymbol;
     if (activeCurrency === "TWD") return `$${amount}`;
     return `${symbol}${amount.toLocaleString()}`;
 }
-
-onMount(() => {
-    // Load ledger (start empty; user adds their own deposits/expenses)
-    try {
-        const savedExpenses = localStorage.getItem("ledger_expenses");
-        if (savedExpenses) {
-            expenseHistory = JSON.parse(savedExpenses);
-        }
-    } catch {
-        expenseHistory = [];
-    }
-});
 
 // Sync default expenseType when activeWallets changes
 $effect(() => {
@@ -191,7 +149,8 @@ $effect(() => {
         // callback sticks to the captured `currency` so a rate that resolves
         // after another currency switch can't be written under the wrong key.
         if (currency !== "TWD") {
-            loadExchangeRates("TWD", data => {
+            rateInfo = null;
+            loadExchangeRates("TWD", (data, meta) => {
                 const ratesRecord = data["twd"] as Record<string, number> | undefined;
                 const rate = ratesRecord?.[currency.toLowerCase()];
                 if (!rate || typeof rate !== "number") return;
@@ -200,6 +159,12 @@ $effect(() => {
                 // A late callback after another currency switch must not
                 // clobber the live inputs — persisting its own key is enough.
                 if (currency !== activeCurrency) return;
+                rateInfo = {
+                    date: data.date,
+                    // Must exceed the TTL: a routine stale replay (anything past
+                    // 12h) would otherwise flash the badge until the refresh lands.
+                    offline: meta.fromCache && Date.now() - meta.fetchedAt >= EXCHANGE_CACHE_TTL * 2,
+                };
                 const prevRate = exchangeRate;
                 exchangeRate = fetchedRate;
                 // If the previous rate was unset, reinitialize the default input value
@@ -211,6 +176,7 @@ $effect(() => {
                 }
             });
         } else {
+            rateInfo = null;
             exchangeRate = 1.0;
             convert("rate");
         }
@@ -218,21 +184,26 @@ $effect(() => {
 });
 
 function saveLedger() {
-    localStorage.setItem("ledger_expenses", JSON.stringify(expenseHistory));
+    // The only user-data write that wasn't failure-guarded — on a trip a quota
+    // or private-mode error would otherwise lose the day's expenses silently.
+    try {
+        localStorage.setItem("ledger_expenses", JSON.stringify(expenseHistory));
+    } catch (e) {
+        console.error("Failed to save expenses", e);
+        onToast("記帳儲存失敗，請稍後再試");
+    }
 }
 
-// Currency Conversion
+// Currency Conversion (math in src/lib/ledger.ts; persistence stays here)
 function convert(source: "foreign" | "twd" | "rate") {
     if (source === "rate") {
         localStorage.setItem(`exchange_rate_${activeCurrency}`, exchangeRate.toString());
     }
 
     if (source === "foreign" || source === "rate") {
-        const foreign = parseFloat(foreignValue) || 0;
-        twdValue = Math.round(foreign / exchangeRate).toString();
+        twdValue = foreignToTwd(foreignValue, exchangeRate);
     } else {
-        const twd = parseFloat(twdValue) || 0;
-        foreignValue = Math.round(twd * exchangeRate).toString();
+        foreignValue = twdToForeign(twdValue, exchangeRate);
     }
 }
 
@@ -263,7 +234,9 @@ function addExpense() {
         name,
         amount,
         type: expenseType,
-        date: new Date().toLocaleDateString(),
+        // Local YYYY-MM-DD (project date convention) — sortable in CSV export;
+        // not shown in the UI, so older toLocaleDateString records are untouched.
+        date: toLocalIsoDate(new Date()),
     };
 
     expenseHistory = [newItem, ...expenseHistory];
@@ -275,9 +248,24 @@ function addExpense() {
 }
 
 function deleteExpense(id: string) {
+    const index = expenseHistory.findIndex(item => item.id === id);
+    if (index < 0) return;
+    const removed = { ...expenseHistory[index] };
     expenseHistory = expenseHistory.filter(item => item.id !== id);
     saveLedger();
-    onToast("紀錄已刪除");
+    onToast({
+        message: "紀錄已刪除",
+        actionLabel: "復原",
+        onAction: () => {
+            // Restore via localStorage, not captured state — this closure may
+            // belong to an unmounted instance (tab switch within the undo
+            // window). Reinsert at the original position, clamped.
+            const next = loadSavedExpenses();
+            next.splice(Math.min(index, next.length), 0, removed);
+            localStorage.setItem("ledger_expenses", JSON.stringify(next));
+            window.dispatchEvent(new Event(LEDGER_SYNC_EVENT));
+        },
+    });
 }
 
 function resetBudget() {
@@ -335,7 +323,7 @@ function handleAddWallet() {
                 <button
                     onclick={swapCurrency}
                     aria-label="互換上下金額"
-                    class="w-9 h-9 rounded-full bg-white/5 border border-card-border flex items-center justify-center text-text-primary hover:bg-neon-blue hover:text-black cursor-pointer transition active:scale-90"
+                    class="w-11 h-11 rounded-full bg-white/5 border border-card-border flex items-center justify-center text-text-primary hover:bg-neon-blue hover:text-black cursor-pointer transition active:scale-90"
                 >
                     <ArrowLeftRight size={16} aria-hidden="true" />
                 </button>
@@ -374,14 +362,23 @@ function handleAddWallet() {
             >
             <span>{localConfig.currencyCode}</span>
         </div>
+        {#if rateInfo}
+            <div class="flex items-center justify-end gap-1.5 text-[10px] text-text-secondary mt-1.5">
+                <span>匯率日期 {rateInfo.date}</span>
+                {#if rateInfo.offline}
+                    <span class="border border-card-border rounded px-1 py-px text-text-muted">離線快取</span>
+                {/if}
+            </div>
+        {/if}
     {/if}
 
-    <!-- Quick Buttons -->
+    <!-- Quick Buttons: real 44px height, no negative margins — wrapped rows sit
+         only 6px apart, so stretched hot zones would overlap across rows. -->
     <div class="flex flex-wrap gap-1.5 mt-3">
         {#each quickAmounts as amount (amount)}
             <button
                 onclick={() => setQuickForeign(amount)}
-                class="bg-white/3 border border-card-border text-text-secondary py-1.5 px-3 rounded-lg text-xs font-semibold hover:bg-neon-blue hover:text-black transition cursor-pointer"
+                class="min-h-[44px] bg-white/3 border border-card-border text-text-secondary px-3 rounded-lg text-xs font-semibold flex items-center hover:bg-neon-blue hover:text-black transition cursor-pointer"
             >
                 {formatQuickAmount(amount)}
             </button>
@@ -395,11 +392,16 @@ function handleAddWallet() {
         <h3 class="text-base font-bold text-text-primary flex items-center gap-2">
             <Wallet size={18} class="text-neon-blue" aria-hidden="true" />記帳與餘額管理
         </h3>
-        <button onclick={resetBudget} class="text-xs text-text-muted hover:text-neon-pink font-semibold cursor-pointer">重設</button>
+        <button
+            onclick={resetBudget}
+            class="min-w-[44px] min-h-[44px] -my-2.5 -mr-2.5 flex items-center justify-center text-xs text-text-muted hover:text-neon-pink font-semibold cursor-pointer"
+        >
+            重設
+        </button>
     </div>
 
     <!-- Stats Dashboard -->
-    <div class="grid grid-cols-3 gap-2 mb-5">
+    <div class="grid grid-cols-3 gap-2 mb-2">
         <div class="bg-black/20 border border-white/2 rounded-xl p-2.5 flex flex-col items-center gap-0.5">
             <span class="text-[11px] text-text-secondary font-medium">儲值總額</span>
             <span class="text-xs font-extrabold text-accent-green tabular-nums">{localConfig.currencySymbol}{totalDeposited.toLocaleString()}</span>
@@ -412,6 +414,18 @@ function handleAddWallet() {
             <span class="text-[11px] text-text-secondary font-medium">剩餘餘額</span>
             <span class="text-xs font-extrabold text-neon-blue tabular-nums">{localConfig.currencySymbol}{balance.toLocaleString()}</span>
         </div>
+    </div>
+
+    <!-- Per-wallet Balances -->
+    <div class="flex flex-wrap gap-2 mb-5">
+        {#each walletBalances as wb (wb.wallet)}
+            <div class="flex-1 basis-[30%] bg-black/20 border border-white/2 rounded-xl p-2.5 flex flex-col items-center gap-0.5">
+                <span class="text-[11px] text-text-secondary font-medium">{wb.wallet === "Cash" ? "現金" : wb.wallet} 餘額</span>
+                <span class="text-xs font-extrabold tabular-nums {wb.balance < 0 ? 'text-neon-pink' : 'text-neon-blue'}">
+                    {wb.balance < 0 ? "-" : ""}{localConfig.currencySymbol}{Math.abs(wb.balance).toLocaleString()}
+                </span>
+            </div>
+        {/each}
     </div>
 
     <!-- Quick Add Form -->
@@ -464,7 +478,7 @@ function handleAddWallet() {
             <button
                 type="button"
                 onclick={handleAddWallet}
-                class="bg-white/5 border border-card-border text-text-secondary hover:bg-neon-blue hover:text-black font-bold py-1.5 px-3 rounded-xl text-[10px] transition active:scale-[0.96] cursor-pointer"
+                class="min-w-[44px] min-h-[44px] bg-white/5 border border-card-border text-text-secondary hover:bg-neon-blue hover:text-black font-bold px-3 rounded-xl text-[10px] flex items-center justify-center transition active:scale-[0.96] cursor-pointer"
             >
                 新增
             </button>
@@ -493,11 +507,7 @@ function handleAddWallet() {
                             {:else}
                                 <CreditCard size={11} class="shrink-0" aria-hidden="true" />
                             {/if}
-                            {
-                                item.type.startsWith("Deposit")
-                                ? (item.type === "Deposit-Cash" ? "現金兌換" : `${item.type.replace("Deposit-", "")} 加值`)
-                                : (item.type === "Cash" ? "現金支付" : `${item.type} 支付`)
-                            }
+                            {ledgerTypeLabel(item.type)}
                         </span>
                     </div>
                     <div class="flex items-center gap-3">

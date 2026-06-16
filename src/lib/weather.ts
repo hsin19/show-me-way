@@ -15,14 +15,36 @@ export interface DailyWeather {
 /** Forecast keyed by local date (YYYY-MM-DD, aggregated in the city's timezone). */
 export type DailyWeatherByDate = Record<string, DailyWeather>;
 
-const GEOCODE_CACHE_KEY = "showmeway_geocode";
+const GEOCODE_CACHE_KEY = "showmeway_geocode_v1";
 const FORECAST_CACHE_KEY = "showmeway_weather";
 // Source models refresh every ~3-6 hours, so refetching sooner buys nothing.
 const FORECAST_TTL = 1000 * 60 * 60 * 3;
+const GEOCODE_TTL = 1000 * 60 * 60 * 24 * 30;
+const GEOCODE_MISS_TTL = FORECAST_TTL;
+
+// Zero-result lookups live in memory only: module state outlasts
+// visibilitychange retries, while a full reload retries once per app load.
+const GEOCODE_MISSES = new Map<string, number>();
+const inFlightForecasts = new Map<string, Promise<DailyWeatherByDate | null>>();
+// Mirror of localStorage so a failed write (quota, private mode) degrades to
+// per-session caching instead of refetching on every foreground return.
+const memCache = new Map<string, unknown>();
+
+export function resetWeatherCacheForTests(): void {
+    GEOCODE_MISSES.clear();
+    inFlightForecasts.clear();
+    memCache.clear();
+}
 
 interface GeoPoint {
     lat: number;
     lon: number;
+}
+
+interface GeocodeCacheEntry extends GeoPoint {
+    name: string;
+    country_code: string;
+    cachedAt: number;
 }
 
 interface ForecastCacheEntry {
@@ -34,19 +56,50 @@ function cityKey(city: string): string {
     return city.trim().toLowerCase();
 }
 
-function readJson<T>(key: string): T | null {
+function isValidGeocodeEntry(value: unknown): value is GeocodeCacheEntry {
+    if (typeof value !== "object" || value === null) return false;
+    const entry = value as Partial<GeocodeCacheEntry>;
+    return Number.isFinite(entry.lat)
+        && Number.isFinite(entry.lon)
+        && typeof entry.name === "string"
+        && typeof entry.country_code === "string"
+        && Number.isFinite(entry.cachedAt);
+}
+
+function isValidForecastCacheEntry(value: unknown): value is ForecastCacheEntry {
+    if (typeof value !== "object" || value === null) return false;
+    const entry = value as Partial<ForecastCacheEntry>;
+    return Number.isFinite(entry.timestamp)
+        && typeof entry.byDate === "object"
+        && entry.byDate !== null
+        && !Array.isArray(entry.byDate);
+}
+
+function readJson<T>(key: string, isValid: (value: unknown) => value is T): T | null {
+    if (memCache.has(key)) {
+        const mirrored = memCache.get(key);
+        if (isValid(mirrored)) return mirrored;
+        memCache.delete(key);
+    }
     const cached = localStorage.getItem(key);
     if (!cached) return null;
     try {
-        return JSON.parse(cached) as T;
+        const parsed: unknown = JSON.parse(cached);
+        if (isValid(parsed)) {
+            memCache.set(key, parsed);
+            return parsed;
+        }
     } catch (e) {
         console.warn("Failed to parse cached weather data", e);
-        return null;
     }
+    // A successful fetch is the only other write path, so drop bad entries here
+    // or they would shadow the cache forever.
+    localStorage.removeItem(key);
+    return null;
 }
 
-// A failed cache write (quota, private mode) must not discard fetched data.
 function writeJson(key: string, value: unknown): void {
+    memCache.set(key, value);
     try {
         localStorage.setItem(key, JSON.stringify(value));
     } catch (e) {
@@ -54,28 +107,63 @@ function writeJson(key: string, value: unknown): void {
     }
 }
 
+// A ", XX" ISO country suffix ("Springfield, US") disambiguates common names
+// via the API's countryCode filter — exact-match heuristics proved unreliable.
+function parseCityQuery(city: string): { name: string; countryCode: string | null; } {
+    const match = city.trim().match(/^(.*\S)\s*,\s*([A-Za-z]{2})$/);
+    if (match) return { name: match[1], countryCode: match[2].toUpperCase() };
+    return { name: city.trim(), countryCode: null };
+}
+
 /**
  * Resolve a city name to coordinates via the Open-Meteo geocoding API.
- * Successful lookups are cached forever (a city doesn't move); failures are
- * not cached, so a typo costs one request per app load until corrected.
+ * Hits are cached for 30 days; zero-result lookups are remembered in memory
+ * for 3 hours, so a typo costs one request per app load plus one per cooldown
+ * window. Network errors are never cached.
  */
 async function geocodeCity(city: string): Promise<GeoPoint | null> {
     const key = `${GEOCODE_CACHE_KEY}_${cityKey(city)}`;
-    const cached = readJson<GeoPoint>(key);
-    if (cached) return cached;
+    // Pre-v1 entries ({lat, lon}, no TTL) are unreadable now — clear, don't migrate.
+    localStorage.removeItem(`showmeway_geocode_${cityKey(city)}`);
+    const cached = readJson(key, isValidGeocodeEntry);
+    const now = Date.now();
+    // A future cachedAt (clock rollback) would otherwise never expire by TTL.
+    if (cached && cached.cachedAt <= now && now - cached.cachedAt < GEOCODE_TTL) {
+        console.info(`Weather location for "${city}": ${cached.name}, ${cached.country_code}`);
+        return { lat: cached.lat, lon: cached.lon };
+    }
+
+    const missedAt = GEOCODE_MISSES.get(cityKey(city));
+    if (missedAt !== undefined && now - missedAt < GEOCODE_MISS_TTL) return null;
 
     try {
-        const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city.trim())}&count=1`;
+        const { name, countryCode } = parseCityQuery(city);
+        // language=zh lets CJK names like 東京/京都 match (zero results without it).
+        const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=zh`
+            + (countryCode ? `&countryCode=${countryCode}` : "");
         const res = await fetch(url);
         if (!res.ok) {
             throw new Error(`Failed to geocode city: ${res.status} ${res.statusText}`);
         }
-        const data = await res.json() as { results?: { latitude: number; longitude: number; }[]; };
+        const data = await res.json() as {
+            results?: { latitude: number; longitude: number; name?: string; country_code?: string; }[];
+        };
         const top = data.results?.[0];
-        if (!top) return null;
-        const point: GeoPoint = { lat: top.latitude, lon: top.longitude };
-        writeJson(key, point);
-        return point;
+        if (!top) {
+            GEOCODE_MISSES.set(cityKey(city), Date.now());
+            return null;
+        }
+        GEOCODE_MISSES.delete(cityKey(city));
+        const entry: GeocodeCacheEntry = {
+            lat: top.latitude,
+            lon: top.longitude,
+            name: top.name ?? name,
+            country_code: top.country_code ?? "",
+            cachedAt: Date.now(),
+        };
+        writeJson(key, entry);
+        console.info(`Weather location for "${city}": ${entry.name}, ${entry.country_code}`);
+        return { lat: entry.lat, lon: entry.lon };
     } catch (error) {
         console.error("Error geocoding city:", error);
         return null;
@@ -99,10 +187,11 @@ async function fetchForecast(city: string): Promise<DailyWeatherByDate | null> {
     try {
         // timezone=auto aggregates each day in the city's local time, matching
         // how this app treats YYYY-MM-DD dates. 16 days is the API maximum;
-        // trip dates beyond that horizon simply get no entry.
+        // trip dates beyond that horizon simply get no entry. past_days keeps
+        // badges on the last two days after a mid-trip date rollover.
         const url = `https://api.open-meteo.com/v1/forecast?latitude=${point.lat}&longitude=${point.lon}`
             + "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
-            + "&timezone=auto&forecast_days=16";
+            + "&timezone=auto&forecast_days=16&past_days=2";
         const res = await fetch(url);
         if (!res.ok) {
             throw new Error(`Failed to fetch forecast: ${res.status} ${res.statusText}`);
@@ -143,20 +232,31 @@ async function fetchForecast(city: string): Promise<DailyWeatherByDate | null> {
 /**
  * Load the daily forecast for a city. Cached data (even expired — the offline
  * fallback while traveling) is delivered synchronously; a background refresh
- * follows when stale, so `onUpdate` may fire 0, 1, or 2 times.
+ * follows when stale, so `onUpdate` may fire 0, 1, or 2 times. `fetchedAt`
+ * tells the caller how old the data is (cache timestamp vs. refresh time).
  */
 export function loadDailyWeather(
     city: string,
-    onUpdate: (byDate: DailyWeatherByDate) => void,
+    onUpdate: (byDate: DailyWeatherByDate, fetchedAt: number) => void,
 ): void {
-    const cached = readJson<ForecastCacheEntry>(`${FORECAST_CACHE_KEY}_${cityKey(city)}`);
-    if (cached) onUpdate(cached.byDate);
+    const key = cityKey(city);
+    const cached = readJson(`${FORECAST_CACHE_KEY}_${key}`, isValidForecastCacheEntry);
+    if (cached) onUpdate(cached.byDate, cached.timestamp);
 
-    const stale = !cached || Date.now() - cached.timestamp >= FORECAST_TTL;
+    // A future timestamp (left behind by a clock rollback) would never expire by TTL.
+    const now = Date.now();
+    const stale = !cached || cached.timestamp > now || now - cached.timestamp >= FORECAST_TTL;
     if (!stale) return;
 
-    void fetchForecast(city).then(byDate => {
-        if (byDate) onUpdate(byDate);
+    // Overlapping stale loads (visibilitychange bursts) share one request.
+    let pending = inFlightForecasts.get(key);
+    if (!pending) {
+        // fetchForecast catches internally and never rejects.
+        pending = fetchForecast(city).finally(() => inFlightForecasts.delete(key));
+        inFlightForecasts.set(key, pending);
+    }
+    void pending.then(byDate => {
+        if (byDate) onUpdate(byDate, Date.now());
     });
 }
 

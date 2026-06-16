@@ -1,10 +1,8 @@
 <script lang="ts">
-import {
-    CalendarRange,
-    ChevronRight,
-    Settings,
-    Share2,
-} from "@lucide/svelte";
+import CalendarRange from "@lucide/svelte/icons/calendar-range";
+import ChevronRight from "@lucide/svelte/icons/chevron-right";
+import Settings from "@lucide/svelte/icons/settings";
+import Share2 from "@lucide/svelte/icons/share-2";
 import type {
     DayItinerary,
     TripData,

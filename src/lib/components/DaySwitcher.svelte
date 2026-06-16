@@ -1,5 +1,5 @@
 <script lang="ts">
-import { Plane } from "@lucide/svelte";
+import Plane from "@lucide/svelte/icons/plane";
 
 interface DayInfo {
     day: number;
@@ -20,18 +20,26 @@ let scroller = $state<HTMLDivElement>();
 
 // Keep the selected chip in view: swiping the day strip changes `currentDay`
 // from outside this component, and the chip row doesn't follow on its own.
-// block "nearest" keeps the (always-visible, sticky-header) row from ever
-// scrolling the window vertically.
+// Scoped scrollTo, NOT scrollIntoView: scrollIntoView registers adjustments
+// on every scrollable ancestor, and WebKit lets that cancel the day strip's
+// in-flight snap glide — the strip then rests stuck between two panels.
+// Only this row may ever move (also guarantees zero vertical scrolling).
 $effect(() => {
+    if (!scroller) return;
+    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
     if (currentDay === 0) {
         // The overview chip is pinned, but rewind the row so DAY 01 is next to it.
-        scroller?.scrollTo({ left: 0, behavior: "smooth" });
+        scroller.scrollTo({ left: 0, behavior });
         return;
     }
     const idx = days.findIndex(d => d.day === currentDay);
     if (idx < 0) return;
-    scroller?.querySelectorAll("button[data-day]")[idx]
-        ?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+    const chip = scroller.querySelectorAll<HTMLElement>("button[data-day]")[idx];
+    if (!chip) return;
+    const chipRect = chip.getBoundingClientRect();
+    const rowRect = scroller.getBoundingClientRect();
+    const left = scroller.scrollLeft + (chipRect.left - rowRect.left) - (rowRect.width - chipRect.width) / 2;
+    scroller.scrollTo({ left: Math.max(0, left), behavior });
 });
 </script>
 

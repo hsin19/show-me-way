@@ -28,27 +28,30 @@ Top-level keys: `trip` (required), `days` (required), and optional `todo`, `pack
 - `start` / `end` — `YYYY-MM-DD`.
 - `departure` — outbound flight time, ISO 8601 **with timezone offset**, e.g. `2026-06-11T14:00:00+08:00` (drives the home-screen countdown).
 - `lang` — optional language code (`ko` / `ja` / `en`). Selects the app's built-in survival phrases and taxi-driver prompt. Defaults to English (`en`) when omitted or unsupported. Phrases are no longer authored in YAML.
-- `city` — optional destination city for the daily weather badge. **Use an English name** (e.g. `Tokyo`, `Seoul`) — Chinese names often geocode to the wrong place or miss entirely. Weather is simply hidden when unset (or an empty string). Preserve an existing `city` when merging/updating.
+- `city` — optional destination city for the daily weather badge. **Prefer an English name** (e.g. `Tokyo`, `Seoul`) — only some Chinese names resolve (東京/京都 work; 首爾/大阪/釜山 miss or hit the wrong country). Ambiguous names take a two-letter country suffix (e.g. `Springfield, US`). Weather is simply hidden when unset (or an empty string). Preserve an existing `city` when merging/updating.
 - `currency` — optional currency code (e.g. `JPY`, `KRW`, `USD`) driving the ledger's converter, default wallets and quick amounts. Defaults to TWD when omitted.
 - `mapProvider` — optional `naver` | `google`; which map service place searches open in (Korea effectively requires `naver`). Defaults to Google Maps.
 - `wallets[]` — optional custom wallet/card names for the ledger (e.g. `Suica`, `WOWPASS`); omit to use the currency's defaults.
-- `hotels[]` — each requires `name`, `address` (local-language address for taxi drivers), `checkIn`, `checkOut` (both `YYYY-MM-DD`); optional `localName` (local-language hotel name, used as the map-search query) and `mapLink` (direct map URL, preferred over searching `localName`).
+- `hotels[]` — each requires `name`, `address` (local-language address for taxi drivers), `checkIn`, `checkOut` (both `YYYY-MM-DD`); optional `localName` (local-language hotel name, used as the map-search query), `mapLink` (direct map URL, preferred over searching `localName`) and `confirmation` (see timeline `confirmation` below — same shape).
 
 ### days[] (required: day, date, region, pace, timeline)
 
 - `day` — integer, 1-based.
 - `date` — `YYYY-MM-DD`.
 - `region` — main area, e.g. `明洞 · 乙支路`.
-- `city` — optional; overrides `trip.city` for this day's weather lookup (multi-city trips), e.g. `Kyoto`. English names only.
+- `city` — optional; overrides `trip.city` for this day's weather lookup (multi-city trips), e.g. `Kyoto`. Prefer English names; a `, XX` country suffix disambiguates.
 - `pace` — pace description, e.g. `慢活、需要早起`.
-- `timeline[]` — each requires `time`, `title`, `type`, `desc`; optional `bullets`, `localName`, `mapLink`, `links`.
+- `timeline[]` — each requires `time`, `title`, `type`, `desc`; optional `bullets`, `localName`, `mapLink`, `links`, `alternatives`, `status`, `confirmation`.
   - `time` — `HH:MM` or a range `14:00 - 15:30`.
   - `title` — short label; emoji prefix is idiomatic (✈️ 🏨 🍜 🛍️ ☕ 🎁).
   - `type` — one of `booked` (預訂/橘), `must-go` (必訪/粉), `standard` (一般/藍), `option` (備選/紫).
   - `bullets[]` — optional string notes (may contain HTML like `<i>`).
   - `localName` — optional place name in the destination's local language; used as the map-search query and for the enlarge-for-the-driver view.
   - `mapLink` — optional direct map URL (e.g. a `naver.me` / `maps.app.goo.gl` short link); preferred over searching `localName`.
-  - `links[]` — optional extra labeled links `{ label, url }` (e.g. several spots for one event); map URLs get a matching brand icon automatically.
+  - `links[]` — optional extra labeled links `{ label, url }` for the *same* event (official site, a guide article, several spots all part of one plan); map URLs get a matching brand icon automatically.
+  - `alternatives[]` — optional pick-one backup places `{ title, localName?, mapLink?, note? }` (e.g. fallback restaurants), shown as a collapsed list at the event card's tail. `localName` is the local-language place name (enlargeable to ask directions, also the map-search query), `mapLink` a direct map URL (preferred over searching `localName`), `note` a switch-decision reminder (e.g. `排隊超過 30 分鐘就換`). **`links` vs `alternatives`:** `links` = supplementary URLs of the same event; `alternatives` = candidate places to switch to, carrying local name + note for on-the-spot decisions — never stuff backup restaurants into `links`.
+  - `status` — optional check-in state, `done` (已完成) or `skipped` (略過); unset means not visited yet. Normally written by the in-app check-in buttons — leave it out when drafting a new trip, and preserve existing values when merging/updating.
+  - `confirmation` — optional reservation confirmation `{ code, name?, note? }`, typically on `booked` events (and on hotels): `code` is the booking/confirmation code (**always quote it** — an unquoted numeric code like `012345` loses its leading zero to YAML number parsing), `name` the reservation name (passport spelling), `note` a short reminder (e.g. `入住時出示護照`). Shown as a tap-to-copy chip with an enlarge-for-the-counter view.
 
 ### todo[] / packing[] (each item requires text; optional checked)
 

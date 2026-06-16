@@ -8,8 +8,8 @@ This repository is a Svelte 5 travel itinerary PWA. Agents should treat local sk
 - Stack: Svelte 5 runes, TypeScript, Vite, Tailwind CSS v4, `vite-plugin-pwa`, `js-yaml`, Vitest.
 - Package manager: `pnpm`.
 - Mount entry: `src/main.ts` mounts the root component `src/App.svelte`.
-- Shared logic in `src/lib/`: `api.ts` (YAML load/save/validate), `utils.ts` (date/map helpers), `exchange.ts` (exchange-rate cache), `weather.ts` (Open-Meteo daily forecast cache), `share.ts` (compressed share links), `phrases.ts` (built-in phrase sets).
-- Components in `src/lib/components/`: `Timeline.svelte` (day event list), `DaySwitcher.svelte` (day navigation), `Checklist.svelte` (packing/todo lists), `Ledger.svelte` (expense tracking with exchange rate), `TaxiHelper.svelte` (taxi phrase helper), `WeatherBadge.svelte` (daily weather badge); brand map icons live in `src/lib/components/icons/`.
+- Shared logic in `src/lib/`: `api.ts` (YAML load/save/validate), `utils.ts` (date/map helpers), `exchange.ts` (exchange-rate cache), `weather.ts` (Open-Meteo daily forecast cache), `share.ts` (compressed share links), `phrases.ts` (built-in phrase sets), `ledger.ts` (Ledger pure math: quick-amount rounding ladder, Deposit-prefix totals/wallet balances, currency config, conversion rounding), `wakelock.ts` (screen wake lock while driver-facing overlays are open; silently no-ops where unsupported, e.g. iOS standalone PWAs before 18.4), `toast.ts` (shared `ToastInput` type for the app-level toast).
+- Components in `src/lib/components/`: `Timeline.svelte` (day event list), `TripOverview.svelte` (day-0 trip overview panel with share/settings entries), `DaySwitcher.svelte` (day navigation), `Checklist.svelte` (packing/todo lists), `Ledger.svelte` (expense tracking with exchange rate), `TaxiHelper.svelte` (taxi phrase helper), `WeatherBadge.svelte` (daily weather badge); brand map icons live in `src/lib/components/icons/`.
 - User-facing language is primarily Traditional Chinese. Keep UI copy and validation errors consistent with that tone.
 
 ## Skills-First Svelte Workflow
@@ -47,7 +47,7 @@ The schema lives at `public/showmeway-schema.json` (served with the site so the 
 
 `serializeToYaml` strips runtime-only `_id` values (timeline events and checklist items, plus any legacy checklist `id`) and re-adds the YAML schema modeline. Do not persist `_id` into YAML fixtures or exports.
 
-Other `localStorage` keys exist outside the itinerary YAML: `ledger_expenses` and `exchange_rate_<currency>` (`Ledger`), `showmeway_exchange_rates_<base>` (rate cache in `src/lib/exchange.ts`), and `showmeway_geocode_<city>` / `showmeway_weather_<city>` (weather cache in `src/lib/weather.ts`, 3h forecast TTL). Checklist checked-state lives inside the itinerary YAML itself; the legacy `todo_state` / `packing_state` keys are migrated once and removed by `App.svelte` — do not reintroduce them.
+Other `localStorage` keys exist outside the itinerary YAML: `ledger_expenses` and `exchange_rate_<currency>` (`Ledger`), `showmeway_exchange_rates_<base>` (rate cache in `src/lib/exchange.ts`), `showmeway_yaml_backups` (auto-snapshots of the user YAML taken before each destructive overwrite — newest first, max 5; see `backupCurrentYaml` in `src/lib/api.ts`), and `showmeway_geocode_v1_<city>` / `showmeway_weather_<city>` (weather cache in `src/lib/weather.ts`; geocode entries carry a 30-day TTL — no longer permanent — and forecasts a 3h TTL). Checklist checked-state lives inside the itinerary YAML itself; the legacy `todo_state` / `packing_state` keys are migrated once and removed by `App.svelte` — do not reintroduce them.
 
 ## Svelte And UI Guidelines
 
@@ -69,6 +69,7 @@ Other `localStorage` keys exist outside the itinerary YAML: `ledger_expenses` an
 ## Testing Notes
 
 - Pure date/time helpers belong in `src/lib/utils.ts` and should have Vitest coverage in `src/lib/utils.test.ts`.
+- Ledger pure calculations belong in `src/lib/ledger.ts` (covered by `src/lib/ledger.test.ts`); `Ledger.svelte` keeps only `$state`/localStorage and wraps these functions in `$derived`.
 - Be careful with `YYYY-MM-DD` parsing. This project intentionally parses plain dates in local time to avoid UTC day shifts.
 - When changing PWA, Vite, or asset behavior, verify with `pnpm run build`.
 
