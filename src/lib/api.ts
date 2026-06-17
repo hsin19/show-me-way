@@ -388,6 +388,140 @@ export function backupCurrentYaml(): void {
     }
 }
 
+// --- Trip profiles -------------------------------------------------------
+// A lightweight multi-trip layer that mirrors the backup approach: the active
+// trip stays in USER_YAML_KEY (so every existing read/write path is untouched),
+// while the other trips are parked as YAML snapshots in PROFILES_KEY. Switching
+// just swaps the chosen snapshot with whatever is currently active. Unlike the
+// auto-backup ring this list is user-managed and never auto-evicted. Per-trip
+// state outside the itinerary YAML (e.g. the ledger) is intentionally NOT
+// swapped yet — only the itinerary travels with the profile.
+
+export const PROFILES_KEY = "showmeway_profiles";
+export const ACTIVE_PROFILE_KEY = "showmeway_active_profile";
+
+interface StoredProfile {
+    id: string;
+    yaml: string;
+    savedAt: string; // ISO date-time the trip was last parked
+}
+
+/** Display summary of a parked (inactive) profile; the name is read live from its YAML. */
+export interface ProfileInfo {
+    id: string;
+    name: string;
+    savedAt: string;
+}
+
+function genProfileId(): string {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID();
+    }
+    return `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Read parked profiles, newest first. Unreadable / malformed storage yields []. */
+function readStoredProfiles(): StoredProfile[] {
+    try {
+        const raw = localStorage.getItem(PROFILES_KEY);
+        if (!raw) return [];
+        const parsed: unknown = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((p): p is StoredProfile =>
+            !!p && typeof p === "object"
+            && typeof (p as StoredProfile).id === "string"
+            && typeof (p as StoredProfile).yaml === "string"
+            && typeof (p as StoredProfile).savedAt === "string"
+        );
+    } catch {
+        return [];
+    }
+}
+
+function writeStoredProfiles(list: StoredProfile[]): void {
+    localStorage.setItem(PROFILES_KEY, JSON.stringify(list));
+}
+
+export function getActiveProfileId(): string | null {
+    return localStorage.getItem(ACTIVE_PROFILE_KEY);
+}
+
+/** Assign an id to the active trip if it lacks one (bootstrap / migration). */
+export function ensureActiveProfileId(): string {
+    let id = getActiveProfileId();
+    if (!id) {
+        id = genProfileId();
+        localStorage.setItem(ACTIVE_PROFILE_KEY, id);
+    }
+    return id;
+}
+
+/** Best-effort `trip.name` from a YAML string, for labeling parked profiles. */
+export function tripNameFromYaml(yaml: string): string {
+    try {
+        const data = parseYaml(yaml) as Partial<TripData> | null;
+        const name = data?.trip?.name;
+        if (typeof name === "string" && name.trim()) return name.trim();
+    } catch {
+        // Malformed YAML still gets a usable label below.
+    }
+    return "未命名行程";
+}
+
+/** The parked (inactive) trips, newest first. The active trip lives in USER_YAML_KEY. */
+export function listProfiles(): ProfileInfo[] {
+    return readStoredProfiles().map(p => ({
+        id: p.id,
+        name: tripNameFromYaml(p.yaml),
+        savedAt: p.savedAt,
+    }));
+}
+
+/**
+ * Park the active trip and bring a stored profile to the front: snapshot the
+ * current USER_YAML_KEY into the profile list, then load `targetId`'s YAML into
+ * USER_YAML_KEY. The caller must persist the live trip into USER_YAML_KEY first
+ * and reload trip data afterwards. Throws if `targetId` is unknown.
+ */
+export function switchToProfile(targetId: string): void {
+    const list = readStoredProfiles();
+    const target = list.find(p => p.id === targetId);
+    if (!target) throw new Error("找不到要切換的行程");
+    const activeId = ensureActiveProfileId();
+    const activeYaml = localStorage.getItem(USER_YAML_KEY);
+    const rest = list.filter(p => p.id !== targetId);
+    if (activeYaml != null) {
+        rest.unshift({ id: activeId, yaml: activeYaml, savedAt: new Date().toISOString() });
+    }
+    writeStoredProfiles(rest);
+    localStorage.setItem(USER_YAML_KEY, target.yaml);
+    localStorage.setItem(ACTIVE_PROFILE_KEY, target.id);
+}
+
+/**
+ * Park the active trip and start a new one from `yaml`. The caller must persist
+ * the live trip into USER_YAML_KEY first and reload afterwards. Returns the new
+ * profile id.
+ */
+export function createProfile(yaml: string): string {
+    const activeId = ensureActiveProfileId();
+    const activeYaml = localStorage.getItem(USER_YAML_KEY);
+    if (activeYaml != null) {
+        const list = readStoredProfiles();
+        list.unshift({ id: activeId, yaml: activeYaml, savedAt: new Date().toISOString() });
+        writeStoredProfiles(list);
+    }
+    const id = genProfileId();
+    localStorage.setItem(USER_YAML_KEY, yaml);
+    localStorage.setItem(ACTIVE_PROFILE_KEY, id);
+    return id;
+}
+
+/** Remove a parked (inactive) profile. The active trip cannot be deleted here. */
+export function deleteProfile(id: string): void {
+    writeStoredProfiles(readStoredProfiles().filter(p => p.id !== id));
+}
+
 /**
  * Download text content as a file on the user's device — the only channel
  * that gets data out of localStorage and off this single device. Works via

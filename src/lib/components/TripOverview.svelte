@@ -1,10 +1,15 @@
 <script lang="ts">
 import CalendarRange from "@lucide/svelte/icons/calendar-range";
+import ChevronDown from "@lucide/svelte/icons/chevron-down";
 import ChevronRight from "@lucide/svelte/icons/chevron-right";
+import Layers from "@lucide/svelte/icons/layers";
+import Plus from "@lucide/svelte/icons/plus";
 import Settings from "@lucide/svelte/icons/settings";
 import Share2 from "@lucide/svelte/icons/share-2";
+import Trash2 from "@lucide/svelte/icons/trash-2";
 import type {
     DayItinerary,
+    ProfileInfo,
     TripData,
 } from "../api";
 import {
@@ -19,14 +24,34 @@ interface Props {
     days: DayItinerary[];
     /** Pre-derived status label: countdown before the trip, next/in-progress event during it. */
     countdownText: string;
+    /** Other saved trips (the active one is `trip` itself); empty when none parked. */
+    profiles: ProfileInfo[];
     /** This day's forecast; null hides the badge (same contract as Timeline). */
     weatherFor: (day: DayItinerary) => DailyWeather | null;
     onSelectDay: (day: number) => void;
+    onSwitchProfile: (id: string) => void;
+    onCreateProfile: () => void;
+    onDeleteProfile: (id: string, name: string) => void;
     onShare: () => void;
     onOpenSettings: () => void;
 }
 
-let { trip, days, countdownText, weatherFor, onSelectDay, onShare, onOpenSettings }: Props = $props();
+let {
+    trip,
+    days,
+    countdownText,
+    profiles,
+    weatherFor,
+    onSelectDay,
+    onSwitchProfile,
+    onCreateProfile,
+    onDeleteProfile,
+    onShare,
+    onOpenSettings,
+}: Props = $props();
+
+// Collapsed by default — the switcher is a secondary action below the day list.
+let showProfiles = $state(false);
 </script>
 
 <!-- Trip hero card -->
@@ -68,9 +93,55 @@ let { trip, days, countdownText, weatherFor, onSelectDay, onShare, onOpenSetting
     {/each}
 </div>
 
+<!-- Trip profile switcher: swap to another saved trip or start a new one.
+     Lives here (not in Settings) so it's a top-level navigation action; the
+     active trip is `trip`, `profiles` holds the other parked ones. -->
+<div class="mt-6">
+    <button
+        onclick={() => (showProfiles = !showProfiles)}
+        aria-expanded={showProfiles}
+        class="w-full glass-panel rounded-xl p-3.5 flex items-center gap-2.5 text-left hover:bg-white/5 transition cursor-pointer"
+    >
+        <Layers size={16} class="shrink-0 text-neon-blue" aria-hidden="true" />
+        <span class="flex-1 min-w-0">
+            <span class="block text-[10px] font-bold text-text-muted">目前行程</span>
+            <span class="block text-sm font-bold text-text-primary truncate">{trip.name}</span>
+        </span>
+        <ChevronDown size={16} class="shrink-0 text-text-muted transition-transform {showProfiles ? 'rotate-180' : ''}" aria-hidden="true" />
+    </button>
+    {#if showProfiles}
+        <div class="mt-2 space-y-1.5">
+            {#each profiles as profile (profile.id)}
+                <div class="flex items-center gap-1">
+                    <button
+                        onclick={() => onSwitchProfile(profile.id)}
+                        class="flex-1 min-w-0 min-h-[44px] flex items-center justify-between gap-2 px-3.5 rounded-xl bg-white/3 border border-card-border text-text-secondary hover:text-neon-blue hover:bg-white/5 transition cursor-pointer"
+                    >
+                        <span class="truncate text-sm font-semibold">{profile.name}</span>
+                        <span class="shrink-0 text-[11px] font-bold">切換</span>
+                    </button>
+                    <button
+                        onclick={() => onDeleteProfile(profile.id, profile.name)}
+                        aria-label="刪除行程 {profile.name}"
+                        class="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-text-muted hover:text-neon-pink transition cursor-pointer"
+                    >
+                        <Trash2 size={16} aria-hidden="true" />
+                    </button>
+                </div>
+            {/each}
+            <button
+                onclick={onCreateProfile}
+                class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-white/3 border border-dashed border-card-border text-text-secondary hover:text-neon-blue hover:bg-white/5 transition cursor-pointer text-xs font-bold"
+            >
+                <Plus size={14} aria-hidden="true" /> 新增行程
+            </button>
+        </div>
+    {/if}
+</div>
+
 <!-- Share + YAML settings entry — these replaced the old header gear button
      and the share button that used to live inside the settings modal. -->
-<div class="grid grid-cols-2 gap-2 mt-6">
+<div class="grid grid-cols-2 gap-2 mt-3">
     <button
         onclick={onShare}
         class="bg-white/3 border border-neon-blue/30 text-neon-blue font-bold py-3.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-neon-blue/10 transition active:scale-[0.98] cursor-pointer"

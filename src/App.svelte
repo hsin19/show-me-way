@@ -25,14 +25,20 @@ import {
     backupCurrentYaml,
     buildLedgerCsv,
     createChecklistItemId,
+    createProfile,
     type DayItinerary,
+    deleteProfile,
     downloadTextFile,
+    ensureActiveProfileId,
     fetchDefaultYamlText,
     fetchItinerary,
     getYamlBackup,
+    listProfiles,
     listYamlBackups,
+    type ProfileInfo,
     saveTripData,
     serializeToYaml,
+    switchToProfile,
     type TripData,
     USER_YAML_KEY,
     validateYaml,
@@ -146,6 +152,8 @@ let showSettings = $state(false);
 let yamlInput = $state("");
 let validationError = $state<string | null>(null);
 let yamlBackups = $state<YamlBackup[]>([]);
+// Parked (inactive) trip profiles; the active trip lives in USER_YAML_KEY.
+let profiles = $state<ProfileInfo[]>([]);
 
 // Enlarged card shown to a driver (local-language name / address) or to a
 // counter clerk (reservation confirmation code). Lives at the app level so all
@@ -540,8 +548,9 @@ onMount(async () => {
 });
 
 // If the URL hash carries a shared itinerary, decode it and ask before
-// overwriting whatever itinerary already lives on this device. The hash is
-// always stripped afterwards so a refresh won't re-prompt.
+// importing. With profiles the import is non-destructive: it lands as a NEW
+// trip (the current one is parked, not overwritten). The hash is always
+// stripped afterwards so a refresh won't re-prompt.
 async function maybeImportSharedItinerary() {
     const token = readShareTokenFromHash();
     if (!token) return;
@@ -550,13 +559,14 @@ async function maybeImportSharedItinerary() {
         const parsed = validateYaml(yaml); // throws on invalid structure/syntax
         const hasExisting = !!localStorage.getItem(USER_YAML_KEY);
         const message = hasExisting
-            ? "偵測到分享的行程。要以此行程「覆蓋」目前裝置上的行程嗎？（原行程將被取代）"
-            : "偵測到分享的行程，要載入嗎？";
+            ? "偵測到分享的行程，要匯入為新行程嗎？（目前行程會保留，可隨時切回）"
+            : "偵測到分享的行程，要匯入嗎？";
         if (confirm(message)) {
-            backupCurrentYaml();
-            // Canonicalize (strip runtime ids, re-add schema line) before storing.
-            localStorage.setItem(USER_YAML_KEY, serializeToYaml(parsed));
-            triggerToast("已載入分享的行程");
+            // Park the current trip and switch to the imported one. Canonicalize
+            // first (strip runtime ids, re-add schema line). loadTripData runs
+            // right after in onMount, so the imported trip becomes active.
+            createProfile(serializeToYaml(parsed));
+            triggerToast("已匯入分享的行程");
         }
     } catch (err) {
         console.error("Failed to import shared itinerary:", err);
@@ -589,6 +599,10 @@ async function loadTripData() {
     try {
         const data = await fetchItinerary();
         tripData = data;
+        // Give the active trip a stable profile id (no-op once assigned), so
+        // it can be parked when the user later switches to another trip.
+        ensureActiveProfileId();
+        profiles = listProfiles();
         loadTripWeather(data);
 
         // Fold any legacy per-list checked-state into the itinerary, then write
@@ -900,6 +914,51 @@ async function resetToLocalDefault() {
     }
 }
 
+// --- Trip profiles: swap the whole itinerary in/out (see lib/api) ---
+// Triggered from the day-0 overview. Each flow persists the live trip into
+// USER_YAML_KEY first so it is parked with its latest content, then reloads.
+
+async function handleCreateProfile() {
+    if (!tripData) return;
+    let yaml: string;
+    try {
+        yaml = await fetchDefaultYamlText();
+    } catch (err) {
+        console.error("Failed to prepare new profile:", err);
+        triggerToast("無法建立新行程，請稍後再試");
+        return;
+    }
+    // Park the current trip, start the new one from the default template, then
+    // open Settings so the user fills in its content (and renames it) right away.
+    saveTripData(tripData);
+    createProfile(yaml);
+    await loadTripData();
+    triggerToast("已建立新行程，請填入行程內容");
+    await openSettings();
+}
+
+async function handleSwitchProfile(id: string) {
+    if (!tripData) return;
+    saveTripData(tripData);
+    try {
+        switchToProfile(id);
+    } catch (err) {
+        console.error("Failed to switch profile:", err);
+        triggerToast("找不到該行程");
+        profiles = listProfiles();
+        return;
+    }
+    triggerToast("已切換行程");
+    await loadTripData();
+}
+
+function handleDeleteProfile(id: string, name: string) {
+    if (!confirm(`要刪除行程「${name}」嗎？此動作無法復原。`)) return;
+    deleteProfile(id);
+    profiles = listProfiles();
+    triggerToast("已刪除行程");
+}
+
 // Global Clipboard Copy
 function handleCopy(text: string, successMsg = "已複製") {
     navigator.clipboard.writeText(text).then(() => {
@@ -1042,8 +1101,12 @@ function clearYaml() {
                                     trip={tripData.trip}
                                     days={tripData.days}
                                     {countdownText}
+                                    {profiles}
                                     weatherFor={weatherForDay}
                                     onSelectDay={day => (currentDay = day)}
+                                    onSwitchProfile={handleSwitchProfile}
+                                    onCreateProfile={handleCreateProfile}
+                                    onDeleteProfile={handleDeleteProfile}
                                     onShare={shareCurrentTrip}
                                     onOpenSettings={openSettings}
                                 />
@@ -1382,65 +1445,69 @@ function clearYaml() {
                     </div>
                 {/if}
 
-                <div class="shrink-0 text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2 space-y-1">
-                    <p class="flex items-center gap-1">
-                        <Lightbulb size={12} class="shrink-0 text-neon-blue" aria-hidden="true" />行程僅存於本機、不會上傳。
-                    </p>
-                    <ul class="list-disc pl-4 mt-1 space-y-1.5">
-                        <li>貼上 YAML 行程內容，或他人的分享連結，按下方儲存即可。</li>
-                        <li>清空並儲存會還原為預設的 <a href="./itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-neon-blue underline hover:text-white transition">itinerary.yaml</a>。</li>
-                        <li>
-                            可用此指令安裝行程小幫手 Skill：
-                            <div class="bg-black/60 border border-white/5 rounded px-2 py-1 mt-1 font-mono text-[10px] select-all break-all text-text-primary">
-                                npx skills add https://github.com/hsin19/show-me-way --skill itinerary-yaml-builder
-                            </div>
-                        </li>
-                    </ul>
-                </div>
-
-                <!-- Auto-backup restore list: snapshots taken before each destructive overwrite -->
-                <div class="shrink-0 text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2">
-                    <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
-                        <History size={12} class="shrink-0 text-neon-blue" aria-hidden="true" />還原備份
-                    </p>
-                    {#if yamlBackups.length === 0}
-                        <p class="mt-1.5">尚無自動備份。覆蓋行程前會自動保留最近 5 份。</p>
-                    {:else}
-                        <ul class="mt-1.5 space-y-1.5 max-h-[140px] overflow-y-auto overscroll-contain">
-                            {#each yamlBackups as backup (backup.savedAt)}
-                                <li>
-                                    <button
-                                        onclick={() => restoreYamlBackup(backup.savedAt)}
-                                        class="w-full min-h-[44px] flex items-center justify-between gap-2 px-3 rounded-lg bg-white/3 border border-card-border text-[11px] text-text-secondary hover:text-neon-blue hover:bg-white/5 transition cursor-pointer"
-                                    >
-                                        <span class="font-mono">{formatBackupTime(backup.savedAt)}</span>
-                                        <span class="text-[10px] font-bold">還原</span>
-                                    </button>
-                                </li>
-                            {/each}
+                <!-- Secondary sections scroll together so the YAML editor above
+                     keeps its flexible height and nothing overlaps on short screens. -->
+                <div class="shrink-0 max-h-[42%] overflow-y-auto overscroll-contain flex flex-col gap-2.5 -mr-1 pr-1">
+                    <div class="shrink-0 text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2 space-y-1">
+                        <p class="flex items-center gap-1">
+                            <Lightbulb size={12} class="shrink-0 text-neon-blue" aria-hidden="true" />行程僅存於本機、不會上傳。
+                        </p>
+                        <ul class="list-disc pl-4 mt-1 space-y-1.5">
+                            <li>貼上 YAML 行程內容，或他人的分享連結，按下方儲存即可。</li>
+                            <li>清空並儲存會還原為預設的 <a href="./itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-neon-blue underline hover:text-white transition">itinerary.yaml</a>。</li>
+                            <li>
+                                可用此指令安裝行程小幫手 Skill：
+                                <div class="bg-black/60 border border-white/5 rounded px-2 py-1 mt-1 font-mono text-[10px] select-all break-all text-text-primary">
+                                    npx skills add https://github.com/hsin19/show-me-way --skill itinerary-yaml-builder
+                                </div>
+                            </li>
                         </ul>
-                    {/if}
-                </div>
+                    </div>
 
-                <!-- File export: data leaves the device as files (backups above still live in the same localStorage) -->
-                <div class="shrink-0 text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2">
-                    <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
-                        <Download size={12} class="shrink-0 text-neon-blue" aria-hidden="true" />匯出資料
-                    </p>
-                    <p class="mt-1.5">下載成檔案保存，避免裝置遺失或清除瀏覽器資料時一併消失。</p>
-                    <div class="grid grid-cols-2 gap-2 mt-1.5">
-                        <button
-                            onclick={exportTripYaml}
-                            class="min-h-[44px] flex items-center justify-center gap-1 px-3 rounded-lg bg-white/3 border border-card-border text-[11px] font-bold text-text-secondary hover:text-neon-blue hover:bg-white/5 transition cursor-pointer"
-                        >
-                            匯出行程 YAML
-                        </button>
-                        <button
-                            onclick={exportLedgerCsv}
-                            class="min-h-[44px] flex items-center justify-center gap-1 px-3 rounded-lg bg-white/3 border border-card-border text-[11px] font-bold text-text-secondary hover:text-neon-blue hover:bg-white/5 transition cursor-pointer"
-                        >
-                            匯出記帳 CSV
-                        </button>
+                    <!-- Auto-backup restore list: snapshots taken before each destructive overwrite -->
+                    <div class="shrink-0 text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2">
+                        <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
+                            <History size={12} class="shrink-0 text-neon-blue" aria-hidden="true" />還原備份
+                        </p>
+                        {#if yamlBackups.length === 0}
+                            <p class="mt-1.5">尚無自動備份。覆蓋行程前會自動保留最近 5 份。</p>
+                        {:else}
+                            <ul class="mt-1.5 space-y-1.5 max-h-[140px] overflow-y-auto overscroll-contain">
+                                {#each yamlBackups as backup (backup.savedAt)}
+                                    <li>
+                                        <button
+                                            onclick={() => restoreYamlBackup(backup.savedAt)}
+                                            class="w-full min-h-[44px] flex items-center justify-between gap-2 px-3 rounded-lg bg-white/3 border border-card-border text-[11px] text-text-secondary hover:text-neon-blue hover:bg-white/5 transition cursor-pointer"
+                                        >
+                                            <span class="font-mono">{formatBackupTime(backup.savedAt)}</span>
+                                            <span class="text-[10px] font-bold">還原</span>
+                                        </button>
+                                    </li>
+                                {/each}
+                            </ul>
+                        {/if}
+                    </div>
+
+                    <!-- File export: data leaves the device as files (backups above still live in the same localStorage) -->
+                    <div class="shrink-0 text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2">
+                        <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
+                            <Download size={12} class="shrink-0 text-neon-blue" aria-hidden="true" />匯出資料
+                        </p>
+                        <p class="mt-1.5">下載成檔案保存，避免裝置遺失或清除瀏覽器資料時一併消失。</p>
+                        <div class="grid grid-cols-2 gap-2 mt-1.5">
+                            <button
+                                onclick={exportTripYaml}
+                                class="min-h-[44px] flex items-center justify-center gap-1 px-3 rounded-lg bg-white/3 border border-card-border text-[11px] font-bold text-text-secondary hover:text-neon-blue hover:bg-white/5 transition cursor-pointer"
+                            >
+                                匯出行程 YAML
+                            </button>
+                            <button
+                                onclick={exportLedgerCsv}
+                                class="min-h-[44px] flex items-center justify-center gap-1 px-3 rounded-lg bg-white/3 border border-card-border text-[11px] font-bold text-text-secondary hover:text-neon-blue hover:bg-white/5 transition cursor-pointer"
+                            >
+                                匯出記帳 CSV
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
