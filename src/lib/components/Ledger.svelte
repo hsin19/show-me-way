@@ -22,16 +22,20 @@ import {
     twdToForeign,
 } from "../ledger";
 import type { ToastInput } from "../toast";
-import { toLocalIsoDate } from "../utils";
 
 interface Props {
     currency?: string;
     wallets?: string[];
+    /** Expense records, owned by the parent (persisted in the itinerary YAML). */
+    expenses: ExpenseItem[];
     onAddWallet?: (name: string) => void;
+    onAddExpense: (name: string, amount: number, type: string) => void;
+    onDeleteExpense: (id: string) => void;
+    onReset: () => void;
     onToast: (toast: ToastInput) => void;
 }
 
-let { currency, wallets = [], onAddWallet, onToast }: Props = $props();
+let { currency, wallets = [], expenses, onAddWallet, onAddExpense, onDeleteExpense, onReset, onToast }: Props = $props();
 
 // Resolve active currency code, defaulting directly to TWD if not specified
 const activeCurrency = $derived.by(() => {
@@ -65,42 +69,20 @@ let foreignValue = $state("1000");
 let twdValue = $state("");
 let rateInfo = $state<{ date: string; offline: boolean; } | null>(null);
 
-// Ledger States
-function loadSavedExpenses(): ExpenseItem[] {
-    try {
-        const saved = localStorage.getItem("ledger_expenses");
-        return saved ? JSON.parse(saved) as ExpenseItem[] : [];
-    } catch (e) {
-        console.warn("Failed to read saved expenses", e);
-        return [];
-    }
-}
-
-// Initialized at declaration (not onMount) so the first render never flashes
-// an empty list. $state.raw: never mutate in place — always reassign a new array.
-let expenseHistory = $state.raw<ExpenseItem[]>(loadSavedExpenses());
-
-// The undo toast outlives this component (tab switch unmounts it) — its
-// restore writes localStorage and pings this event so the live instance,
-// whichever one it is, refreshes its view.
-const LEDGER_SYNC_EVENT = "showmeway:ledger-sync";
-$effect(() => {
-    const reload = () => (expenseHistory = loadSavedExpenses());
-    window.addEventListener(LEDGER_SYNC_EVENT, reload);
-    return () => window.removeEventListener(LEDGER_SYNC_EVENT, reload);
-});
+// Ledger input states (the records themselves are the `expenses` prop, owned by
+// the parent and persisted into the itinerary YAML).
 let expenseName = $state("");
 let expenseAmount = $state("");
 let expenseType = $state("Cash");
 let newWalletName = $state("");
 
 // Derived values (pure math lives in src/lib/ledger.ts)
-const totals = $derived(computeLedgerTotals(expenseHistory));
+const totals = $derived(computeLedgerTotals(expenses));
 const totalDeposited = $derived(totals.totalDeposited);
 const totalSpent = $derived(totals.totalSpent);
 const balance = $derived(totals.balance);
 
-const walletBalances = $derived(computeWalletBalances(expenseHistory, activeWallets));
+const walletBalances = $derived(computeWalletBalances(expenses, activeWallets));
 
 const quickAmounts = $derived(computeQuickAmounts(activeCurrency, exchangeRate));
 
@@ -183,17 +165,6 @@ $effect(() => {
     });
 });
 
-function saveLedger() {
-    // The only user-data write that wasn't failure-guarded — on a trip a quota
-    // or private-mode error would otherwise lose the day's expenses silently.
-    try {
-        localStorage.setItem("ledger_expenses", JSON.stringify(expenseHistory));
-    } catch (e) {
-        console.error("Failed to save expenses", e);
-        onToast("記帳儲存失敗，請稍後再試");
-    }
-}
-
 // Currency Conversion (math in src/lib/ledger.ts; persistence stays here)
 function convert(source: "foreign" | "twd" | "rate") {
     if (source === "rate") {
@@ -219,7 +190,9 @@ function swapCurrency() {
     onToast("已切換數值");
 }
 
-// Ledger Actions
+// Ledger Actions — records are owned by the parent (persisted into the YAML);
+// this component only validates input and delegates. Add/delete/reset and the
+// undo toast all live in App.svelte.
 function addExpense() {
     const name = expenseName.trim();
     const amount = parseInt(expenseAmount) || 0;
@@ -229,49 +202,15 @@ function addExpense() {
         return;
     }
 
-    const newItem: ExpenseItem = {
-        id: Date.now().toString(),
-        name,
-        amount,
-        type: expenseType,
-        // Local YYYY-MM-DD (project date convention) — sortable in CSV export;
-        // not shown in the UI, so older toLocaleDateString records are untouched.
-        date: toLocalIsoDate(new Date()),
-    };
-
-    expenseHistory = [newItem, ...expenseHistory];
-    saveLedger();
-
+    onAddExpense(name, amount, expenseType);
     expenseName = "";
     expenseAmount = "";
     onToast("記帳成功");
 }
 
-function deleteExpense(id: string) {
-    const index = expenseHistory.findIndex(item => item.id === id);
-    if (index < 0) return;
-    const removed = { ...expenseHistory[index] };
-    expenseHistory = expenseHistory.filter(item => item.id !== id);
-    saveLedger();
-    onToast({
-        message: "紀錄已刪除",
-        actionLabel: "復原",
-        onAction: () => {
-            // Restore via localStorage, not captured state — this closure may
-            // belong to an unmounted instance (tab switch within the undo
-            // window). Reinsert at the original position, clamped.
-            const next = loadSavedExpenses();
-            next.splice(Math.min(index, next.length), 0, removed);
-            localStorage.setItem("ledger_expenses", JSON.stringify(next));
-            window.dispatchEvent(new Event(LEDGER_SYNC_EVENT));
-        },
-    });
-}
-
 function resetBudget() {
     if (confirm("確定要清除所有記帳紀錄與加值金額嗎？")) {
-        expenseHistory = [];
-        saveLedger();
+        onReset();
         onToast("已全部重置");
     }
 }
@@ -497,7 +436,7 @@ function handleAddWallet() {
     <div>
         <h4 class="text-xs text-text-secondary font-semibold border-b border-white/5 pb-2 mb-2">消費紀錄</h4>
         <ul class="max-h-[160px] overflow-y-auto space-y-1 pr-1">
-            {#each expenseHistory as item (item.id)}
+            {#each expenses as item (item._id)}
                 <li class="flex justify-between items-center text-xs py-2 border-b border-white/3 last:border-0">
                     <div class="flex flex-col">
                         <span class="font-bold text-text-primary">{item.name}</span>
@@ -515,7 +454,7 @@ function handleAddWallet() {
                             {item.type.startsWith("Deposit") ? "+" : "-"}{localConfig.currencySymbol}{item.amount.toLocaleString()}
                         </span>
                         <button
-                            onclick={() => deleteExpense(item.id)}
+                            onclick={() => onDeleteExpense(item._id ?? "")}
                             class="text-text-muted hover:text-neon-pink cursor-pointer transition min-w-[44px] min-h-[44px] -my-2 flex items-center justify-center"
                             aria-label="刪除紀錄"
                             title="刪除"

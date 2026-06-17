@@ -143,6 +143,32 @@
         }
       }
     },
+    "expenses": {
+      "type": "array",
+      "description": "記帳消費紀錄 (通常由 App 自動維護，亦可手動編輯)",
+      "items": {
+        "type": "object",
+        "required": ["name", "amount", "type", "date"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "消費項目名稱"
+          },
+          "amount": {
+            "type": "number",
+            "description": "金額 (當地幣別整數)"
+          },
+          "type": {
+            "type": "string",
+            "description": "支付方式：錢包/卡片名稱、Cash，或加值 Deposit-<錢包> / Deposit-Cash"
+          },
+          "date": {
+            "type": "string",
+            "description": "日期 (YYYY-MM-DD)"
+          }
+        }
+      }
+    },
     "days": {
       "type": "array",
       "description": "每日行程細節列表",

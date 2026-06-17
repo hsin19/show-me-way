@@ -15,8 +15,8 @@ import {
     twdToForeign,
 } from "./ledger";
 
-function entry(type: string, amount: number, id = `${type}-${amount}`): ExpenseItem {
-    return { id, name: "item", amount, type, date: "2026-06-11" };
+function entry(type: string, amount: number, _id = `${type}-${amount}`): ExpenseItem {
+    return { _id, name: "item", amount, type, date: "2026-06-11" };
 }
 
 describe("computeLedgerTotals", () => {

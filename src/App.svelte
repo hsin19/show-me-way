@@ -9,6 +9,7 @@ import DollarSign from "@lucide/svelte/icons/dollar-sign";
 import Download from "@lucide/svelte/icons/download";
 import History from "@lucide/svelte/icons/history";
 import Lightbulb from "@lucide/svelte/icons/lightbulb";
+import Link2 from "@lucide/svelte/icons/link-2";
 import ListChecks from "@lucide/svelte/icons/list-checks";
 import ListTodo from "@lucide/svelte/icons/list-todo";
 import Loader2 from "@lucide/svelte/icons/loader-2";
@@ -25,6 +26,7 @@ import {
     backupCurrentYaml,
     buildLedgerCsv,
     createChecklistItemId,
+    createExpenseId,
     createProfile,
     type DayItinerary,
     deleteProfile,
@@ -605,11 +607,12 @@ async function loadTripData() {
         profiles = listProfiles();
         loadTripWeather(data);
 
-        // Fold any legacy per-list checked-state into the itinerary, then write
-        // the unified data back so YAML becomes the single source of truth.
-        if (migrateLegacyChecklistState(data)) {
-            persistTripData();
-        }
+        // Fold any legacy localStorage state (checklist checked-state, ledger
+        // expenses) into the itinerary, then write the unified data back so YAML
+        // becomes the single source of truth.
+        let migrated = migrateLegacyChecklistState(data);
+        if (migrateLegacyLedger(data)) migrated = true;
+        if (migrated) persistTripData();
 
         syncToToday(data);
         pendingInitialScroll = true;
@@ -660,6 +663,34 @@ function migrateLegacyChecklistState(data: TripData): boolean {
         localStorage.removeItem(storageKey);
     }
     return migrated;
+}
+
+// One-time migration: older versions kept expense records in a standalone
+// `ledger_expenses` localStorage key. Fold them into the itinerary YAML (single
+// source of truth, so they now travel with the trip profile) and drop the key.
+// Only folds when the YAML has no expenses yet, so it can't double-import.
+function migrateLegacyLedger(data: TripData): boolean {
+    const saved = localStorage.getItem("ledger_expenses");
+    if (saved === null) return false;
+    try {
+        const parsed: unknown = JSON.parse(saved);
+        if (Array.isArray(parsed) && data.expenses.length === 0) {
+            for (const raw of parsed as Array<Partial<Record<"name" | "amount" | "type" | "date", unknown>>>) {
+                if (!raw || typeof raw !== "object") continue;
+                data.expenses.push({
+                    name: typeof raw.name === "string" ? raw.name : "",
+                    amount: typeof raw.amount === "number" ? raw.amount : 0,
+                    type: typeof raw.type === "string" ? raw.type : "Cash",
+                    date: typeof raw.date === "string" ? raw.date : toLocalIsoDate(new Date()),
+                    _id: createExpenseId(),
+                });
+            }
+        }
+    } catch (e) {
+        console.error("Failed to migrate legacy ledger:", e);
+    }
+    localStorage.removeItem("ledger_expenses");
+    return true;
 }
 
 // --- Checklist editing handlers (todo / packing) ---
@@ -727,6 +758,49 @@ function addTripWallet(name: string) {
         tripData.trip.wallets.push(name);
         persistTripData();
     }
+}
+
+// --- Ledger expense handlers; records live in the itinerary YAML (TripData.expenses) ---
+function addExpense(name: string, amount: number, type: string) {
+    if (!tripData) return;
+    // Newest first, matching the previous ledger ordering.
+    tripData.expenses.unshift({
+        _id: createExpenseId(),
+        name,
+        amount,
+        type,
+        // Local YYYY-MM-DD (project date convention) — sortable in CSV export.
+        date: toLocalIsoDate(new Date()),
+    });
+    persistTripData();
+}
+
+function deleteExpense(id: string) {
+    if (!tripData) return;
+    const index = tripData.expenses.findIndex(e => e._id === id);
+    if (index < 0) return;
+    const removed = { ...tripData.expenses[index] };
+    tripData.expenses = tripData.expenses.filter(e => e._id !== id);
+    persistTripData();
+    triggerToast({
+        message: "紀錄已刪除",
+        actionLabel: "復原",
+        onAction: () => {
+            if (!tripData) return;
+            // Reinsert the snapshot at its original position, clamped to the
+            // current length (the list may have changed meanwhile).
+            const next = [...tripData.expenses];
+            next.splice(Math.min(index, next.length), 0, removed);
+            tripData.expenses = next;
+            persistTripData();
+        },
+    });
+}
+
+function resetLedger() {
+    if (!tripData) return;
+    tripData.expenses = [];
+    persistTripData();
 }
 
 // Snapshot of the YAML when the editor was opened, used to detect unsaved edits
@@ -800,7 +874,10 @@ async function shareCurrentTrip() {
         return;
     }
     try {
-        const url = await buildShareUrl(serializeToYaml(tripData));
+        // Strip personal expense records from the shared link — they're for the
+        // trip owner's own device / file backup only, not the people they share
+        // the itinerary with. (File export below keeps them; that's a local backup.)
+        const url = await buildShareUrl(serializeToYaml({ ...tripData, expenses: [] }));
         await shareOrCopy({ url }, url, "分享連結已複製！網址較長，可用短網址服務縮短");
     } catch (err) {
         console.error("Failed to build share link:", err);
@@ -836,9 +913,30 @@ function exportTripYaml() {
     }
 }
 
+// Export the WHOLE trip (including expenses) as a share link, for moving your
+// own trip between your own devices — the inverse of `shareCurrentTrip`, which
+// strips expenses for sharing with other people.
+async function exportTripUrl() {
+    if (!tripData) {
+        triggerToast("目前沒有可匯出的行程");
+        return;
+    }
+    if (!isShareSupported()) {
+        triggerToast("此瀏覽器不支援連結壓縮，無法產生連結");
+        return;
+    }
+    try {
+        const url = await buildShareUrl(serializeToYaml(tripData));
+        await shareOrCopy({ url }, url, "已複製跨裝置連結（含記帳），在另一台裝置貼上即可");
+    } catch (err) {
+        console.error("Failed to build transfer link:", err);
+        triggerToast("無法產生連結，請稍後再試");
+    }
+}
+
 function exportLedgerCsv() {
     try {
-        const csv = buildLedgerCsv();
+        const csv = buildLedgerCsv(tripData?.expenses ?? []);
         if (csv === null) {
             triggerToast("尚無記帳紀錄可匯出");
             return;
@@ -1187,7 +1285,11 @@ function clearYaml() {
                     <Ledger
                         currency={tripData.trip.currency}
                         wallets={tripData.trip.wallets}
+                        expenses={tripData.expenses}
                         onAddWallet={addTripWallet}
+                        onAddExpense={addExpense}
+                        onDeleteExpense={deleteExpense}
+                        onReset={resetLedger}
                         onToast={triggerToast}
                     />
                 {/if}
@@ -1493,8 +1595,14 @@ function clearYaml() {
                         <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
                             <Download size={12} class="shrink-0 text-neon-blue" aria-hidden="true" />匯出資料
                         </p>
-                        <p class="mt-1.5">下載成檔案保存，避免裝置遺失或清除瀏覽器資料時一併消失。</p>
-                        <div class="grid grid-cols-2 gap-2 mt-1.5">
+                        <p class="mt-1.5">複製成跨裝置連結快速搬移，或下載成檔案保存，避免裝置遺失或清除瀏覽器資料時一併消失。</p>
+                        <button
+                            onclick={exportTripUrl}
+                            class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3 rounded-lg bg-white/3 border border-neon-blue/30 text-[11px] font-bold text-neon-blue hover:bg-neon-blue/10 transition cursor-pointer mt-1.5"
+                        >
+                            <Link2 size={12} aria-hidden="true" /> 複製跨裝置連結（含記帳）
+                        </button>
+                        <div class="grid grid-cols-2 gap-2 mt-2">
                             <button
                                 onclick={exportTripYaml}
                                 class="min-h-[44px] flex items-center justify-center gap-1 px-3 rounded-lg bg-white/3 border border-card-border text-[11px] font-bold text-text-secondary hover:text-neon-blue hover:bg-white/5 transition cursor-pointer"

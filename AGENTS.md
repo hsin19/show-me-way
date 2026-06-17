@@ -9,7 +9,7 @@ This repository is a Svelte 5 travel itinerary PWA. Agents should treat local sk
 - Package manager: `pnpm`.
 - Mount entry: `src/main.ts` mounts the root component `src/App.svelte`.
 - Shared logic in `src/lib/`: `api.ts` (YAML load/save/validate), `utils.ts` (date/map helpers), `exchange.ts` (exchange-rate cache), `weather.ts` (Open-Meteo daily forecast cache), `share.ts` (compressed share links), `phrases.ts` (built-in phrase sets), `ledger.ts` (Ledger pure math: quick-amount rounding ladder, Deposit-prefix totals/wallet balances, currency config, conversion rounding), `wakelock.ts` (screen wake lock while driver-facing overlays are open; silently no-ops where unsupported, e.g. iOS standalone PWAs before 18.4), `toast.ts` (shared `ToastInput` type for the app-level toast).
-- Components in `src/lib/components/`: `Timeline.svelte` (day event list), `TripOverview.svelte` (day-0 trip overview panel with share/settings entries), `DaySwitcher.svelte` (day navigation), `Checklist.svelte` (packing/todo lists), `Ledger.svelte` (expense tracking with exchange rate), `TaxiHelper.svelte` (taxi phrase helper), `WeatherBadge.svelte` (daily weather badge); brand map icons live in `src/lib/components/icons/`.
+- Components in `src/lib/components/`: `Timeline.svelte` (day event list), `TripOverview.svelte` (day-0 trip overview panel with the trip-profile switcher and share/settings entries), `DaySwitcher.svelte` (day navigation), `Checklist.svelte` (packing/todo lists), `Ledger.svelte` (expense tracking with exchange rate), `TaxiHelper.svelte` (taxi phrase helper), `WeatherBadge.svelte` (daily weather badge); brand map icons live in `src/lib/components/icons/`.
 - User-facing language is primarily Traditional Chinese. Keep UI copy and validation errors consistent with that tone.
 
 ## Skills-First Svelte Workflow
@@ -45,9 +45,11 @@ Itinerary data is YAML. Loading priority:
 
 The schema lives at `public/showmeway-schema.json` (served with the site so the modeline `$schema` URL resolves). Keep TypeScript interfaces in `src/lib/api.ts`, schema fields, and example YAML aligned when changing itinerary structure.
 
-`serializeToYaml` strips runtime-only `_id` values (timeline events and checklist items, plus any legacy checklist `id`) and re-adds the YAML schema modeline. Do not persist `_id` into YAML fixtures or exports.
+`serializeToYaml` strips runtime-only `_id` values (timeline events, checklist items, and expense records, plus any legacy `id`) and re-adds the YAML schema modeline. Do not persist `_id` into YAML fixtures or exports.
 
-Other `localStorage` keys exist outside the itinerary YAML: `ledger_expenses` and `exchange_rate_<currency>` (`Ledger`), `showmeway_exchange_rates_<base>` (rate cache in `src/lib/exchange.ts`), `showmeway_yaml_backups` (auto-snapshots of the user YAML taken before each destructive overwrite — newest first, max 5; see `backupCurrentYaml` in `src/lib/api.ts`), and `showmeway_geocode_v1_<city>` / `showmeway_weather_<city>` (weather cache in `src/lib/weather.ts`; geocode entries carry a 30-day TTL — no longer permanent — and forecasts a 3h TTL). Checklist checked-state lives inside the itinerary YAML itself; the legacy `todo_state` / `packing_state` keys are migrated once and removed by `App.svelte` — do not reintroduce them.
+Trip profiles (multiple trips): the active trip stays in `showmeway_user_yaml`; the other trips are parked as YAML snapshots in `showmeway_profiles`, with `showmeway_active_profile` holding the active id (see the profile helpers in `src/lib/api.ts`). Switching swaps the chosen snapshot with the active one — a separate, user-managed list (never auto-evicted, unlike the backup ring). The switcher UI lives on the day-0 `TripOverview` panel. Only the itinerary YAML travels with a profile.
+
+Other `localStorage` keys exist outside the itinerary YAML: `exchange_rate_<currency>` (manual rate, `Ledger`), `showmeway_exchange_rates_<base>` (rate cache in `src/lib/exchange.ts`), `showmeway_yaml_backups` (auto-snapshots of the user YAML taken before each destructive overwrite — newest first, max 5; see `backupCurrentYaml` in `src/lib/api.ts`), and `showmeway_geocode_v1_<city>` / `showmeway_weather_<city>` (weather cache in `src/lib/weather.ts`; geocode entries carry a 30-day TTL — no longer permanent — and forecasts a 3h TTL). Checklist checked-state AND ledger expense records (`TripData.expenses`) live inside the itinerary YAML itself; the legacy `todo_state` / `packing_state` / `ledger_expenses` keys are migrated once into the YAML and removed by `App.svelte` — do not reintroduce them.
 
 ## Svelte And UI Guidelines
 
@@ -69,7 +71,7 @@ Other `localStorage` keys exist outside the itinerary YAML: `ledger_expenses` an
 ## Testing Notes
 
 - Pure date/time helpers belong in `src/lib/utils.ts` and should have Vitest coverage in `src/lib/utils.test.ts`.
-- Ledger pure calculations belong in `src/lib/ledger.ts` (covered by `src/lib/ledger.test.ts`); `Ledger.svelte` keeps only `$state`/localStorage and wraps these functions in `$derived`.
+- Ledger pure calculations belong in `src/lib/ledger.ts` (covered by `src/lib/ledger.test.ts`); `Ledger.svelte` is a controlled component — expense records come in as the `expenses` prop (owned by `App.svelte`, persisted in the itinerary YAML) and add/delete/reset go back through callbacks. It keeps only its own input `$state` plus the manual exchange-rate localStorage, and wraps the pure functions in `$derived`.
 - Be careful with `YYYY-MM-DD` parsing. This project intentionally parses plain dates in local time to avoid UTC day shifts.
 - When changing PWA, Vite, or asset behavior, verify with `pnpm run build`.
 

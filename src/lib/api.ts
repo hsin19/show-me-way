@@ -2,7 +2,10 @@ import {
     dump as dumpYaml,
     load as parseYaml,
 } from "js-yaml";
-import { ledgerTypeLabel } from "./ledger";
+import {
+    type ExpenseItem,
+    ledgerTypeLabel,
+} from "./ledger";
 
 /** Reservation confirmation shown as a tap-to-copy chip and an enlarged counter-facing view. */
 export interface ConfirmationInfo {
@@ -104,6 +107,12 @@ export interface TripData {
     todo: ChecklistItem[];
     packing: ChecklistItem[];
     days: DayItinerary[];
+    /**
+     * Expense records for the ledger. Persisted in the itinerary YAML (like
+     * `todo` / `packing`) so they travel with the trip profile and share links.
+     * Optional in source YAML; normalized to an empty array on load.
+     */
+    expenses: ExpenseItem[];
 }
 
 export interface ChecklistItem {
@@ -143,6 +152,9 @@ function attachRuntimeIds(data: TripData): TripData {
     }
     for (const item of data.packing) {
         item._id = `pack-${runtimeIdSeq++}`;
+    }
+    for (const item of data.expenses) {
+        item._id = `exp-${runtimeIdSeq++}`;
     }
     return data;
 }
@@ -282,6 +294,18 @@ function normalizeTripData(raw: unknown): TripData {
             }
         }
     }
+    // Expense records get `_id`s too; a null / non-object entry would crash
+    // `attachRuntimeIds`. These are normally app-generated, but guard hand edits.
+    if (data.expenses != null) {
+        if (!Array.isArray(data.expenses)) {
+            throw new Error("expenses 必須是列表");
+        }
+        for (const [j, item] of data.expenses.entries()) {
+            if (!item || typeof item !== "object" || Array.isArray(item)) {
+                throw new Error(`expenses 第 ${j + 1} 項必須是物件`);
+            }
+        }
+    }
 
     // Optional sections default to empty arrays. Note `phrases` is intentionally
     // dropped here so any legacy value never round-trips back into saved YAML.
@@ -290,6 +314,7 @@ function normalizeTripData(raw: unknown): TripData {
         days: data.days,
         todo: Array.isArray(data.todo) ? data.todo : [],
         packing: Array.isArray(data.packing) ? data.packing : [],
+        expenses: Array.isArray(data.expenses) ? data.expenses : [],
     };
 
     return attachRuntimeIds(normalized);
@@ -315,6 +340,12 @@ export function serializeToYaml(data: TripData): string {
     for (const item of [...clean.todo, ...clean.packing]) {
         delete item._id;
         // Drop the obsolete persisted `id` so it is cleaned out on first save.
+        delete (item as { id?: string; }).id;
+    }
+    for (const item of clean.expenses) {
+        delete item._id;
+        // Drop the legacy persisted `id` carried over from the old localStorage
+        // ledger format, so migrated records serialize cleanly.
         delete (item as { id?: string; }).id;
     }
 
@@ -545,21 +576,15 @@ function escapeCsvField(value: string): string {
 }
 
 /**
- * Build a CSV export of the expense records in `ledger_expenses` (the key is
- * owned by `Ledger.svelte`). zh-TW headers plus a UTF-8 BOM so Excel decodes
- * the Chinese text correctly. Returns null when there is nothing to export
- * (no records, or unreadable storage — same degradation as the Ledger itself).
+ * Build a CSV export of the given expense records (now part of the itinerary
+ * YAML — see `TripData.expenses`). zh-TW headers plus a UTF-8 BOM so Excel
+ * decodes the Chinese text correctly. Returns null when there is nothing to
+ * export (no records).
  */
-export function buildLedgerCsv(): string | null {
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(localStorage.getItem("ledger_expenses") ?? "[]");
-    } catch {
-        return null;
-    }
-    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+export function buildLedgerCsv(expenses: ExpenseItem[]): string | null {
+    if (!Array.isArray(expenses) || expenses.length === 0) return null;
     const lines = ["日期,項目,金額,類別"];
-    for (const item of parsed as Partial<Record<"date" | "name" | "amount" | "type", unknown>>[]) {
+    for (const item of expenses as Partial<Record<"date" | "name" | "amount" | "type", unknown>>[]) {
         lines.push([
             escapeCsvField(typeof item?.date === "string" ? item.date : ""),
             escapeCsvField(typeof item?.name === "string" ? item.name : ""),
@@ -577,6 +602,14 @@ export function buildLedgerCsv(): string | null {
  */
 export function createChecklistItemId(prefix: "todo" | "pack"): string {
     return `${prefix}-${runtimeIdSeq++}`;
+}
+
+/**
+ * Generate a runtime-only `_id` for a newly added expense record. Shares the
+ * same sequence as `attachRuntimeIds`; stripped on serialization like all `_id`s.
+ */
+export function createExpenseId(): string {
+    return `exp-${runtimeIdSeq++}`;
 }
 
 /**

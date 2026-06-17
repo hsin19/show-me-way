@@ -2,11 +2,17 @@
 // cover them without plugins. Ledger.svelte wraps these in $derived.
 
 export interface ExpenseItem {
-    id: string;
     name: string;
     amount: number;
     type: string; // WOWPASS | Cash | Deposit-WOWPASS | Deposit-Cash
     date: string;
+    /**
+     * Ephemeral, runtime-only key (same pattern as `ChecklistItem._id`):
+     * assigned on load / creation and stripped on serialization, so it never
+     * appears in the saved/exported YAML. Used as the `{#each}` key and the
+     * lookup handle for delete.
+     */
+    _id?: string;
 }
 
 export interface LedgerTotals {

@@ -458,32 +458,51 @@ describe("backupCurrentYaml / listYamlBackups / getYamlBackup", () => {
     });
 });
 
-describe("buildLedgerCsv", () => {
-    let storage: ReturnType<typeof createLocalStorageStub>;
-    beforeEach(() => {
-        storage = createLocalStorageStub();
-        vi.stubGlobal("localStorage", storage);
-    });
-    afterEach(() => vi.unstubAllGlobals());
+describe("expenses — YAML round-trip", () => {
+    const withExpenses = tripYaml(validHotel) + "\n" + [
+        "expenses:",
+        "  - name: '晚餐'",
+        "    amount: 1200",
+        "    type: 'Cash'",
+        "    date: '2026-06-11'",
+    ].join("\n");
 
-    it("returns null with no records or unreadable storage", () => {
-        expect(buildLedgerCsv()).toBeNull();
-        storage.setItem("ledger_expenses", "[]");
-        expect(buildLedgerCsv()).toBeNull();
-        storage.setItem("ledger_expenses", "{not json");
-        expect(buildLedgerCsv()).toBeNull();
+    it("defaults to an empty list when absent", () => {
+        expect(validateYaml(tripYaml(validHotel)).expenses).toEqual([]);
+    });
+
+    it("parses records and assigns a runtime _id", () => {
+        const data = validateYaml(withExpenses);
+        expect(data.expenses).toHaveLength(1);
+        expect(data.expenses[0].name).toBe("晚餐");
+        expect(data.expenses[0].amount).toBe(1200);
+        expect(typeof data.expenses[0]._id).toBe("string");
+    });
+
+    it("strips _id on serialization but keeps the record", () => {
+        const yaml = serializeToYaml(validateYaml(withExpenses));
+        expect(yaml).toContain("expenses:");
+        expect(yaml).toContain("晚餐");
+        expect(yaml).not.toContain("_id");
+    });
+
+    it("rejects a non-object expense entry with a zh-TW message", () => {
+        expect(() => validateYaml(tripYaml(validHotel) + "\nexpenses:\n  - 'x'"))
+            .toThrow("expenses 第 1 項必須是物件");
+    });
+});
+
+describe("buildLedgerCsv", () => {
+    it("returns null with no records", () => {
+        expect(buildLedgerCsv([])).toBeNull();
     });
 
     it("emits a BOM, zh-TW header, type labels and escaped fields", () => {
-        storage.setItem(
-            "ledger_expenses",
-            JSON.stringify([
-                { date: "2026-06-11", name: "晚餐", amount: 1200, type: "Cash" },
-                { date: "2026-06-11", name: "WOWPASS 加值", amount: 50000, type: "Deposit-WOWPASS" },
-                { date: "2026-06-12", name: "紀念品, 含稅", amount: 3000, type: "WOWPASS" },
-            ]),
-        );
-        const csv = buildLedgerCsv()!;
+        const csv = buildLedgerCsv([
+            { date: "2026-06-11", name: "晚餐", amount: 1200, type: "Cash" },
+            { date: "2026-06-11", name: "WOWPASS 加值", amount: 50000, type: "Deposit-WOWPASS" },
+            { date: "2026-06-12", name: "紀念品, 含稅", amount: 3000, type: "WOWPASS" },
+        ])!;
         expect(csv.charCodeAt(0)).toBe(0xFEFF);
         const lines = csv.slice(1).trimEnd().split("\r\n");
         expect(lines[0]).toBe("日期,項目,金額,類別");
