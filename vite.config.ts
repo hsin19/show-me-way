@@ -7,6 +7,20 @@ import { VitePWA } from "vite-plugin-pwa";
 // https://vite.dev/config/
 export default defineConfig({
     base: "/show-me-way/",
+    // A fixed, app-specific port keeps this app's localStorage on its own origin
+    // (storage is keyed by host:port), so dev data never collides with another
+    // Vite app on the default 5173. strictPort fails loudly instead of silently
+    // hopping to a shared port, which would defeat that isolation. 8045 derives
+    // from this repo's first commit hash (804c50f7…) — a stable, low-collision
+    // scheme so each project stays on its own origin.
+    server: {
+        port: 8045,
+        strictPort: true,
+    },
+    preview: {
+        port: 8046,
+        strictPort: true,
+    },
     plugins: [
         svelte(),
         tailwindcss(),

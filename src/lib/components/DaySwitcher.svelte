@@ -18,12 +18,11 @@ let { days, currentDay = $bindable(), todayDay = null }: Props = $props();
 
 let scroller = $state<HTMLDivElement>();
 
-// Keep the selected chip in view: swiping the day strip changes `currentDay`
-// from outside this component, and the chip row doesn't follow on its own.
-// Scoped scrollTo, NOT scrollIntoView: scrollIntoView registers adjustments
-// on every scrollable ancestor, and WebKit lets that cancel the day strip's
-// in-flight snap glide — the strip then rests stuck between two panels.
-// Only this row may ever move (also guarantees zero vertical scrolling).
+// Keep the selected chip in view. `currentDay` only changes once the day strip
+// has settled (never mid-swipe), so this fires after the gesture is over and
+// can smooth-scroll without competing with it. Scoped scrollTo, NOT
+// scrollIntoView: scrollIntoView adjusts every scrollable ancestor, which WebKit
+// lets cancel the strip's snap.
 $effect(() => {
     if (!scroller) return;
     const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";

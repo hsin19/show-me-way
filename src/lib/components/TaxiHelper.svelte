@@ -8,10 +8,11 @@ import Ticket from "@lucide/svelte/icons/ticket";
 import X from "@lucide/svelte/icons/x";
 import { onMount } from "svelte";
 import type { HotelInfo } from "../api";
+import type { ConfirmationCard } from "../enlarge";
 import type {
     PhraseCategory,
     PhraseInfo,
-} from "../api";
+} from "../phrases";
 import {
     getTodayIsoString,
     isOvernightStay,
@@ -25,7 +26,7 @@ interface Props {
     copyAddressLabel: string;
     onCopy: (text: string, msg: string) => void;
     /** Show a hotel's confirmation code enlarged; the overlay is a single app-level instance. */
-    onEnlarge: (card: { kind: "confirmation"; title: string; code: string; name?: string; note?: string; }) => void;
+    onEnlarge: (card: ConfirmationCard) => void;
 }
 
 let { hotels, phrases, driverPrompt, copyAddressLabel, onCopy, onEnlarge }: Props = $props();

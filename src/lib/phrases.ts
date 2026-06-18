@@ -1,4 +1,13 @@
-import type { PhraseInfo } from "./api";
+/** Situational category for a survival phrase; used by the TaxiHelper filter chips. */
+export type PhraseCategory = "basic" | "transport" | "dining" | "shopping" | "help";
+
+export interface PhraseInfo {
+    zh: string;
+    text: string;
+    rom: string;
+    /** Optional category; uncategorized phrases only show under the 全部 filter. */
+    cat?: PhraseCategory;
+}
 
 /**
  * Built-in, hard-coded survival phrases keyed by language code (`trip.lang`).

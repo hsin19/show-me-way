@@ -19,6 +19,7 @@ import type {
     DayItinerary,
 } from "../api";
 import type { HotelInfo } from "../api";
+import type { EnlargedCard } from "../enlarge";
 import {
     classifyTimelineEvents,
     formatDayDate,
@@ -42,11 +43,7 @@ interface Props {
     /** App's ticking clock; enables today's past/current/upcoming styling. Null disables. */
     now?: Date | null;
     /** Show a place's local-language name/address, or a confirmation code, enlarged; the overlay is a single app-level instance. */
-    onEnlarge: (
-        card:
-            | { kind: "place"; title: string; localName: string; address?: string; }
-            | { kind: "confirmation"; title: string; code: string; name?: string; note?: string; },
-    ) => void;
+    onEnlarge: (card: EnlargedCard) => void;
     /** Set an event's manual check-in state; `undefined` clears it (tapping the active state again). */
     onSetEventStatus: (id: string, status: "done" | "skipped" | undefined) => void;
     /** Share this day's plain-text 報平安 report (app-level handler: share sheet or clipboard fallback). */
