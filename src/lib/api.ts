@@ -602,31 +602,41 @@ export function createExpenseId(): string {
 }
 
 /**
+ * Fetch one candidate YAML file. Returns null (rather than throwing) for any
+ * "not really there" outcome so the caller can fall through to the next:
+ *  - network error / timeout (offline)
+ *  - a non-OK status
+ *  - an HTML body. The Vite dev server answers a MISSING public file with the
+ *    SPA fallback — `200 text/html` (index.html) — not a 404, so `response.ok`
+ *    alone would hand that page back as "YAML" and blow up the parser. A real
+ *    itinerary YAML always starts with the `#` modeline or `trip:`, never `<`.
+ */
+async function fetchYamlCandidate(url: string, opts?: RequestInit): Promise<string | null> {
+    let response: Response;
+    try {
+        response = await fetch(url, opts);
+    } catch {
+        return null;
+    }
+    if (!response.ok) return null;
+    const text = await response.text();
+    if (text.trimStart().startsWith("<")) return null;
+    return text;
+}
+
+/**
  * Fetch the default itinerary YAML text: itinerary.local.yaml first, then the
  * bundled itinerary.yaml. Shared by `fetchItinerary` and the settings editor so
- * their fallback behavior can't drift.
- *
- * Offline, a missing file makes fetch reject outright (not a 404), so rejection
- * must also fall through to the precached itinerary.yaml. The abort timeout
- * bounds a hanging network, and must stay ABOVE the service worker's 5s
- * networkTimeoutSeconds so the SW's cached copy of a real itinerary.local.yaml
- * wins before we give up on it.
+ * their fallback behavior can't drift. The abort timeout bounds a hanging
+ * network, and must stay ABOVE the service worker's 5s networkTimeoutSeconds so
+ * the SW's cached copy of a real itinerary.local.yaml wins before we give up.
  */
 export async function fetchDefaultYamlText(): Promise<string> {
-    let response: Response | null = null;
-    try {
-        response = await fetch("./itinerary.local.yaml", { signal: AbortSignal.timeout(8000) });
-    } catch {
-        // Offline / timed out — fall through to the bundled default below.
-    }
-
-    if (!response?.ok) {
-        response = await fetch("./itinerary.yaml");
-        if (!response.ok) {
-            throw new Error("Neither itinerary.local.yaml nor itinerary.yaml was found.");
-        }
-    }
-    return response.text();
+    const local = await fetchYamlCandidate("./itinerary.local.yaml", { signal: AbortSignal.timeout(8000) });
+    if (local !== null) return local;
+    const bundled = await fetchYamlCandidate("./itinerary.yaml");
+    if (bundled !== null) return bundled;
+    throw new Error("Neither itinerary.local.yaml nor itinerary.yaml was found.");
 }
 
 // Load and parse itinerary YAML from local storage or fallback file

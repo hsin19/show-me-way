@@ -2,83 +2,184 @@
 trip:
   name: 我的探索之旅 (範本)
   start: '2026-10-01'
-  end: '2026-10-03'
+  end: '2026-10-04'
   departure: '2026-10-01T08:00:00+08:00'
   lang: ja
   currency: JPY
   city: Tokyo
+  mapProvider: google
+  wallets:
+    - Suica
+    - ICOCA
   hotels:
     - name: 極簡設計精選飯店
       address: 東京都新宿區西新宿 1-1-1
       checkIn: '2026-10-01'
       checkOut: '2026-10-03'
-      localName: 極簡設計精選飯店
+      localName: 新宿セレクトホテル
+      mapLink: 'https://maps.app.goo.gl/example-hotel'
       confirmation:
         code: 'BK-20261001'
         name: 'WANG XIAO MING'
-        note: 入住時出示護照
+        note: 入住時出示護照與訂房確認信
+    - name: 灣岸景觀飯店
+      address: 東京都港區台場 2-2-2
+      checkIn: '2026-10-03'
+      checkOut: '2026-10-04'
+      localName: お台場ベイビューホテル
 days:
   - day: 1
     date: '2026-10-01'
-    region: 經典商圈漫步
-    pace: 輕鬆漫遊
+    region: 抵達 · 新宿
+    pace: 輕鬆漫遊，當天以休息與覓食為主
     timeline:
       - time: '08:00'
-        title: ✈️ 前往目的地
+        title: ✈️ 出發前往東京
         type: booked
-        desc: 搭乘班機前往你的夢想城市。
+        desc: 桃園機場第一航廈出發，記得提早 2.5 小時到機場。
         status: done
         confirmation:
           code: 'ABC123'
+          name: 'WANG XIAO MING'
+          note: 線上登機證存手機，托運行李限重 23kg
       - time: '14:00'
         title: 🏨 飯店 Check-in
         type: standard
-        desc: 抵達飯店辦理入住手續並放置行李。
-      - time: '18:00'
+        desc: 抵達飯店辦理入住、放置行李，確認 Wi-Fi 與早餐時間。
+      - time: '18:00 - 19:30'
         title: 🍜 晚餐探店
         type: must-go
-        desc: 造訪當地熱門名店，開啟美食之旅。
-        localName: 一蘭 新宿店
-        mapLink: 'https://maps.app.goo.gl/example1'
+        desc: 造訪當地熱門拉麵名店，開啟美食之旅。
+        localName: 一蘭 新宿中央東口店
+        mapLink: 'https://maps.app.goo.gl/example-ramen'
         links:
-          - label: 美食街攻略
-            url: 'https://example.com/food-guide'
+          - label: 新宿美食攻略
+            url: 'https://example.com/shinjuku-food'
         alternatives:
           - title: 拉麵二郎
-            localName: ラーメン二郎
-            mapLink: 'https://maps.app.goo.gl/example2'
+            localName: ラーメン二郎 歌舞伎町店
+            mapLink: 'https://maps.app.goo.gl/example-jiro'
             note: 排隊超過 30 分鐘就換這間
           - title: 商場美食街
-            note: 雨天備案，免排隊
+            note: 雨天 / 太累的備案，免排隊
   - day: 2
     date: '2026-10-02'
-    region: 市區潮流探險
+    region: 經典景點 · 澀谷
     pace: 腳步略快，行程豐富
     timeline:
-      - time: '10:00'
-        title: 🛍️ 潮流街區探店
+      - time: '09:30 - 11:00'
+        title: 🎟️ teamLab 預約入場
+        type: booked
+        desc: 數位藝術展，須持預約 QR code 於指定時段入場。
+        localName: チームラボプラネッツ TOKYO
+        mapLink: 'https://maps.app.goo.gl/example-teamlab'
+        bullets:
+          - 穿短褲或可捲起的褲子（部分展區會踩水）
+          - 提早 15 分鐘到場排隊
+        confirmation:
+          code: 'TL-0099123'
+          note: 出示 App 內 QR code
+      - time: '12:30 - 13:30'
+        title: 🍱 午餐
         type: standard
-        desc: 探訪當地獨立設計師品牌與熱門快閃店。
-      - time: '14:00'
+        desc: 在澀谷一帶找間定食或丼飯店解決午餐。
+        alternatives:
+          - title: 平價迴轉壽司
+            note: 想快速解決就選這個
+      - time: '15:00'
         title: ☕ 下午茶時光
         type: option
-        desc: 在網紅咖啡廳點杯咖啡與招牌甜點，稍作休息。
+        desc: 網紅咖啡廳點杯咖啡與招牌甜點，稍作休息。
         status: skipped
+      - time: '19:00'
+        title: 🛍️ 澀谷逛街採購
+        type: standard
+        desc: 逛 PARCO、唐吉訶德補貨，注意免稅門檻與營業時間。
+        links:
+          - label: 免稅須知
+            url: 'https://example.com/tax-free'
   - day: 3
     date: '2026-10-03'
-    region: 伴手禮採購與回程
+    region: 京都一日遊
+    city: Kyoto
+    pace: 早出晚歸，當天移動到京都
+    timeline:
+      - time: '07:30'
+        title: 🚄 新幹線前往京都
+        type: booked
+        desc: 東京站搭乘東海道新幹線「のぞみ」前往京都，約 2 小時 15 分。
+        bullets:
+          - 提前用 EX 預約 App 劃位
+          - 月台便當（駅弁）可當早餐
+        confirmation:
+          code: 'EX-778812'
+          note: 進站刷 IC 卡與預約紀錄
+      - time: '10:00 - 12:00'
+        title: ⛩️ 伏見稻荷大社
+        type: must-go
+        desc: 千本鳥居必訪，建議早到避開人潮，體力夠可走到山腰。
+        localName: 伏見稲荷大社
+        mapLink: 'https://maps.app.goo.gl/example-fushimi'
+        bullets:
+          - 來回約 2 小時，穿好走的鞋
+      - time: '13:00 - 14:00'
+        title: 🍵 京都午餐
+        type: standard
+        desc: 祇園或錦市場一帶用餐，順道逛逛。
+        localName: 錦市場
+        alternatives:
+          - title: 湯豆腐套餐
+            localName: 南禅寺 順正
+            note: 想吃正式一點選這間，建議先訂位
+      - time: '18:30'
+        title: 🚄 返回東京
+        type: booked
+        desc: 京都站搭新幹線返回東京，回飯店休息。
+        confirmation:
+          code: 'EX-778890'
+  - day: 4
+    date: '2026-10-04'
+    region: 採購 · 回程
     pace: 收尾行程，不排太滿
     timeline:
-      - time: '10:00'
+      - time: '10:00 - 12:00'
         title: 🎁 最後採購與打包
         type: standard
-        desc: 到當地商場或免稅店補齊伴手禮，回飯店整理行李。
+        desc: 到藥妝店或機場免稅店補齊伴手禮，回飯店整理行李、退房。
       - time: '15:00'
         title: ✈️ 搭機回國
         type: booked
-        desc: 帶著滿滿的回憶搭乘回程班機。
+        desc: 帶著滿滿的回憶搭乘回程班機，記得預留退稅與安檢時間。
+        confirmation:
+          code: 'ABC456'
+          name: 'WANG XIAO MING'
 todo:
-  - text: 確認護照效期大於 6 個月
-  - text: 兌換當地現金備用
+  - text: 確認護照效期距回國日仍大於 6 個月
+  - text: 辦妥簽證 / 免簽電子許可（如 Visit Japan Web、K-ETA、ESTA）
+  - text: 線上辦理登機手續並選位
+  - text: 再次確認去回程航班時間與行李額度
+  - text: 兌換當地現金、確認可海外提款的金融卡
+  - text: 開通信用卡海外交易，記下掛失電話
+  - text: 購買網卡 / eSIM 或租借 WiFi 機
+  - text: 投保旅遊平安險與不便險
+  - text: 預訂或確認交通票券（JR Pass、機場接送等）
+  - text: 下載離線地圖、翻譯與訂票 App
+  - text: 證件備份（護照、簽證、保單）拍照存雲端
+  - text: 確認所有飯店訂房與入住時間
+  - text: 把行程與住宿資訊傳給家人
+  - text: 查當地天氣與公休 / 節慶，微調行程
 packing:
-  - text: 更換衣物與常備藥品
+  - text: 護照、登機證、身分證
+  - text: 錢包、當地現金、信用卡 / 金融卡
+  - text: 手機、充電線、行動電源
+  - text: 萬用轉接頭 / 變壓器
+  - text: 網卡 / WiFi 機
+  - text: 常備藥品（腸胃藥、止痛藥、感冒藥、個人處方藥）
+  - text: 盥洗用品、牙刷牙膏
+  - text: 換洗衣物、內衣褲與襪子（依天數）
+  - text: 外套 / 雨具（依當地天氣）
+  - text: 口罩、濕紙巾、乾洗手
+  - text: 隱形眼鏡 / 眼鏡 / 太陽眼鏡
+  - text: 證件影本與大頭照備份
+  - text: 環保袋 / 購物袋（裝戰利品）
+  - text: 行李秤（回程怕超重）
