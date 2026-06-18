@@ -1,4 +1,5 @@
 <script lang="ts">
+import { fly } from "svelte/transition";
 import type {
     DayItinerary,
     ProfileInfo,
@@ -7,22 +8,24 @@ import type {
 import type { EnlargedCard } from "../enlarge";
 import {
     findCurrentEventIndex,
+    formatDayDate,
+    formatNextEventLabel,
+    getCountdownText,
+    getNextEventInfo,
     toLocalIsoDate,
 } from "../utils";
 import type { DailyWeather } from "../weather";
+import DaySwitcher from "./DaySwitcher.svelte";
 import Timeline from "./Timeline.svelte";
 import TripOverview from "./TripOverview.svelte";
 
 interface Props {
     trip: TripData["trip"];
     days: DayItinerary[];
-    /** Single source of truth for the visible day; bound so the parent's DaySwitcher stays in sync. */
+    /** Single source of truth for the visible day; bound so App's today-sync can drive it. 0 = overview. */
     currentDay: number;
-    /** Armed by the parent on (re)load; consumed here to position the strip once mounted. */
-    pendingInitialScroll: boolean;
-    /** App's ticking clock (passed to each day's Timeline and used for today's auto-scroll). */
+    /** App's ticking clock (passed to Timeline; also drives "today" derivations and the current-event scroll). */
     clockNow: Date;
-    countdownText: string;
     profiles: ProfileInfo[];
     showWeatherAttribution: boolean;
     staleWeatherHours: number | null;
@@ -42,9 +45,7 @@ let {
     trip,
     days,
     currentDay = $bindable(),
-    pendingInitialScroll = $bindable(),
     clockNow,
-    countdownText,
     profiles,
     showWeatherAttribution,
     staleWeatherHours,
@@ -60,59 +61,101 @@ let {
     onOpenSettings,
 }: Props = $props();
 
-// --- Switch day via a horizontal scroll-snap strip (native swipe / trackpad) ---
-// Each day is a full-width, full-height panel that scrolls VERTICALLY on its own
-// (overflow-y-auto); the strip only scrolls horizontally. Because every panel is
-// the same fixed height, nothing reflows while paging, so iOS WebKit's native
-// snap stays smooth and each day keeps its own scroll position. `currentDay` is
-// the single source of truth: a swipe reports the resting panel into it, and a
-// programmatic change (DaySwitcher tap, overview select, initial load) brings
-// the strip to it.
-let dayStrip = $state<HTMLDivElement>();
-// When the user last scrolled the strip horizontally; the realign effect uses it
-// to stay out of the way while a swipe is still settling so it never fires a
-// competing scroll. A timestamp survives the extra effect runs that two-way
-// `bind:currentDay` can trigger.
-let lastUserScrollAt = 0;
-const REALIGN_SUPPRESS_MS = 400;
+// --- One day on screen at a time, swapped with a slide transition ---
+// Only the current panel is rendered (overview = day 0, then each day). Day
+// switching is just a `currentDay` change; the view is a pure function of it, so
+// there is no horizontal scroll machinery to keep in sync. Native vertical
+// scroll happens inside the panel; left/right paging is a swipe/wheel gesture
+// that simply steps `currentDay`.
 const EVENT_SCROLL_GAP = 8;
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Day-change slide transition (ms / px). Tweak here for feel.
+const PAGE_MS = 1000;
+const PAGE_SHIFT = 120;
 
-// Day number ↔ strip panel index. Panel 0 is the trip overview (day 0); the
-// day panels follow in YAML order, shifted by one.
-function dayToIndex(day: number): number | null {
-    if (day === 0) return 0;
-    const idx = days.findIndex(d => d.day === day);
-    return idx < 0 ? null : idx + 1;
+// "Today" derivations (consumed by the DaySwitcher marker and the overview capsule).
+let todayData = $derived(days.find(d => d.date === toLocalIsoDate(clockNow)) ?? null);
+let todayDay = $derived(todayData?.day ?? null);
+let nextEvent = $derived(todayData ? getNextEventInfo(todayData.timeline, todayData.date, clockNow) : null);
+let countdownText = $derived.by(() => {
+    if (nextEvent) return formatNextEventLabel(nextEvent);
+    return getCountdownText(trip, clockNow);
+});
+
+// Ordered panel keys: overview (0) then each day in order. Used for prev/next stepping.
+let panelKeys = $derived([0, ...days.map(d => d.day)]);
+let currentDayData = $derived(days.find(d => d.day === currentDay) ?? null);
+
+// Slide direction for the transition (+1 = new day enters from the right).
+let dir = $state(1);
+
+// Navigate to a specific day (DaySwitcher chip / overview list). Sets the slide
+// direction from the index delta, then changes the day.
+function goToDay(day: number) {
+    if (day === currentDay) return;
+    dir = panelKeys.indexOf(day) >= panelKeys.indexOf(currentDay) ? 1 : -1;
+    currentDay = day;
 }
 
-function indexToDay(idx: number): number | null {
-    if (idx === 0) return 0;
-    return days[idx - 1]?.day ?? null;
+// Step to the previous / next panel, clamped to the ends.
+function step(delta: number) {
+    const i = panelKeys.indexOf(currentDay);
+    const next = Math.max(0, Math.min(panelKeys.length - 1, i + delta));
+    if (next === i) return;
+    dir = delta > 0 ? 1 : -1;
+    currentDay = panelKeys[next];
 }
 
-function dayOffsetLeft(day: number): number | null {
-    const idx = dayToIndex(day);
-    if (idx === null || !dayStrip) return null;
-    return idx * dayStrip.clientWidth;
+// Horizontal swipe (mobile) → step a day. Read on touchend so vertical scrolling
+// is never intercepted; only a clearly-horizontal flick past the threshold pages.
+const SWIPE_MIN = 50;
+let touchX = 0;
+let touchY = 0;
+function onTouchStart(e: TouchEvent) {
+    touchX = e.touches[0].clientX;
+    touchY = e.touches[0].clientY;
 }
-
-function scrollBehavior(): "auto" | "smooth" {
-    return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
-}
-
-// Vertical position within one day's panel: today scrolls to its in-progress
-// event (none started yet → top), any other day scrolls to the top. Scrolls the
-// panel itself (each panel is its own scroll container).
-function applyDayScroll(day: number, behavior: "auto" | "smooth" = scrollBehavior()) {
-    if (!dayStrip) return;
-    const panelIdx = dayToIndex(day);
-    const panel = panelIdx === null ? undefined : dayStrip.children[panelIdx] as HTMLElement | undefined;
-    if (!panel) return;
-    const dayData = days.find(d => d.day === day);
-    if (!dayData) {
-        panel.scrollTo({ top: 0, behavior });
-        return;
+function onTouchEnd(e: TouchEvent) {
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchX;
+    const dy = t.clientY - touchY;
+    if (Math.abs(dx) > SWIPE_MIN && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        step(dx < 0 ? 1 : -1);
     }
+}
+
+// Desktop horizontal wheel / trackpad → step a day. One step per gesture (lock
+// releases once the wheel goes idle), so a flick's burst can't skip several days.
+let pager = $state<HTMLElement>();
+$effect(() => {
+    const el = pager;
+    if (!el) return;
+    let locked = false;
+    let idleTimer: number;
+    const onWheel = (e: WheelEvent) => {
+        if (e.ctrlKey) return; // pinch-zoom
+        let horiz: number;
+        if (e.shiftKey) horiz = e.deltaX || e.deltaY;
+        else if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) horiz = e.deltaX;
+        else return; // vertical-dominant → native panel scroll
+        if (!horiz) return;
+        e.preventDefault();
+        clearTimeout(idleTimer);
+        idleTimer = window.setTimeout(() => (locked = false), 140);
+        if (locked || Math.abs(horiz) < 4) return;
+        locked = true;
+        step(horiz > 0 ? 1 : -1);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+});
+
+// Vertical position within the freshly-rendered day panel: today scrolls to its
+// in-progress event (none started yet → top), any other day stays at the top.
+let panelEl = $state<HTMLElement>();
+function positionPanel(day: number, panel: HTMLElement) {
+    const dayData = days.find(d => d.day === day);
+    if (!dayData) return; // overview rests at top (fresh panel is already at 0)
     const now = new Date();
     let eventIdx = dayData.date === toLocalIsoDate(now)
         ? findCurrentEventIndex(dayData.timeline, now)
@@ -122,154 +165,84 @@ function applyDayScroll(day: number, behavior: "auto" | "smooth" = scrollBehavio
     while (eventIdx !== null && dayData.timeline[eventIdx].status) {
         eventIdx = eventIdx + 1 < dayData.timeline.length ? eventIdx + 1 : null;
     }
-    if (eventIdx === null) {
-        panel.scrollTo({ top: 0, behavior });
-        return;
-    }
+    if (eventIdx === null) return;
     const card = panel.querySelectorAll<HTMLElement>("[data-timeline-event]")[eventIdx];
-    if (!card) {
-        panel.scrollTo({ top: 0, behavior });
-        return;
-    }
+    if (!card) return;
     const top = Math.max(0, card.getBoundingClientRect().top - panel.getBoundingClientRect().top + panel.scrollTop - EVENT_SCROLL_GAP);
-    panel.scrollTo({ top, behavior });
+    panel.scrollTo({ top, behavior: "auto" });
 }
 
-// A swipe only reports which panel it rests on (for the DaySwitcher highlight);
-// the motion is all native CSS snap. No reflow happens on this change (panels are
-// fixed height), so updating live is safe and smooth.
-function handleStripScroll() {
-    if (!dayStrip) return;
-    lastUserScrollAt = performance.now();
-    const idx = Math.round(dayStrip.scrollLeft / dayStrip.clientWidth);
-    const day = indexToDay(idx);
-    if (day !== null && day !== currentDay) {
-        currentDay = day;
-    }
-}
-
-// Desktop horizontal paging via wheel / trackpad. Each day panel is
-// overflow-y:auto, which forces its overflow-x to compute to hidden — a scroll
-// container that swallows horizontal scroll before it reaches this pager. Touch
-// swipes are unaffected (mobile pages fine); this is a desktop wheel-only quirk.
-// So redirect a horizontal-intent wheel (trackpad pan, tilt wheel, shift+wheel)
-// to the strip ourselves. preventDefault → manual non-passive listener (Svelte's
-// `onwheel` is passive). A dominant-vertical wheel stays native so the day panel
-// scrolls.
+// Reposition whenever the panel (re)mounts for a new day. `{#key currentDay}`
+// recreates the section, so `panelEl` is reassigned each switch; rAF waits for
+// the new content to lay out before measuring the current-event card.
 $effect(() => {
-    const strip = dayStrip;
-    if (!strip) return;
-    // One wheel gesture = one page. The lock latches on the first event and
-    // releases only after the wheel goes idle, so a trackpad flick's burst of
-    // momentum events can't skip several days at once.
-    let wheelLocked = false;
-    let wheelIdleTimer: number;
-    const onWheel = (e: WheelEvent) => {
-        if (e.ctrlKey) return; // pinch-zoom gesture
-        let horiz: number;
-        if (e.shiftKey) horiz = e.deltaX || e.deltaY; // shift+wheel → horizontal
-        else if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) horiz = e.deltaX; // horizontal pan / tilt wheel
-        else return; // vertical-dominant → native (the day panel scrolls)
-        if (!horiz) return;
-        e.preventDefault();
-        // Keep the lock alive while events keep arriving; release once idle.
-        clearTimeout(wheelIdleTimer);
-        wheelIdleTimer = window.setTimeout(() => (wheelLocked = false), 140);
-        if (wheelLocked || Math.abs(horiz) < 4) return;
-        const width = strip.clientWidth;
-        if (width <= 0) return;
-        const curIdx = Math.round(strip.scrollLeft / width);
-        const nextIdx = Math.max(0, Math.min(strip.children.length - 1, curIdx + (horiz > 0 ? 1 : -1)));
-        if (nextIdx === curIdx) return;
-        wheelLocked = true;
-        // Instant, not smooth: Chrome cancels smooth scrolls on snap-mandatory
-        // containers, leaving the strip stuck. Jumping straight to the snap point
-        // is reliable (and snappy enough for a one-page wheel step).
-        strip.scrollTo({ left: nextIdx * width, behavior: "auto" });
-    };
-    strip.addEventListener("wheel", onWheel, { passive: false });
-    return () => strip.removeEventListener("wheel", onWheel);
-});
-
-// Bring the strip to `currentDay` and vertically position that day — for
-// programmatic changes only (DaySwitcher tap, overview select). Skipped while
-// the user is swiping so the native snap is never fought.
-$effect(() => {
-    const target = dayOffsetLeft(currentDay);
-    if (target === null || !dayStrip) return;
-    if (performance.now() - lastUserScrollAt < REALIGN_SUPPRESS_MS) return;
-    if (Math.abs(dayStrip.scrollLeft - target) > 2) {
-        dayStrip.scrollTo({ left: target, behavior: scrollBehavior() });
-    }
-    applyDayScroll(currentDay);
-});
-
-// Initial positioning on (re)load: jump to currentDay instantly, then position.
-$effect(() => {
-    if (!dayStrip || !pendingInitialScroll) return;
-    pendingInitialScroll = false;
     const day = currentDay;
-    const target = dayOffsetLeft(day);
-    if (target !== null && Math.abs(dayStrip.scrollLeft - target) > 2) {
-        dayStrip.scrollTo({ left: target, behavior: "auto" });
-    }
-    requestAnimationFrame(() => applyDayScroll(day, "auto"));
+    const panel = panelEl;
+    if (!panel) return;
+    requestAnimationFrame(() => positionPanel(day, panel));
 });
 </script>
 
 <div class="flex flex-col h-full">
-    <!-- Horizontal scroll-snap pager: the trip overview (panel 0), then one
-         full-width panel per day. Each panel is full-height and scrolls
-         vertically on its own, so paging never reflows and stays smooth. -->
-    <div
-        bind:this={dayStrip}
-        onscroll={handleStripScroll}
-        class="flex flex-1 min-h-0 overflow-x-auto overflow-y-hidden overscroll-x-contain snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-    >
-        <section class="snap-start snap-always shrink-0 w-full h-full overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <div class="max-w-3xl mx-auto w-full p-5">
-                <TripOverview
-                    {trip}
-                    {days}
-                    {countdownText}
-                    {profiles}
-                    weatherFor={weatherForDay}
-                    onSelectDay={day => (currentDay = day)}
-                    {onSwitchProfile}
-                    {onCreateProfile}
-                    {onDeleteProfile}
-                    {onShare}
-                    {onOpenSettings}
-                />
-            </div>
-        </section>
-        {#each days as day (day.day)}
-            <!-- snap-always: scroll-snap-stop forces one panel per swipe (no momentum skipping) -->
-            <section class="snap-start snap-always shrink-0 w-full h-full overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <!-- Day switcher header: chips drive the same `currentDay` as the pager below. -->
+    <header class="shrink-0 z-[100] bg-[#0d0e15]/85 backdrop-blur-xl border-b border-white/5 pt-[calc(12px+var(--safe-top))] px-5">
+        <div class="max-w-3xl mx-auto w-full">
+            <DaySwitcher days={days.map(d => ({ day: d.day, date: formatDayDate(d.date) }))} {currentDay} onSelect={goToDay} {todayDay} />
+        </div>
+    </header>
+
+    <!-- Pager viewport: one panel at a time, slid in/out on day change. -->
+    <!-- svelte-ignore a11y_no_static_element_interactions (touch handlers only
+         observe a horizontal flick to page; they never block scrolling) -->
+    <div bind:this={pager} class="relative flex-1 min-h-0 overflow-hidden">
+        {#key currentDay}
+            <section
+                bind:this={panelEl}
+                ontouchstart={onTouchStart}
+                ontouchend={onTouchEnd}
+                in:fly={{ x: dir * PAGE_SHIFT, duration: reduceMotion ? 0 : PAGE_MS }}
+                class="absolute inset-0 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
                 <div class="max-w-3xl mx-auto w-full p-5">
-                    <Timeline
-                        dayData={day}
-                        hotels={trip.hotels}
-                        mapProvider={trip.mapProvider}
-                        weather={weatherForDay(day)}
-                        now={clockNow}
-                        {onEnlarge}
-                        {onSetEventStatus}
-                        onShareDay={() => onShareDay(day)}
-                        onCopy={onCopy}
-                    />
-                    {#if showWeatherAttribution}
-                        <p class="text-center text-[10px] text-text-muted mt-4">
-                            天氣資料：<a
-                                href="https://open-meteo.com/"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="underline hover:text-text-secondary transition"
-                            >Open-Meteo.com</a> (CC BY 4.0){#if staleWeatherHours !== null}（{staleWeatherHours} 小時前）{/if}
-                        </p>
+                    {#if currentDay === 0}
+                        <TripOverview
+                            {trip}
+                            {days}
+                            {countdownText}
+                            {profiles}
+                            weatherFor={weatherForDay}
+                            onSelectDay={goToDay}
+                            {onSwitchProfile}
+                            {onCreateProfile}
+                            {onDeleteProfile}
+                            {onShare}
+                            {onOpenSettings}
+                        />
+                    {:else if currentDayData}
+                        <Timeline
+                            dayData={currentDayData}
+                            hotels={trip.hotels}
+                            mapProvider={trip.mapProvider}
+                            weather={weatherForDay(currentDayData)}
+                            now={clockNow}
+                            {onEnlarge}
+                            {onSetEventStatus}
+                            onShareDay={() => onShareDay(currentDayData)}
+                            onCopy={onCopy}
+                        />
+                        {#if showWeatherAttribution}
+                            <p class="text-center text-[10px] text-text-muted mt-4">
+                                天氣資料：<a
+                                    href="https://open-meteo.com/"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="underline hover:text-text-secondary transition"
+                                >Open-Meteo.com</a> (CC BY 4.0){#if staleWeatherHours !== null}（{staleWeatherHours} 小時前）{/if}
+                            </p>
+                        {/if}
                     {/if}
                 </div>
             </section>
-        {/each}
+        {/key}
     </div>
 </div>

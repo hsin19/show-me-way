@@ -33,7 +33,6 @@ import {
     validateYaml,
 } from "./lib/api";
 import Checklist from "./lib/components/Checklist.svelte";
-import DaySwitcher from "./lib/components/DaySwitcher.svelte";
 import EnlargedCardOverlay from "./lib/components/EnlargedCardOverlay.svelte";
 import ItineraryStrip from "./lib/components/ItineraryStrip.svelte";
 import Ledger from "./lib/components/Ledger.svelte";
@@ -53,10 +52,6 @@ import {
 import type { ToastInput } from "./lib/toast";
 import {
     buildDayReport,
-    formatDayDate,
-    formatNextEventLabel,
-    getCountdownText,
-    getNextEventInfo,
     getTodayIsoString,
     toLocalIsoDate,
 } from "./lib/utils";
@@ -78,16 +73,6 @@ let loadError = $state<string | null>(null);
 // sync). Named to stay distinct from the perf-time `now` locals in the scroll
 // handlers — the two timebases must never mix.
 let clockNow = $state(new Date());
-// The day whose date is the local today — drives the overview capsule, the
-// DaySwitcher 今天 marker, and rolls over automatically with the clock tick.
-let todayData = $derived(tripData?.days.find(d => d.date === toLocalIsoDate(clockNow)) ?? null);
-let nextEvent = $derived(todayData ? getNextEventInfo(todayData.timeline, todayData.date, clockNow) : null);
-// Overview-panel capsule: during the trip surface today's next / in-progress
-// event; otherwise fall back to the countdown / trip-state label.
-let countdownText = $derived.by(() => {
-    if (nextEvent) return formatNextEventLabel(nextEvent);
-    return tripData ? getCountdownText(tripData.trip, clockNow) : "計算中…";
-});
 
 $effect(() => {
     const timer = window.setInterval(() => (clockNow = new Date()), 60000);
@@ -212,8 +197,8 @@ function handleVisibilityChange() {
     checkForSwUpdate();
     if (tripData) {
         refreshTripWeather(tripData);
-        // Cross-midnight resume: hop to the new today. The strip realigns via
-        // the existing sync effect, whose settle then drives applyDayScroll.
+        // Cross-midnight resume: hop to the new today (ItineraryStrip repositions
+        // to it as a pure reaction to currentDay changing).
         if (getTodayIsoString() !== lastSyncedDate) syncToToday(tripData);
     }
 }
@@ -247,10 +232,6 @@ let staleWeatherHours = $derived.by(() => {
     const age = clockNow.getTime() - oldest;
     return age >= STALE_WEATHER_MS ? Math.floor(age / (1000 * 60 * 60)) : null;
 });
-
-// One-shot flag armed on (re)load; ItineraryStrip consumes it to position the
-// strip once mounted.
-let pendingInitialScroll = $state(false);
 
 onMount(async () => {
     // 0. If opened via a share link, offer to import it before loading.
@@ -326,7 +307,6 @@ async function loadTripData() {
         if (migrated) persistTripData();
 
         syncToToday(data);
-        pendingInitialScroll = true;
     } catch (err) {
         console.error("Failed to load trip data:", err);
         loadError = "無法載入或解析行程資料。請開啟設定確認 YAML 語法。";
@@ -714,18 +694,7 @@ function handleToastAction() {
      are flow children and the content area between them owns its own scroll
      (each itinerary day panel scrolls independently). -->
 <div class="flex flex-col h-dvh overflow-hidden bg-bg-main text-text-primary animate-fade-in">
-    <!-- App Header: just the day switcher now — trip name, countdown and the
-         settings entry live on the overview panel (day 0) inside the strip. -->
-    {#if tripData && activeTab === "itinerary"}
-        <header class="shrink-0 z-[100] bg-[#0d0e15]/85 backdrop-blur-xl border-b border-white/5 pt-[calc(12px+var(--safe-top))] px-5">
-            <div class="max-w-3xl mx-auto w-full">
-                <!-- Day Switcher component (Formats ISO dates to MM/DD(W) dynamically) -->
-                <DaySwitcher days={tripData.days.map(d => ({ day: d.day, date: formatDayDate(d.date) }))} bind:currentDay todayDay={todayData?.day ?? null} />
-            </div>
-        </header>
-    {/if}
-
-    <!-- Main content area: fills the space between header and nav; each branch
+    <!-- Main content area: fills the shell; each branch
          owns its own scroll. The itinerary strip scrolls per-day internally; the
          other tabs scroll as a whole. -->
     <main class="flex-1 min-h-0 w-full">
@@ -756,9 +725,7 @@ function handleToastAction() {
                         trip={tripData.trip}
                         days={tripData.days}
                         bind:currentDay
-                        bind:pendingInitialScroll
                         {clockNow}
-                        {countdownText}
                         {profiles}
                         {showWeatherAttribution}
                         {staleWeatherHours}

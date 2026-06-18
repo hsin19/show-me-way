@@ -8,13 +8,15 @@ interface DayInfo {
 
 interface Props {
     days: DayInfo[];
-    /** Selected day number; 0 selects the trip-overview panel. */
+    /** Selected day number (read-only for highlighting); 0 is the trip-overview panel. */
     currentDay: number;
+    /** Tap a chip to navigate; the parent (ItineraryStrip) moves the strip and updates currentDay. */
+    onSelect: (day: number) => void;
     /** Day number whose date is today (shows the 今天 marker); null outside the trip. */
     todayDay?: number | null;
 }
 
-let { days, currentDay = $bindable(), todayDay = null }: Props = $props();
+let { days, currentDay, onSelect, todayDay = null }: Props = $props();
 
 let scroller = $state<HTMLDivElement>();
 
@@ -54,7 +56,7 @@ $effect(() => {
                     ? 'bg-gradient-to-br from-neon-blue/15 to-neon-pink/10 border-neon-blue shadow-[0_0_15px_rgba(0,240,255,0.25)]'
                     : 'bg-white/3 border-card-border hover:bg-white/5'}
                 "
-                onclick={() => (currentDay = 0)}
+                onclick={() => onSelect(0)}
             >
                 <Plane size={15} class={currentDay === 0 ? "text-neon-blue" : "text-text-muted"} aria-hidden="true" />
                 <span class="text-[11px] font-bold mt-1 {currentDay === 0 ? 'text-text-primary' : 'text-text-secondary'}">總覽</span>
@@ -71,7 +73,7 @@ $effect(() => {
                         : 'bg-white/3 border-card-border hover:bg-white/5'}
                     "
                     aria-current={todayDay === day ? "date" : undefined}
-                    onclick={() => (currentDay = day)}
+                    onclick={() => onSelect(day)}
                 >
                     {#if todayDay === day}
                         <span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-neon-pink shadow-[0_0_6px_rgba(255,42,116,0.8)]" aria-hidden="true"></span>
