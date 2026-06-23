@@ -8,6 +8,7 @@ import ListChecks from "@lucide/svelte/icons/list-checks";
 import ListTodo from "@lucide/svelte/icons/list-todo";
 import Loader2 from "@lucide/svelte/icons/loader-2";
 import Luggage from "@lucide/svelte/icons/luggage";
+import Sparkles from "@lucide/svelte/icons/sparkles";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import Wallet from "@lucide/svelte/icons/wallet";
 import { onMount } from "svelte";
@@ -32,6 +33,7 @@ import {
     USER_YAML_KEY,
     validateYaml,
 } from "./lib/api";
+import ChatPanel from "./lib/components/ChatPanel.svelte";
 import Checklist from "./lib/components/Checklist.svelte";
 import EnlargedCardOverlay from "./lib/components/EnlargedCardOverlay.svelte";
 import ItineraryStrip from "./lib/components/ItineraryStrip.svelte";
@@ -69,7 +71,7 @@ import {
 // App State using Svelte 5 Runes
 let tripData = $state<TripData | null>(null);
 let currentDay = $state(1);
-let activeTab = $state("itinerary"); // itinerary | todo | taxi | calc
+let activeTab = $state("itinerary"); // itinerary | todo | taxi | calc | ai
 let isLoading = $state(true);
 let loadError = $state<string | null>(null);
 
@@ -682,6 +684,8 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
                         onOpenSettings={() => (showSettings = true)}
                     />
                 {/if}
+            {:else if activeTab === "ai"}
+                <ChatPanel {tripData} />
             {:else}
                 <div class="h-full overflow-y-auto overscroll-contain">
                     <div class="max-w-3xl mx-auto w-full p-5 pt-[calc(20px+var(--safe-top))] animate-fade-in">
@@ -776,6 +780,13 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
             >
                 <DollarSign size={20} class={activeTab === "calc" ? "stroke-neon-blue filter drop-shadow-[0_0_4px_rgba(0,240,255,0.4)]" : ""} />
                 <span class="text-[10px] font-semibold mt-1">記帳</span>
+            </button>
+            <button
+                onclick={() => (activeTab = "ai")}
+                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'ai' ? 'text-neon-blue' : ''}"
+            >
+                <Sparkles size={20} class={activeTab === "ai" ? "stroke-neon-blue filter drop-shadow-[0_0_4px_rgba(0,240,255,0.4)]" : ""} />
+                <span class="text-[10px] font-semibold mt-1">AI</span>
             </button>
         </div>
     </nav>
