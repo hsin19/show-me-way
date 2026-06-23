@@ -11,6 +11,7 @@ import {
     foreignToTwd,
     getCurrencyConfig,
     ledgerTypeLabel,
+    parseLegacyExpenses,
     roundQuickAmount,
     twdToForeign,
 } from "./ledger";
@@ -239,5 +240,40 @@ describe("ledgerTypeLabel", () => {
         expect(ledgerTypeLabel("Deposit-WOWPASS")).toBe("WOWPASS 加值");
         expect(ledgerTypeLabel("Suica")).toBe("Suica 支付");
         expect(ledgerTypeLabel("")).toBe("");
+    });
+});
+
+describe("parseLegacyExpenses", () => {
+    const TODAY = "2026-06-18";
+    let n = 0;
+    const makeId = () => `id-${n++}`;
+
+    it("coerces well-formed legacy records and assigns ids", () => {
+        const out = parseLegacyExpenses(
+            [{ name: "拉麵", amount: 980, type: "Cash", date: "2026-06-11" }],
+            TODAY,
+            () => "fixed",
+        );
+        expect(out).toEqual([{ name: "拉麵", amount: 980, type: "Cash", date: "2026-06-11", _id: "fixed" }]);
+    });
+
+    it("returns [] for a non-array (corrupt or absent payload)", () => {
+        expect(parseLegacyExpenses(null, TODAY, makeId)).toEqual([]);
+        expect(parseLegacyExpenses({ not: "an array" }, TODAY, makeId)).toEqual([]);
+        expect(parseLegacyExpenses("[]", TODAY, makeId)).toEqual([]);
+    });
+
+    it("skips non-object entries but keeps valid ones", () => {
+        const out = parseLegacyExpenses([null, 42, { amount: 5 }], TODAY, () => "x");
+        expect(out).toEqual([{ name: "", amount: 5, type: "Cash", date: TODAY, _id: "x" }]);
+    });
+
+    it("falls back per field when the stored shape is wrong", () => {
+        const out = parseLegacyExpenses(
+            [{ name: 123, amount: "lots", type: 9, date: 0 }],
+            TODAY,
+            () => "x",
+        );
+        expect(out).toEqual([{ name: "", amount: 0, type: "Cash", date: TODAY, _id: "x" }]);
     });
 });

@@ -310,3 +310,15 @@ export function mapDirections(query: string, provider?: string): string {
     if (provider === "naver") return mapSearch(query, provider);
     return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}&travelmode=transit`;
 }
+
+/**
+ * Return a new array with `item` reinserted at `index`, clamped to the current
+ * bounds. Used by the delete-undo handlers: the list may have changed between
+ * the delete and the undo (another item removed), so a stale index must never
+ * land out of range or throw. A negative index clamps to the front.
+ */
+export function insertAtClamped<T>(arr: T[], index: number, item: T): T[] {
+    const next = [...arr];
+    next.splice(Math.min(Math.max(index, 0), next.length), 0, item);
+    return next;
+}

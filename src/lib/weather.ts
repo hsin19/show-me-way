@@ -3,6 +3,13 @@
 // Mirrors the exchange-rate pattern in `lib/exchange.ts`: localStorage cache,
 // serve stale data first, refresh in the background, never surface errors.
 
+import {
+    clearStorageCacheMemory,
+    isFresh,
+    readCachedJson,
+    writeCachedJson,
+} from "./storage-cache";
+
 export interface DailyWeather {
     /** WMO weather interpretation code — see `weatherCodeInfo`. */
     code: number;
@@ -26,14 +33,11 @@ const GEOCODE_MISS_TTL = FORECAST_TTL;
 // visibilitychange retries, while a full reload retries once per app load.
 const GEOCODE_MISSES = new Map<string, number>();
 const inFlightForecasts = new Map<string, Promise<DailyWeatherByDate | null>>();
-// Mirror of localStorage so a failed write (quota, private mode) degrades to
-// per-session caching instead of refetching on every foreground return.
-const memCache = new Map<string, unknown>();
 
 export function resetWeatherCacheForTests(): void {
     GEOCODE_MISSES.clear();
     inFlightForecasts.clear();
-    memCache.clear();
+    clearStorageCacheMemory();
 }
 
 interface GeoPoint {
@@ -75,38 +79,6 @@ function isValidForecastCacheEntry(value: unknown): value is ForecastCacheEntry 
         && !Array.isArray(entry.byDate);
 }
 
-function readJson<T>(key: string, isValid: (value: unknown) => value is T): T | null {
-    if (memCache.has(key)) {
-        const mirrored = memCache.get(key);
-        if (isValid(mirrored)) return mirrored;
-        memCache.delete(key);
-    }
-    const cached = localStorage.getItem(key);
-    if (!cached) return null;
-    try {
-        const parsed: unknown = JSON.parse(cached);
-        if (isValid(parsed)) {
-            memCache.set(key, parsed);
-            return parsed;
-        }
-    } catch (e) {
-        console.warn("Failed to parse cached weather data", e);
-    }
-    // A successful fetch is the only other write path, so drop bad entries here
-    // or they would shadow the cache forever.
-    localStorage.removeItem(key);
-    return null;
-}
-
-function writeJson(key: string, value: unknown): void {
-    memCache.set(key, value);
-    try {
-        localStorage.setItem(key, JSON.stringify(value));
-    } catch (e) {
-        console.warn("Failed to cache weather data", e);
-    }
-}
-
 // A ", XX" ISO country suffix ("Springfield, US") disambiguates common names
 // via the API's countryCode filter — exact-match heuristics proved unreliable.
 function parseCityQuery(city: string): { name: string; countryCode: string | null; } {
@@ -125,10 +97,9 @@ async function geocodeCity(city: string): Promise<GeoPoint | null> {
     const key = `${GEOCODE_CACHE_KEY}_${cityKey(city)}`;
     // Pre-v1 entries ({lat, lon}, no TTL) are unreadable now — clear, don't migrate.
     localStorage.removeItem(`showmeway_geocode_${cityKey(city)}`);
-    const cached = readJson(key, isValidGeocodeEntry);
+    const cached = readCachedJson(key, isValidGeocodeEntry);
     const now = Date.now();
-    // A future cachedAt (clock rollback) would otherwise never expire by TTL.
-    if (cached && cached.cachedAt <= now && now - cached.cachedAt < GEOCODE_TTL) {
+    if (cached && isFresh(cached.cachedAt, GEOCODE_TTL, now)) {
         console.info(`Weather location for "${city}": ${cached.name}, ${cached.country_code}`);
         return { lat: cached.lat, lon: cached.lon };
     }
@@ -161,7 +132,7 @@ async function geocodeCity(city: string): Promise<GeoPoint | null> {
             country_code: top.country_code ?? "",
             cachedAt: Date.now(),
         };
-        writeJson(key, entry);
+        writeCachedJson(key, entry);
         console.info(`Weather location for "${city}": ${entry.name}, ${entry.country_code}`);
         return { lat: entry.lat, lon: entry.lon };
     } catch (error) {
@@ -218,7 +189,7 @@ async function fetchForecast(city: string): Promise<DailyWeatherByDate | null> {
         // don't clobber the offline-fallback cache or the displayed forecast.
         if (Object.keys(byDate).length === 0) return null;
 
-        writeJson(
+        writeCachedJson(
             `${FORECAST_CACHE_KEY}_${cityKey(city)}`,
             { timestamp: Date.now(), byDate } satisfies ForecastCacheEntry,
         );
@@ -240,12 +211,10 @@ export function loadDailyWeather(
     onUpdate: (byDate: DailyWeatherByDate, fetchedAt: number) => void,
 ): void {
     const key = cityKey(city);
-    const cached = readJson(`${FORECAST_CACHE_KEY}_${key}`, isValidForecastCacheEntry);
+    const cached = readCachedJson(`${FORECAST_CACHE_KEY}_${key}`, isValidForecastCacheEntry);
     if (cached) onUpdate(cached.byDate, cached.timestamp);
 
-    // A future timestamp (left behind by a clock rollback) would never expire by TTL.
-    const now = Date.now();
-    const stale = !cached || cached.timestamp > now || now - cached.timestamp >= FORECAST_TTL;
+    const stale = !cached || !isFresh(cached.timestamp, FORECAST_TTL, Date.now());
     if (!stale) return;
 
     // Overlapping stale loads (visibilitychange bursts) share one request.

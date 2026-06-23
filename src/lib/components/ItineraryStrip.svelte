@@ -33,7 +33,6 @@ interface Props {
     onEnlarge: (card: EnlargedCard) => void;
     onSetEventStatus: (id: string, status: "done" | "skipped" | undefined) => void;
     onShareDay: (day: DayItinerary) => void;
-    onCopy: (text: string, msg: string) => void;
     onSwitchProfile: (id: string) => void;
     onCreateProfile: () => void;
     onDeleteProfile: (id: string, name: string) => void;
@@ -53,7 +52,6 @@ let {
     onEnlarge,
     onSetEventStatus,
     onShareDay,
-    onCopy,
     onSwitchProfile,
     onCreateProfile,
     onDeleteProfile,
@@ -228,7 +226,6 @@ $effect(() => {
                             {onEnlarge}
                             {onSetEventStatus}
                             onShareDay={() => onShareDay(currentDayData)}
-                            onCopy={onCopy}
                         />
                         {#if showWeatherAttribution}
                             <p class="text-center text-[10px] text-text-muted mt-4">

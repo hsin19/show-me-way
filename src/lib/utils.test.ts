@@ -13,6 +13,7 @@ import {
     getCountdownText,
     getNextEventInfo,
     getTodayIsoString,
+    insertAtClamped,
     isCheckoutDay,
     isOvernightStay,
     mapDirections,
@@ -435,5 +436,26 @@ describe("mapDirections", () => {
         const googlePrefix = "https://www.google.com/maps/dir/?api=1&destination=";
         expect(mapDirections("x")).toBe(`${googlePrefix}x&travelmode=transit`);
         expect(mapDirections("x", "kakao")).toBe(`${googlePrefix}x&travelmode=transit`);
+    });
+});
+
+describe("insertAtClamped", () => {
+    it("reinserts at the original index without mutating the input", () => {
+        const arr = ["a", "c"];
+        const out = insertAtClamped(arr, 1, "b");
+        expect(out).toEqual(["a", "b", "c"]);
+        expect(arr).toEqual(["a", "c"]); // input untouched
+    });
+
+    it("clamps a stale index past the end to the back", () => {
+        expect(insertAtClamped(["a"], 5, "z")).toEqual(["a", "z"]);
+    });
+
+    it("clamps a negative index to the front", () => {
+        expect(insertAtClamped(["a", "b"], -3, "z")).toEqual(["z", "a", "b"]);
+    });
+
+    it("inserts into an empty array", () => {
+        expect(insertAtClamped([], 2, "only")).toEqual(["only"]);
     });
 });

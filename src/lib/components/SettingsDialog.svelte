@@ -21,7 +21,10 @@ import {
     decodeShareToken,
     parseShareToken,
 } from "../share";
-import type { ToastInput } from "../toast";
+import {
+    copyToClipboard,
+    showToast,
+} from "../toast.svelte";
 import {
     formatDayDate,
     toLocalIsoDate,
@@ -32,14 +35,12 @@ interface Props {
     open: boolean;
     /** Reload trip data after a successful save / restore / reset (App's loadTripData). */
     onReload: () => Promise<void>;
-    onToast: (toast: ToastInput) => void;
-    onCopy: (text: string, msg?: string) => void;
     onExportYaml: () => void;
     onExportUrl: () => void;
     onExportCsv: () => void;
 }
 
-let { open = $bindable(), onReload, onToast, onCopy, onExportYaml, onExportUrl, onExportCsv }: Props = $props();
+let { open = $bindable(), onReload, onExportYaml, onExportUrl, onExportCsv }: Props = $props();
 
 let yamlInput = $state("");
 let validationError = $state<string | null>(null);
@@ -111,7 +112,7 @@ async function save() {
         yamlSnapshot = tidied;
         open = false;
         validationError = null;
-        onToast(token ? "已從分享連結載入行程！" : "自訂 YAML 行程儲存成功！");
+        showToast(token ? "已從分享連結載入行程！" : "自訂 YAML 行程儲存成功！");
         await onReload();
     } catch (err) {
         console.error("YAML Validation failed:", err);
@@ -140,7 +141,7 @@ async function restore(savedAt: string) {
     }
     const yaml = getYamlBackup(savedAt);
     if (!yaml) {
-        onToast("找不到此備份");
+        showToast("找不到此備份");
         yamlBackups = listYamlBackups();
         return;
     }
@@ -153,7 +154,7 @@ async function restore(savedAt: string) {
         yamlInput = yaml;
         validationError = err instanceof Error ? err.message : "YAML 格式錯誤，請檢查縮排！";
         yamlBackups = listYamlBackups();
-        onToast("此備份內容無效，已載入編輯器，請修正後再儲存");
+        showToast("此備份內容無效，已載入編輯器，請修正後再儲存");
         return;
     }
     if (!confirm("要以此備份覆蓋目前的行程嗎？")) return;
@@ -161,7 +162,7 @@ async function restore(savedAt: string) {
     localStorage.setItem(USER_YAML_KEY, yaml);
     open = false;
     validationError = null;
-    onToast("已還原備份的行程");
+    showToast("已還原備份的行程");
     await onReload();
 }
 
@@ -177,7 +178,7 @@ async function reset() {
         localStorage.removeItem(USER_YAML_KEY);
         open = false;
         validationError = null;
-        onToast("已恢復為預設行程…");
+        showToast("已恢復為預設行程…");
         await onReload();
     }
 }
@@ -187,13 +188,13 @@ function selectAll() {
     if (textarea) {
         textarea.focus();
         textarea.select();
-        onToast("已全選編輯器內容");
+        showToast("已全選編輯器內容");
     }
 }
 
 function clearEditor() {
     yamlInput = "";
-    onToast("已清空編輯器內容");
+    showToast("已清空編輯器內容");
 }
 </script>
 
@@ -264,7 +265,7 @@ function clearEditor() {
                         </button>
                         <span class="text-[9px] text-white/10 select-none">|</span>
                         <button
-                            onclick={() => onCopy(yamlInput, "已複製編輯器中的 YAML")}
+                            onclick={() => copyToClipboard(yamlInput, "已複製編輯器中的 YAML")}
                             class="text-[11px] min-w-[44px] min-h-[44px] -mt-3 -mb-1.5 pt-1.5 px-1 text-text-secondary hover:text-neon-blue flex items-center justify-center gap-1 cursor-pointer font-medium transition"
                         >
                             <Copy size={12} aria-hidden="true" /> 複製

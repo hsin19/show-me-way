@@ -20,8 +20,6 @@ export interface LanguageConfig {
     label: string;
     /** Prompt shown on the fullscreen "show this to the driver" card. */
     driverPrompt: string;
-    /** Label for the button that copies the hotel address. */
-    copyAddressLabel: string;
     /** The survival phrase deck for this language. */
     phrases: PhraseInfo[];
 }
@@ -30,7 +28,6 @@ export const LANGUAGES: Record<string, LanguageConfig> = {
     ko: {
         label: "韓文",
         driverPrompt: "기사님, 여기로 가주세요 (司機先生，請載我去這)：",
-        copyAddressLabel: "複製韓文地址",
         phrases: [
             // 基本
             { zh: "您好", text: "안녕하세요", rom: "An-nyeong-ha-se-yo", cat: "basic" },
@@ -72,7 +69,6 @@ export const LANGUAGES: Record<string, LanguageConfig> = {
     ja: {
         label: "日文",
         driverPrompt: "運転手さん、ここまでお願いします (司機先生，請載我去這)：",
-        copyAddressLabel: "複製日文地址",
         phrases: [
             // 基本
             { zh: "您好", text: "こんにちは", rom: "Kon-ni-chi-wa", cat: "basic" },
@@ -114,7 +110,6 @@ export const LANGUAGES: Record<string, LanguageConfig> = {
     en: {
         label: "英文",
         driverPrompt: "Please take me to this address (司機先生，請載我去這)：",
-        copyAddressLabel: "複製英文地址",
         phrases: [
             // 基本
             { zh: "您好", text: "Hello", rom: "", cat: "basic" },

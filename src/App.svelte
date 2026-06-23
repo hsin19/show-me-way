@@ -41,6 +41,7 @@ import TaxiHelper from "./lib/components/TaxiHelper.svelte";
 import Toast from "./lib/components/Toast.svelte";
 import UpdatePrompt from "./lib/components/UpdatePrompt.svelte";
 import type { EnlargedCard } from "./lib/enlarge";
+import { parseLegacyExpenses } from "./lib/ledger";
 import { getLanguageConfig } from "./lib/phrases";
 import {
     buildShareUrl,
@@ -49,10 +50,14 @@ import {
     isShareSupported,
     readShareTokenFromHash,
 } from "./lib/share";
-import type { ToastInput } from "./lib/toast";
+import {
+    copyToClipboard,
+    showToast,
+} from "./lib/toast.svelte";
 import {
     buildDayReport,
     getTodayIsoString,
+    insertAtClamped,
     toLocalIsoDate,
 } from "./lib/utils";
 import {
@@ -79,12 +84,6 @@ $effect(() => {
     return () => clearInterval(timer);
 });
 
-// Toast Notification States
-let toastMessage = $state("");
-let toastAction = $state<{ label: string; onAction: () => void; } | null>(null);
-let isToastVisible = $state(false);
-let toastTimer: number;
-
 // PWA update flow: registerType "prompt" keeps the new service worker waiting
 // until the user accepts, so an in-use page is never reloaded under them.
 let needRefresh = $state(false);
@@ -110,7 +109,7 @@ const updateSW = registerSW({
         needRefresh = true;
     },
     onOfflineReady() {
-        triggerToast("已可離線使用");
+        showToast("已可離線使用");
     },
     onRegisteredSW(_swUrl, registration) {
         if (!registration) return;
@@ -260,11 +259,11 @@ async function maybeImportSharedItinerary() {
             // first (strip runtime ids, re-add schema line). loadTripData runs
             // right after in onMount, so the imported trip becomes active.
             createProfile(serializeToYaml(parsed));
-            triggerToast("已匯入分享的行程");
+            showToast("已匯入分享的行程");
         }
     } catch (err) {
         console.error("Failed to import shared itinerary:", err);
-        triggerToast("分享連結內容無效，已略過");
+        showToast("分享連結內容無效，已略過");
     } finally {
         clearShareHash();
     }
@@ -323,7 +322,7 @@ function persistTripData() {
         saveTripData(tripData);
     } catch (err) {
         console.error("Failed to persist trip data:", err);
-        triggerToast("儲存失敗，請稍後再試");
+        showToast("儲存失敗，請稍後再試");
     }
 }
 
@@ -365,17 +364,9 @@ function migrateLegacyLedger(data: TripData): boolean {
     if (saved === null) return false;
     try {
         const parsed: unknown = JSON.parse(saved);
-        if (Array.isArray(parsed) && data.expenses.length === 0) {
-            for (const raw of parsed as Array<Partial<Record<"name" | "amount" | "type" | "date", unknown>>>) {
-                if (!raw || typeof raw !== "object") continue;
-                data.expenses.push({
-                    name: typeof raw.name === "string" ? raw.name : "",
-                    amount: typeof raw.amount === "number" ? raw.amount : 0,
-                    type: typeof raw.type === "string" ? raw.type : "Cash",
-                    date: typeof raw.date === "string" ? raw.date : toLocalIsoDate(new Date()),
-                    _id: createExpenseId(),
-                });
-            }
+        // Only fold when the YAML has no expenses yet, so it can't double-import.
+        if (data.expenses.length === 0) {
+            data.expenses.push(...parseLegacyExpenses(parsed, toLocalIsoDate(new Date()), createExpenseId));
         }
     } catch (e) {
         console.error("Failed to migrate legacy ledger:", e);
@@ -411,7 +402,7 @@ function deleteChecklistItem(list: "todo" | "packing", id: string) {
     tripData[list] = tripData[list].filter(i => i._id !== id);
     persistTripData();
     const label = removed.text.length > 10 ? `${removed.text.slice(0, 10)}…` : removed.text;
-    triggerToast({
+    showToast({
         message: `已刪除「${label}」`,
         actionLabel: "復原",
         onAction: () => {
@@ -419,9 +410,7 @@ function deleteChecklistItem(list: "todo" | "packing", id: string) {
             // The list may have changed since the delete (e.g. another item
             // removed) — reinsert the snapshot at its original position,
             // clamped to the current length.
-            const next = [...tripData[list]];
-            next.splice(Math.min(index, next.length), 0, removed);
-            tripData[list] = next;
+            tripData[list] = insertAtClamped(tripData[list], index, removed);
             persistTripData();
         },
     });
@@ -473,16 +462,14 @@ function deleteExpense(id: string) {
     const removed = { ...tripData.expenses[index] };
     tripData.expenses = tripData.expenses.filter(e => e._id !== id);
     persistTripData();
-    triggerToast({
+    showToast({
         message: "紀錄已刪除",
         actionLabel: "復原",
         onAction: () => {
             if (!tripData) return;
             // Reinsert the snapshot at its original position, clamped to the
             // current length (the list may have changed meanwhile).
-            const next = [...tripData.expenses];
-            next.splice(Math.min(index, next.length), 0, removed);
-            tripData.expenses = next;
+            tripData.expenses = insertAtClamped(tripData.expenses, index, removed);
             persistTripData();
         },
     });
@@ -500,7 +487,7 @@ function resetLedger() {
 async function shareCurrentTrip() {
     if (!tripData) return;
     if (!isShareSupported()) {
-        triggerToast("此瀏覽器不支援連結壓縮，無法產生分享連結");
+        showToast("此瀏覽器不支援連結壓縮，無法產生分享連結");
         return;
     }
     try {
@@ -511,7 +498,7 @@ async function shareCurrentTrip() {
         await shareOrCopy({ url }, url, "分享連結已複製！網址較長，可用短網址服務縮短");
     } catch (err) {
         console.error("Failed to build share link:", err);
-        triggerToast("無法產生分享連結，請稍後再試");
+        showToast("無法產生分享連結，請稍後再試");
     }
 }
 
@@ -531,15 +518,15 @@ function exportDateStamp(): string {
 
 function exportTripYaml() {
     if (!tripData) {
-        triggerToast("目前沒有可匯出的行程");
+        showToast("目前沒有可匯出的行程");
         return;
     }
     try {
         downloadTextFile(`show-me-way-行程-${exportDateStamp()}.yaml`, serializeToYaml(tripData), "application/yaml;charset=utf-8");
-        triggerToast("已匯出行程 YAML");
+        showToast("已匯出行程 YAML");
     } catch (err) {
         console.error("Failed to export trip YAML:", err);
-        triggerToast("匯出失敗，請稍後再試");
+        showToast("匯出失敗，請稍後再試");
     }
 }
 
@@ -548,11 +535,11 @@ function exportTripYaml() {
 // strips expenses for sharing with other people.
 async function exportTripUrl() {
     if (!tripData) {
-        triggerToast("目前沒有可匯出的行程");
+        showToast("目前沒有可匯出的行程");
         return;
     }
     if (!isShareSupported()) {
-        triggerToast("此瀏覽器不支援連結壓縮，無法產生連結");
+        showToast("此瀏覽器不支援連結壓縮，無法產生連結");
         return;
     }
     try {
@@ -560,7 +547,7 @@ async function exportTripUrl() {
         await shareOrCopy({ url }, url, "已複製跨裝置連結（含記帳），在另一台裝置貼上即可");
     } catch (err) {
         console.error("Failed to build transfer link:", err);
-        triggerToast("無法產生連結，請稍後再試");
+        showToast("無法產生連結，請稍後再試");
     }
 }
 
@@ -568,14 +555,14 @@ function exportLedgerCsv() {
     try {
         const csv = buildLedgerCsv(tripData?.expenses ?? []);
         if (csv === null) {
-            triggerToast("尚無記帳紀錄可匯出");
+            showToast("尚無記帳紀錄可匯出");
             return;
         }
         downloadTextFile(`show-me-way-記帳-${exportDateStamp()}.csv`, csv, "text/csv;charset=utf-8");
-        triggerToast("已匯出記帳 CSV");
+        showToast("已匯出記帳 CSV");
     } catch (err) {
         console.error("Failed to export ledger CSV:", err);
-        triggerToast("匯出失敗，請稍後再試");
+        showToast("匯出失敗，請稍後再試");
     }
 }
 
@@ -590,7 +577,7 @@ async function handleCreateProfile() {
         yaml = await fetchDefaultYamlText();
     } catch (err) {
         console.error("Failed to prepare new profile:", err);
-        triggerToast("無法建立新行程，請稍後再試");
+        showToast("無法建立新行程，請稍後再試");
         return;
     }
     // Park the current trip, start the new one from the default template, then
@@ -598,7 +585,7 @@ async function handleCreateProfile() {
     saveTripData(tripData);
     createProfile(yaml);
     await loadTripData();
-    triggerToast("已建立新行程，請填入行程內容");
+    showToast("已建立新行程，請填入行程內容");
     showSettings = true;
 }
 
@@ -609,11 +596,11 @@ async function handleSwitchProfile(id: string) {
         switchToProfile(id);
     } catch (err) {
         console.error("Failed to switch profile:", err);
-        triggerToast("找不到該行程");
+        showToast("找不到該行程");
         profiles = listProfiles();
         return;
     }
-    triggerToast("已切換行程");
+    showToast("已切換行程");
     await loadTripData();
 }
 
@@ -621,27 +608,7 @@ function handleDeleteProfile(id: string, name: string) {
     if (!confirm(`要刪除行程「${name}」嗎？此動作無法復原。`)) return;
     deleteProfile(id);
     profiles = listProfiles();
-    triggerToast("已刪除行程");
-}
-
-// Global Clipboard Copy
-function handleCopy(text: string, successMsg = "已複製") {
-    navigator.clipboard.writeText(text).then(() => {
-        triggerToast(successMsg);
-    }).catch(() => {
-        const textarea = document.createElement("textarea");
-        textarea.value = text;
-        textarea.style.position = "fixed";
-        document.body.appendChild(textarea);
-        textarea.select();
-        try {
-            document.execCommand("copy");
-            triggerToast(successMsg);
-        } catch {
-            triggerToast("複製失敗，請手動複製");
-        }
-        document.body.removeChild(textarea);
-    });
+    showToast("已刪除行程");
 }
 
 // Share via the native share sheet when available, otherwise fall back to the
@@ -658,32 +625,7 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
             if ((err as DOMException)?.name === "AbortError") return;
         }
     }
-    handleCopy(copyText, copyMsg);
-}
-
-// Trigger Toast Notification: a plain message, or an action variant
-// ({ message, actionLabel, onAction }) used for undo — that one stays up
-// longer so the button can actually be reached.
-function triggerToast(toast: ToastInput) {
-    const opts = typeof toast === "string" ? { message: toast } : toast;
-    toastMessage = opts.message;
-    toastAction = opts.actionLabel && opts.onAction
-        ? { label: opts.actionLabel, onAction: opts.onAction }
-        : null;
-    isToastVisible = true;
-    // Back-to-back toasts must restart the clock, or the first timer would
-    // hide the second toast early and cut an undo window short.
-    clearTimeout(toastTimer);
-    toastTimer = window.setTimeout(() => {
-        isToastVisible = false;
-    }, toastAction ? 4500 : 2500);
-}
-
-function handleToastAction() {
-    const action = toastAction?.onAction;
-    clearTimeout(toastTimer);
-    isToastVisible = false;
-    action?.();
+    copyToClipboard(copyText, copyMsg);
 }
 </script>
 
@@ -733,7 +675,6 @@ function handleToastAction() {
                         onEnlarge={card => (enlargedCard = card)}
                         onSetEventStatus={setEventStatus}
                         onShareDay={shareDayReport}
-                        onCopy={handleCopy}
                         onSwitchProfile={handleSwitchProfile}
                         onCreateProfile={handleCreateProfile}
                         onDeleteProfile={handleDeleteProfile}
@@ -778,8 +719,7 @@ function handleToastAction() {
                                 hotels={tripData.trip.hotels}
                                 phrases={langConfig.phrases}
                                 driverPrompt={langConfig.driverPrompt}
-                                copyAddressLabel={langConfig.copyAddressLabel}
-                                onCopy={handleCopy}
+                                {clockNow}
                                 onEnlarge={card => (enlargedCard = card)}
                             />
                         {:else if activeTab === "calc"}
@@ -797,7 +737,6 @@ function handleToastAction() {
                                 onAddExpense={addExpense}
                                 onDeleteExpense={deleteExpense}
                                 onReset={resetLedger}
-                                onToast={triggerToast}
                             />
                         {/if}
                     </div>
@@ -841,19 +780,17 @@ function handleToastAction() {
         </div>
     </nav>
 
-    <!-- Global toast, PWA update banner, and the fullscreen enlarged-card
-         overlay — each self-contained; App owns their state and wiring. -->
-    <Toast message={toastMessage} actionLabel={toastAction?.label ?? null} visible={isToastVisible} onAction={handleToastAction} />
+    <!-- Global toast (reads the toast service directly), PWA update banner, and
+         the fullscreen enlarged-card overlay — each self-contained. -->
+    <Toast />
 
     <UpdatePrompt show={needRefresh} onUpdate={() => void updateSW(true)} onDismiss={() => (needRefresh = false)} />
 
-    <EnlargedCardOverlay card={enlargedCard} onClose={() => (enlargedCard = null)} onCopy={handleCopy} />
+    <EnlargedCardOverlay card={enlargedCard} onClose={() => (enlargedCard = null)} />
 
     <SettingsDialog
         bind:open={showSettings}
         onReload={loadTripData}
-        onToast={triggerToast}
-        onCopy={handleCopy}
         onExportYaml={exportTripYaml}
         onExportUrl={exportTripUrl}
         onExportCsv={exportLedgerCsv}

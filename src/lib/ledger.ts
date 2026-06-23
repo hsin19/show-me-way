@@ -120,6 +120,30 @@ export function twdToForeign(twdValue: string, exchangeRate: number): string {
     return Math.round(twd * exchangeRate).toString();
 }
 
+/**
+ * Coerce the raw value parsed from the legacy `ledger_expenses` localStorage key
+ * into validated `ExpenseItem`s (one-time migration into the itinerary YAML).
+ * Non-arrays yield `[]`; non-object entries are skipped; each field falls back
+ * to a safe default rather than trusting the stored shape. `_id` is assigned via
+ * `makeId` and `date` defaults to `today` (local YYYY-MM-DD).
+ */
+export function parseLegacyExpenses(raw: unknown, today: string, makeId: () => string): ExpenseItem[] {
+    if (!Array.isArray(raw)) return [];
+    const out: ExpenseItem[] = [];
+    for (const entry of raw) {
+        if (!entry || typeof entry !== "object") continue;
+        const r = entry as Partial<Record<"name" | "amount" | "type" | "date", unknown>>;
+        out.push({
+            name: typeof r.name === "string" ? r.name : "",
+            amount: typeof r.amount === "number" ? r.amount : 0,
+            type: typeof r.type === "string" ? r.type : "Cash",
+            date: typeof r.date === "string" ? r.date : today,
+            _id: makeId(),
+        });
+    }
+    return out;
+}
+
 // Single source for the zh-TW type label — the history list and the CSV
 // export must never drift apart.
 export function ledgerTypeLabel(type: string): string {

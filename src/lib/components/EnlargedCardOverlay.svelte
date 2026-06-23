@@ -2,16 +2,16 @@
 import X from "@lucide/svelte/icons/x";
 import { fade } from "svelte/transition";
 import type { EnlargedCard } from "../enlarge";
+import { copyToClipboard } from "../toast.svelte";
 import { acquireScreenWakeLock } from "../wakelock";
 
 interface Props {
     /** The card to show, or null when the overlay is closed. */
     card: EnlargedCard | null;
     onClose: () => void;
-    onCopy: (text: string, msg: string) => void;
 }
 
-let { card, onClose, onCopy }: Props = $props();
+let { card, onClose }: Props = $props();
 
 let dialogEl = $state<HTMLDivElement>();
 
@@ -61,7 +61,11 @@ $effect(() => {
         >
             <div class="flex justify-between items-center mb-6">
                 <h3 class="text-sm text-text-secondary">
-                    {data.kind === "confirmation" ? "出示給櫃台人員看（點碼可複製）" : "出示給司機 / 店員看（點字可複製）"}
+                    {#if data.kind === "confirmation"}
+                        出示給櫃台人員看（點碼可複製）
+                    {:else}
+                        {data.prompt ?? "出示給司機 / 店員看（點字可複製）"}
+                    {/if}
                 </h3>
                 <button
                     onclick={onClose}
@@ -77,7 +81,7 @@ $effect(() => {
                 {#if data.kind === "confirmation"}
                     <button
                         type="button"
-                        onclick={() => onCopy(data.code, "已複製確認碼")}
+                        onclick={() => copyToClipboard(data.code, "已複製確認碼")}
                         class="text-neon-blue text-4xl font-black leading-normal tracking-widest block w-full break-all cursor-pointer transition active:scale-[0.98] drop-shadow-[0_0_8px_rgba(0,240,255,0.3)]"
                         title="點一下複製"
                     >
@@ -92,7 +96,7 @@ $effect(() => {
                 {:else}
                     <button
                         type="button"
-                        onclick={() => onCopy(data.localName, "已複製名稱")}
+                        onclick={() => copyToClipboard(data.localName, "已複製名稱")}
                         class="text-white text-2xl font-black leading-normal block w-full break-words cursor-pointer transition active:scale-[0.98]"
                         title="點一下複製"
                     >
@@ -101,7 +105,7 @@ $effect(() => {
                     {#if data.address}
                         <button
                             type="button"
-                            onclick={() => onCopy(data.address ?? "", "已複製地址")}
+                            onclick={() => copyToClipboard(data.address ?? "", "已複製地址")}
                             class="text-neon-blue text-3xl font-black leading-normal block w-full break-words mt-3 cursor-pointer transition active:scale-[0.98] drop-shadow-[0_0_8px_rgba(0,240,255,0.3)]"
                             title="點一下複製"
                         >

@@ -10,6 +10,7 @@ import {
     EXCHANGE_CACHE_TTL as CACHE_TTL,
     type ExchangeRates,
     loadExchangeRates,
+    resetExchangeCacheForTests,
 } from "./exchange";
 const NOW = new Date("2026-06-11T08:00:00Z").getTime();
 const KEY = "showmeway_exchange_rates_usd";
@@ -58,6 +59,7 @@ describe("loadExchangeRates", () => {
     beforeEach(() => {
         vi.useFakeTimers();
         vi.setSystemTime(NOW);
+        resetExchangeCacheForTests();
         storage = createLocalStorageStub();
         vi.stubGlobal("localStorage", storage);
         vi.spyOn(console, "warn").mockImplementation(() => {});

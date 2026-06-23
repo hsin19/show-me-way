@@ -1,3 +1,11 @@
+import {
+    isFresh,
+    readCachedJson,
+    writeCachedJson,
+} from "./storage-cache";
+
+export { clearStorageCacheMemory as resetExchangeCacheForTests } from "./storage-cache";
+
 export interface ExchangeRates {
     date: string;
     [baseCurrency: string]: Record<string, number> | string | undefined;
@@ -30,33 +38,11 @@ function isValidCacheEntry(value: unknown): value is CacheEntry {
 }
 
 function readCache(baseCurrency: string): CacheEntry | null {
-    const key = cacheKeyFor(baseCurrency);
-    const cached = localStorage.getItem(key);
-    if (!cached) return null;
-    try {
-        const parsed: unknown = JSON.parse(cached);
-        if (isValidCacheEntry(parsed)) return parsed;
-    } catch (e) {
-        console.warn("Failed to parse cached exchange rates", e);
-    }
-    // A successful fetch is the only other write path, so drop bad entries here
-    // or they would shadow the cache forever.
-    localStorage.removeItem(key);
-    return null;
+    return readCachedJson(cacheKeyFor(baseCurrency), isValidCacheEntry);
 }
 
-// A failed cache write (quota, private mode) must not discard the fetched data —
-// mirrors weather.ts writeJson. Kept separate from the fetch try so a storage
-// error can't masquerade as a network failure and drop a successful result.
 function writeCache(baseCurrency: string, rates: ExchangeRates): void {
-    try {
-        localStorage.setItem(
-            cacheKeyFor(baseCurrency),
-            JSON.stringify({ timestamp: Date.now(), rates } satisfies CacheEntry),
-        );
-    } catch (e) {
-        console.warn("Failed to cache exchange rates", e);
-    }
+    writeCachedJson(cacheKeyFor(baseCurrency), { timestamp: Date.now(), rates } satisfies CacheEntry);
 }
 
 async function fetchFromNetwork(baseCurrency: string): Promise<ExchangeRates | null> {
@@ -86,9 +72,7 @@ export function loadExchangeRates(
     const cached = readCache(baseCurrency);
     if (cached) onUpdate(cached.rates, { fromCache: true, fetchedAt: cached.timestamp });
 
-    // A future timestamp (left behind by a clock rollback) would never expire by TTL.
-    const now = Date.now();
-    const stale = !cached || cached.timestamp > now || now - cached.timestamp >= EXCHANGE_CACHE_TTL;
+    const stale = !cached || !isFresh(cached.timestamp, EXCHANGE_CACHE_TTL, Date.now());
     if (!stale) return;
 
     void fetchFromNetwork(baseCurrency).then(rates => {

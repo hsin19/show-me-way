@@ -12,12 +12,8 @@ import Navigation from "@lucide/svelte/icons/navigation";
 import Play from "@lucide/svelte/icons/play";
 import Share2 from "@lucide/svelte/icons/share-2";
 import SkipForward from "@lucide/svelte/icons/skip-forward";
-import Ticket from "@lucide/svelte/icons/ticket";
 import Zap from "@lucide/svelte/icons/zap";
-import type {
-    ConfirmationInfo,
-    DayItinerary,
-} from "../api";
+import type { DayItinerary } from "../api";
 import type { HotelInfo } from "../api";
 import type { EnlargedCard } from "../enlarge";
 import {
@@ -29,6 +25,7 @@ import {
     mapSearch,
 } from "../utils";
 import type { DailyWeather } from "../weather";
+import ConfirmationChips from "./ConfirmationChips.svelte";
 import GoogleMapsIcon from "./icons/GoogleMapsIcon.svelte";
 import NaverIcon from "./icons/NaverIcon.svelte";
 import WeatherBadge from "./WeatherBadge.svelte";
@@ -48,11 +45,9 @@ interface Props {
     onSetEventStatus: (id: string, status: "done" | "skipped" | undefined) => void;
     /** Share this day's plain-text 報平安 report (app-level handler: share sheet or clipboard fallback). */
     onShareDay: () => void;
-    /** Copy to the clipboard with toast feedback (app-level handler). */
-    onCopy: (text: string, msg: string) => void;
 }
 
-let { dayData, hotels = [], mapProvider, weather = null, now = null, onEnlarge, onSetEventStatus, onShareDay, onCopy }: Props = $props();
+let { dayData, hotels = [], mapProvider, weather = null, now = null, onEnlarge, onSetEventStatus, onShareDay }: Props = $props();
 
 // Per-event time status for today's panel only — classifyTimelineEvents
 // returns null for any other day, so non-today panels skip all styling.
@@ -146,28 +141,6 @@ let expandedAlts = $state<Record<string, boolean>>({});
             <Maximize2 size={14} aria-hidden="true" />
         </button>
     {/if}
-{/snippet}
-
-<!-- Confirmation-code chip (tap to copy) + enlarge button for counter check-in. -->
-{#snippet confirmationActions(confirmation: ConfirmationInfo, title: string)}
-    <button
-        type="button"
-        onclick={() => onCopy(confirmation.code, "已複製確認碼")}
-        class="inline-flex items-center gap-1.5 min-h-[44px] bg-neon-orange/10 border border-neon-orange/20 text-neon-orange text-[11px] font-bold px-3 py-1.5 rounded-lg transition duration-300 hover:bg-neon-orange hover:text-black hover:shadow-[0_0_15px_rgba(255,123,0,0.25)] cursor-pointer"
-        title="點一下複製確認碼"
-    >
-        <Ticket size={13} class="shrink-0" aria-hidden="true" />
-        {confirmation.code}
-    </button>
-    <button
-        type="button"
-        onclick={() => onEnlarge({ kind: "confirmation", title, code: confirmation.code, name: confirmation.name, note: confirmation.note })}
-        class="min-w-[44px] min-h-[44px] flex items-center justify-center bg-neon-orange/5 border border-neon-orange/15 text-neon-orange/70 rounded-lg transition duration-300 hover:bg-neon-orange hover:text-black hover:shadow-[0_0_15px_rgba(255,123,0,0.25)] cursor-pointer"
-        aria-label="放大顯示確認碼"
-        title="放大出示給櫃台看"
-    >
-        <Maximize2 size={14} aria-hidden="true" />
-    </button>
 {/snippet}
 
 <!-- A single labeled link chip; map URLs get a matching brand icon. -->
@@ -319,7 +292,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
                 {#if event.confirmation || event.localName || event.mapLink || (event.links && event.links.length > 0)}
                     <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-white/5">
                         {#if event.confirmation}
-                            {@render confirmationActions(event.confirmation, event.title)}
+                            <ConfirmationChips confirmation={event.confirmation} title={event.title} {onEnlarge} />
                         {/if}
                         {@render placeActions(event.localName, event.title, undefined, event.mapLink)}
                         {#each event.links ?? [] as link (link.url)}

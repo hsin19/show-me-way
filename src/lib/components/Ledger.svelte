@@ -21,7 +21,7 @@ import {
     ledgerTypeLabel,
     twdToForeign,
 } from "../ledger";
-import type { ToastInput } from "../toast";
+import { showToast } from "../toast.svelte";
 
 interface Props {
     currency?: string;
@@ -32,10 +32,9 @@ interface Props {
     onAddExpense: (name: string, amount: number, type: string) => void;
     onDeleteExpense: (id: string) => void;
     onReset: () => void;
-    onToast: (toast: ToastInput) => void;
 }
 
-let { currency, wallets = [], expenses, onAddWallet, onAddExpense, onDeleteExpense, onReset, onToast }: Props = $props();
+let { currency, wallets = [], expenses, onAddWallet, onAddExpense, onDeleteExpense, onReset }: Props = $props();
 
 // Resolve active currency code, defaulting directly to TWD if not specified
 const activeCurrency = $derived.by(() => {
@@ -187,7 +186,7 @@ function swapCurrency() {
     const temp = foreignValue;
     foreignValue = twdValue;
     twdValue = temp;
-    onToast("已切換數值");
+    showToast("已切換數值");
 }
 
 // Ledger Actions — records are owned by the parent (persisted into the YAML);
@@ -198,20 +197,20 @@ function addExpense() {
     const amount = parseInt(expenseAmount) || 0;
 
     if (!name || amount <= 0) {
-        onToast("請輸入項目與大於 0 的金額");
+        showToast("請輸入項目與大於 0 的金額");
         return;
     }
 
     onAddExpense(name, amount, expenseType);
     expenseName = "";
     expenseAmount = "";
-    onToast("記帳成功");
+    showToast("記帳成功");
 }
 
 function resetBudget() {
     if (confirm("確定要清除所有記帳紀錄與加值金額嗎？")) {
         onReset();
-        onToast("已全部重置");
+        showToast("已全部重置");
     }
 }
 
@@ -219,17 +218,17 @@ function handleAddWallet() {
     const name = newWalletName.trim();
     if (!name) return;
     if (activeWallets.includes(name) || name === "Cash") {
-        onToast("錢包或卡片名稱已存在");
+        showToast("錢包或卡片名稱已存在");
         return;
     }
     if (onAddWallet) {
         onAddWallet(name);
         newWalletName = "";
-        onToast(`已新增錢包：${name}`);
+        showToast(`已新增錢包：${name}`);
         // Auto select the newly added wallet
         expenseType = name;
     } else {
-        onToast("無法在目前行程儲存自訂錢包");
+        showToast("無法在目前行程儲存自訂錢包");
     }
 }
 </script>

@@ -4,81 +4,52 @@ import Calendar from "@lucide/svelte/icons/calendar";
 import Copy from "@lucide/svelte/icons/copy";
 import Maximize2 from "@lucide/svelte/icons/maximize-2";
 import MessageSquareText from "@lucide/svelte/icons/message-square-text";
-import Ticket from "@lucide/svelte/icons/ticket";
-import X from "@lucide/svelte/icons/x";
-import { onMount } from "svelte";
 import type { HotelInfo } from "../api";
-import type { ConfirmationCard } from "../enlarge";
+import type { EnlargedCard } from "../enlarge";
 import type {
     PhraseCategory,
     PhraseInfo,
 } from "../phrases";
+import { copyToClipboard } from "../toast.svelte";
 import {
-    getTodayIsoString,
     isOvernightStay,
+    toLocalIsoDate,
 } from "../utils";
-import { acquireScreenWakeLock } from "../wakelock";
+import ConfirmationChips from "./ConfirmationChips.svelte";
 
 interface Props {
     hotels: HotelInfo[];
     phrases: PhraseInfo[];
     driverPrompt: string;
-    copyAddressLabel: string;
-    onCopy: (text: string, msg: string) => void;
-    /** Show a hotel's confirmation code enlarged; the overlay is a single app-level instance. */
-    onEnlarge: (card: ConfirmationCard) => void;
+    /** App's ticking clock; drives the "current stay" highlight so it rolls over midnight on a long-open tab. */
+    clockNow: Date;
+    /** Enlarge a hotel's confirmation code or address; the overlay is a single app-level instance. */
+    onEnlarge: (card: EnlargedCard) => void;
 }
 
-let { hotels, phrases, driverPrompt, copyAddressLabel, onCopy, onEnlarge }: Props = $props();
+let { hotels, phrases, driverPrompt, clockNow, onEnlarge }: Props = $props();
 
-let showFullscreen = $state(false);
-let selectedHotel = $state<HotelInfo | null>(null);
-let todayStr = $state("");
-
-onMount(() => {
-    todayStr = getTodayIsoString();
-});
+let todayStr = $derived(toLocalIsoDate(clockNow));
 
 // Highlight tonight's hotel. Same overnight semantics as Timeline / the 報平安
 // report (checkout day belongs to the next hotel), so a changeover day never
 // marks both hotels as current.
 function isCurrentStay(hotel: HotelInfo): boolean {
-    if (!todayStr) return false;
     return isOvernightStay(hotel, todayStr);
 }
 
-function openFullscreen(hotel: HotelInfo) {
-    selectedHotel = hotel;
-    showFullscreen = true;
+// Show the address (and local-language name) full-screen for a driver. Reuses
+// the app-level enlarged-card overlay — same wake lock / focus / Escape — via a
+// place card carrying the trip language's localized driver prompt.
+function showAddressForDriver(hotel: HotelInfo) {
+    onEnlarge({
+        kind: "place",
+        title: hotel.name,
+        localName: hotel.localName ?? hotel.name,
+        address: hotel.address,
+        prompt: driverPrompt,
+    });
 }
-
-function closeFullscreen() {
-    showFullscreen = false;
-    selectedHotel = null;
-}
-
-// Keep the screen on while the address is being shown to a driver. The overlay
-// is persistent DOM toggled by opacity, so watch the open state, not mounting.
-// Unsupported browsers (iOS standalone < 18.4) no-op — see lib/wakelock.ts.
-$effect(() => {
-    if (!showFullscreen) return;
-    return acquireScreenWakeLock();
-});
-
-// Move focus into the dialog on open and hand it back to the trigger on
-// close. The dialog itself is inside {#if selectedHotel}, so the closed
-// state never sits in the Tab order.
-let dialogEl = $state<HTMLDivElement>();
-let returnFocus: HTMLElement | null = null;
-$effect(() => {
-    if (showFullscreen) {
-        returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-        dialogEl?.focus();
-    } else {
-        returnFocus?.focus();
-        returnFocus = null;
-    }
-});
 
 // Format YYYY-MM-DD to display MM/DD
 function formatShortDate(dateStr: string): string {
@@ -139,7 +110,7 @@ let filteredPhrases = $derived(
                 </div>
 
                 <button
-                    onclick={() => onCopy(`${hotel.name}\n${hotel.address}`, "已複製飯店地址資訊")}
+                    onclick={() => copyToClipboard(`${hotel.name}\n${hotel.address}`, "已複製飯店地址資訊")}
                     class="min-w-[44px] min-h-[44px] flex items-center justify-center text-text-secondary border border-card-border rounded-lg transition hover:bg-white/5 hover:text-text-primary cursor-pointer flex-shrink-0"
                     aria-label="複製地址"
                     title="複製地址"
@@ -153,31 +124,13 @@ let filteredPhrases = $derived(
             </div>
 
             {#if hotel.confirmation}
-                {@const confirmation = hotel.confirmation}
                 <div class="flex flex-wrap gap-2 my-3">
-                    <button
-                        type="button"
-                        onclick={() => onCopy(confirmation.code, "已複製確認碼")}
-                        class="inline-flex items-center gap-1.5 min-h-[44px] bg-neon-orange/10 border border-neon-orange/20 text-neon-orange text-[11px] font-bold px-3 py-1.5 rounded-lg transition duration-300 hover:bg-neon-orange hover:text-black hover:shadow-[0_0_15px_rgba(255,123,0,0.25)] cursor-pointer"
-                        title="點一下複製確認碼"
-                    >
-                        <Ticket size={13} class="shrink-0" aria-hidden="true" />
-                        {confirmation.code}
-                    </button>
-                    <button
-                        type="button"
-                        onclick={() => onEnlarge({ kind: "confirmation", title: hotel.name, code: confirmation.code, name: confirmation.name, note: confirmation.note })}
-                        class="min-w-[44px] min-h-[44px] flex items-center justify-center bg-neon-orange/5 border border-neon-orange/15 text-neon-orange/70 rounded-lg transition duration-300 hover:bg-neon-orange hover:text-black hover:shadow-[0_0_15px_rgba(255,123,0,0.25)] cursor-pointer"
-                        aria-label="放大顯示確認碼"
-                        title="放大出示給櫃台看"
-                    >
-                        <Maximize2 size={14} aria-hidden="true" />
-                    </button>
+                    <ConfirmationChips confirmation={hotel.confirmation} title={hotel.name} {onEnlarge} />
                 </div>
             {/if}
 
             <button
-                onclick={() => openFullscreen(hotel)}
+                onclick={() => showAddressForDriver(hotel)}
                 class="w-full bg-gradient-to-r from-neon-blue to-neon-purple text-black font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition active:scale-[0.98] cursor-pointer shadow-[0_0_10px_rgba(0,240,255,0.15)]"
             >
                 <Maximize2 size={12} aria-hidden="true" />
@@ -220,7 +173,7 @@ let filteredPhrases = $derived(
             {#each filteredPhrases as p (p.zh + p.text)}
                 <button
                     type="button"
-                    onclick={() => onCopy(p.text, `已複製：${p.text} (${p.zh})`)}
+                    onclick={() => copyToClipboard(p.text, `已複製：${p.text} (${p.zh})`)}
                     class="bg-card-bg border border-card-border rounded-xl p-3.5 flex justify-between items-center w-full text-left cursor-pointer transition duration-200 active:scale-[0.98] hover:bg-white/5 group"
                 >
                     <div class="flex flex-col gap-1">
@@ -236,60 +189,3 @@ let filteredPhrases = $derived(
         </div>
     </div>
 {/if}
-
-<svelte:window onkeydown={(e => e.key === "Escape" && closeFullscreen())} />
-
-<!-- Fullscreen Overlay Modal -->
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div
-    onclick={closeFullscreen}
-    class="
-        fixed inset-0 bg-black/95 z-[1000] flex items-center justify-center p-5 transition-opacity duration-300
-        {showFullscreen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
-    "
->
-    {#if selectedHotel}
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <div
-            bind:this={dialogEl}
-            role="dialog"
-            aria-modal="true"
-            aria-label="全螢幕顯示飯店地址"
-            tabindex="-1"
-            onclick={(e => e.stopPropagation())}
-            class="
-                bg-[#121422] border border-white/8 rounded-3xl w-full max-w-[400px] p-6 shadow-2xl transition-transform duration-300 overscroll-contain
-                {showFullscreen ? 'translate-y-0' : 'translate-y-5'}
-            "
-        >
-            <div class="flex justify-between items-center mb-6">
-                <h3 class="text-sm text-text-secondary">{driverPrompt}</h3>
-                <button
-                    onclick={closeFullscreen}
-                    aria-label="關閉"
-                    class="text-text-secondary hover:text-text-primary text-2xl cursor-pointer"
-                >
-                    <X size={24} aria-hidden="true" />
-                </button>
-            </div>
-
-            <div class="text-2xl font-black leading-normal text-white text-center break-words mb-5 px-2">
-                {selectedHotel.name}<br>
-                <strong class="text-neon-blue text-3xl block mt-2 drop-shadow-[0_0_8px_rgba(0,240,255,0.3)]">
-                    {selectedHotel.address}
-                </strong>
-            </div>
-
-            <button
-                onclick={() => {
-                    onCopy(selectedHotel?.address || "", "已複製地址");
-                    closeFullscreen();
-                }}
-                class="w-full bg-gradient-to-r from-neon-blue to-neon-purple text-black font-bold py-3.5 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer"
-            >
-                {copyAddressLabel}
-            </button>
-        </div>
-    {/if}
-</div>
