@@ -186,16 +186,35 @@ describe("sendChatMessage", () => {
         return { steps: [{ type: "model_output", content: texts.map(t => ({ type: "text", text: t })) }] };
     }
 
+    function functionCall(yaml: string, summary = "改好了") {
+        return { steps: [{ type: "function_call", id: "c1", name: "update_itinerary", arguments: { yaml, summary } }] };
+    }
+
     it("joins text from the model_output step on success", async () => {
         const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(modelOutput("第二天", "去明洞。")) }));
         vi.stubGlobal("fetch", fetchMock);
 
-        const reply = await sendChatMessage("key", "gemini-2.5-flash", [], "第二天去哪？", "trip: {}");
-        expect(reply).toBe("第二天去明洞。");
+        const turn = await sendChatMessage("key", "gemini-2.5-flash", [], "第二天去哪？", "trip: {}");
+        expect(turn.text).toBe("第二天去明洞。");
+        expect(turn.edit).toBeNull();
         expect(fetchMock).toHaveBeenCalledOnce();
     });
 
-    it("posts to the Interactions endpoint with the model and key header, statelessly", async () => {
+    it("returns a proposed edit when the model calls update_itinerary", async () => {
+        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(functionCall("trip: {}", "加了咖啡廳")) })));
+        const turn = await sendChatMessage("key", "gemini-2.5-flash", [], "加咖啡廳", buildContext());
+        expect(turn.edit).toEqual({ yaml: "trip: {}", summary: "加了咖啡廳" });
+        expect(turn.text).toBe("");
+    });
+
+    it("parses function_call arguments given as a JSON string", async () => {
+        const payload = { steps: [{ type: "function_call", name: "update_itinerary", arguments: JSON.stringify({ yaml: "trip: {}", summary: "x" }) }] };
+        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(payload) })));
+        const turn = await sendChatMessage("key", "gemini-2.5-flash", [], "hi", buildContext());
+        expect(turn.edit?.yaml).toBe("trip: {}");
+    });
+
+    it("posts to the Interactions endpoint with the model, key header, and edit tool, statelessly", async () => {
         let capturedUrl = "";
         let capturedInit: { headers: Record<string, string>; body: string; } | undefined;
         const fetchMock = vi.fn((url: string, init: { headers: Record<string, string>; body: string; }) => {
@@ -208,9 +227,15 @@ describe("sendChatMessage", () => {
         await sendChatMessage("my-key", "gemini-2.5-pro", [], "hi", buildContext());
         expect(capturedUrl).toContain("/interactions");
         expect(capturedInit?.headers["x-goog-api-key"]).toBe("my-key");
-        const body = JSON.parse(capturedInit!.body) as { model: string; store: boolean; };
+        const body = JSON.parse(capturedInit!.body) as {
+            model: string;
+            store: boolean;
+            tools: { type: string; name: string; parameters: { required: string[]; }; }[];
+        };
         expect(body.model).toBe("gemini-2.5-pro");
         expect(body.store).toBe(false);
+        expect(body.tools[0].name).toBe("update_itinerary");
+        expect(body.tools[0].parameters.required).toContain("yaml");
     });
 
     it("replays prior history as input steps and appends the new user turn", async () => {

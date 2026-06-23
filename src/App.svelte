@@ -14,6 +14,7 @@ import Wallet from "@lucide/svelte/icons/wallet";
 import { onMount } from "svelte";
 import { registerSW } from "virtual:pwa-register";
 import {
+    backupCurrentYaml,
     buildLedgerCsv,
     createChecklistItemId,
     createExpenseId,
@@ -483,6 +484,29 @@ function resetLedger() {
     persistTripData();
 }
 
+// --- AI conversational edit: apply a full itinerary YAML proposed by the chat ---
+// Validated again here (defense in depth — ChatPanel already validated before
+// offering the apply button) and the pre-edit YAML is snapshotted into the
+// backup ring so the change is undoable from Settings. Updates tripData in
+// place rather than going through loadTripData, so the AI tab (and its
+// in-memory conversation) is never unmounted mid-edit. Returns whether applied.
+function applyAiEdit(yaml: string): boolean {
+    let parsed: TripData;
+    try {
+        parsed = validateYaml(yaml);
+    } catch (err) {
+        console.error("Failed to apply AI edit:", err);
+        showToast("AI 的修改內容無效，已略過");
+        return false;
+    }
+    backupCurrentYaml(); // snapshot the pre-edit YAML before overwriting
+    tripData = parsed;
+    persistTripData();
+    loadTripWeather(parsed);
+    showToast("已套用 AI 修改的行程");
+    return true;
+}
+
 // Generate a self-contained share link from the currently loaded trip and
 // offer it through the native share sheet (clipboard fallback). Triggered from
 // the overview panel, so feedback goes through toasts (no settings modal open).
@@ -685,7 +709,7 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
                     />
                 {/if}
             {:else if activeTab === "ai"}
-                <ChatPanel {tripData} />
+                <ChatPanel {tripData} onApplyEdit={applyAiEdit} />
             {:else}
                 <div class="h-full overflow-y-auto overscroll-contain">
                     <div class="max-w-3xl mx-auto w-full p-5 pt-[calc(20px+var(--safe-top))] animate-fade-in">

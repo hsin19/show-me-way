@@ -77,13 +77,17 @@ export function buildItineraryContext(tripData: TripData): string {
 
 export function buildSystemInstruction(itineraryYaml: string, currentDateTime: string): string {
     return [
-        "你是「ShowMeWay」旅遊行程 App 的 AI 助手。請依據以下使用者的行程資料（YAML 格式）回答問題。",
+        "你是「ShowMeWay」旅遊行程 App 的 AI 助手。請依據以下使用者的行程資料（YAML 格式）協助查詢與編輯行程。",
         `現在時間：${currentDateTime}`,
-        "規則：",
+        "【回答規則】",
         "1. 一律使用繁體中文（台灣用語）回答。",
-        "2. 只根據行程資料作答；若資料中沒有相關內容，請如實說明找不到，不要編造。",
+        "2. 查詢類問題只根據行程資料作答；若資料中沒有相關內容，請如實說明找不到，不要編造。",
         "3. 回答簡潔、口語、重點明確，適合在手機上閱讀。",
         "4. 提到日期或時間時，沿用行程資料中的格式。",
+        "【編輯規則】",
+        "5. 當使用者要求新增、修改或刪除行程內容（例如加景點、改時間、換飯店、加待辦或打包項目）時，呼叫 update_itinerary 工具。",
+        "6. 呼叫時 yaml 參數要傳入「完整」的更新後行程（沿用原本所有欄位與結構，只改動需要變動的部分，其餘原封不動保留，不可省略）；summary 參數用繁體中文一兩句話說明這次的變更。",
+        "7. 僅在確實要修改行程時才呼叫 update_itinerary；單純回答問題時不要呼叫，直接用文字回覆即可。",
         "",
         "=== 行程資料 (YAML) ===",
         itineraryYaml,
@@ -91,25 +95,88 @@ export function buildSystemInstruction(itineraryYaml: string, currentDateTime: s
     ].join("\n");
 }
 
+// The single edit tool. Rather than the model wrapping a YAML block in prose
+// (which we'd have to scrape), it calls this with the full updated itinerary as
+// a structured argument. The call is intercepted client-side — the YAML is
+// validated and shown behind a confirm step — so the model never edits blindly.
+export const UPDATE_ITINERARY_TOOL_NAME = "update_itinerary";
+
+const UPDATE_ITINERARY_TOOL = {
+    type: "function",
+    name: UPDATE_ITINERARY_TOOL_NAME,
+    description: "當使用者要求新增、修改或刪除行程內容（景點、時間、飯店、待辦、打包等）時呼叫，傳入更新後的完整行程 YAML。單純回答問題時不要呼叫。",
+    parameters: {
+        type: "object",
+        properties: {
+            yaml: {
+                type: "string",
+                description: "完整的更新後行程 YAML，沿用原本所有欄位與結構，只改動需要變動的部分，其餘原封不動保留。",
+            },
+            summary: {
+                type: "string",
+                description: "用繁體中文一兩句話說明這次做了哪些變更。",
+            },
+        },
+        required: ["yaml", "summary"],
+    },
+} as const;
+
+/** A full-itinerary edit the model proposed by calling the update_itinerary tool. */
+export interface ProposedEdit {
+    /** The full updated itinerary YAML (not yet validated — the caller validates). */
+    yaml: string;
+    /** zh-TW one-liner describing the change, for the chat bubble. */
+    summary: string;
+}
+
+/** One chat turn's outcome: a text reply and/or a proposed itinerary edit. */
+export interface ChatTurn {
+    /** Conversational reply text; empty when the model only called the edit tool. */
+    text: string;
+    /** Proposed edit when update_itinerary was called, else null. */
+    edit: ProposedEdit | null;
+}
+
 interface InteractionStep {
     type?: string;
+    name?: string;
+    arguments?: unknown;
     content?: { type?: string; text?: string; }[];
 }
 
-// An Interactions response is a list of execution steps (thoughts, tool calls,
-// model output). Pull text from every `model_output` step, ignoring the rest.
-function extractText(payload: unknown): string | null {
-    if (typeof payload !== "object" || payload === null) return null;
+// The Interactions response is a list of execution steps (thoughts, tool calls,
+// model output). Pull the model_output text and any update_itinerary call.
+function extractTurn(payload: unknown): ChatTurn {
+    const empty: ChatTurn = { text: "", edit: null };
+    if (typeof payload !== "object" || payload === null) return empty;
     const steps = (payload as { steps?: unknown; }).steps;
-    if (!Array.isArray(steps)) return null;
-    const text = steps
-        .map(s => s as InteractionStep)
+    if (!Array.isArray(steps)) return empty;
+    const typed = steps.map(s => s as InteractionStep);
+    const text = typed
         .filter(s => s.type === "model_output" && Array.isArray(s.content))
         .flatMap(s => s.content!)
         .map(c => (c.type === "text" && typeof c.text === "string" ? c.text : ""))
         .join("")
         .trim();
-    return text || null;
+    const call = typed.find(s => s.type === "function_call" && s.name === UPDATE_ITINERARY_TOOL_NAME);
+    return { text, edit: call ? parseEditArgs(call.arguments) : null };
+}
+
+// Tool arguments arrive as an object, but tolerate a JSON-string form too.
+function parseEditArgs(args: unknown): ProposedEdit | null {
+    let obj: unknown = args;
+    if (typeof obj === "string") {
+        try {
+            obj = JSON.parse(obj);
+        } catch {
+            return null;
+        }
+    }
+    if (typeof obj !== "object" || obj === null) return null;
+    const yaml = (obj as { yaml?: unknown; }).yaml;
+    const summary = (obj as { summary?: unknown; }).summary;
+    if (typeof yaml !== "string" || !yaml.trim()) return null;
+    return { yaml, summary: typeof summary === "string" ? summary : "" };
 }
 
 async function handleErrorResponse(res: Response): Promise<never> {
@@ -217,10 +284,13 @@ function toInputSteps(history: ChatMessage[], userText: string) {
 }
 
 /**
- * Send one chat turn to Gemini (Interactions API) and return the reply text.
+ * Send one chat turn to Gemini (Interactions API) and return the reply text
+ * plus any proposed itinerary edit (when the model called update_itinerary).
  *
  * `store: false` keeps it stateless — Google retains nothing and we replay the
- * in-memory history each call, matching the chat's "memory only" design. Unlike
+ * in-memory history each call, matching the chat's "memory only" design. The
+ * itinerary YAML is re-sent in the system instruction every turn, so the model
+ * always edits against the current state without replaying tool history. Unlike
  * the fail-silent caches in exchange.ts / weather.ts, this rejects on failure so
  * the calling component can surface the cause inline / via toast.
  */
@@ -230,7 +300,7 @@ export async function sendChatMessage(
     history: ChatMessage[],
     userText: string,
     itineraryYaml: string,
-): Promise<string> {
+): Promise<ChatTurn> {
     const daysOfWeek = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
     const now = new Date();
     const year = now.getFullYear();
@@ -251,6 +321,7 @@ export async function sendChatMessage(
                 store: false,
                 system_instruction: buildSystemInstruction(itineraryYaml, nowStr),
                 input: toInputSteps(history, userText),
+                tools: [UPDATE_ITINERARY_TOOL],
             }),
         });
     } catch (e) {
@@ -263,9 +334,9 @@ export async function sendChatMessage(
     }
 
     const payload: unknown = await res.json();
-    const text = extractText(payload);
-    if (!text) {
+    const turn = extractTurn(payload);
+    if (!turn.text && !turn.edit) {
         throw new Error("Gemini 沒有回覆內容，請換個方式再問一次。");
     }
-    return text;
+    return turn;
 }

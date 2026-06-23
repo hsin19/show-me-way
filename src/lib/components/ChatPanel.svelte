@@ -1,11 +1,16 @@
 <script lang="ts">
+import Check from "@lucide/svelte/icons/check";
 import KeyRound from "@lucide/svelte/icons/key-round";
 import Loader2 from "@lucide/svelte/icons/loader-2";
 import Send from "@lucide/svelte/icons/send";
 import Sparkles from "@lucide/svelte/icons/sparkles";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+import WandSparkles from "@lucide/svelte/icons/wand-sparkles";
 import { tick } from "svelte";
-import type { TripData } from "../api";
+import {
+    type TripData,
+    validateYaml,
+} from "../api";
 import {
     buildItineraryContext,
     type ChatMessage,
@@ -19,15 +24,32 @@ import {
     sendChatMessage,
 } from "../gemini";
 import { showToast } from "../toast.svelte";
+import DiffView from "./DiffView.svelte";
 
 interface Props {
     tripData: TripData;
+    /** Apply a full itinerary YAML the chat proposed; returns whether it took. */
+    onApplyEdit: (yaml: string) => boolean;
 }
 
-let { tripData }: Props = $props();
+let { tripData, onApplyEdit }: Props = $props();
+
+// A chat message plus the UI-only edit state for conversational edits. `content`
+// is the text replayed to Gemini as history (the prose / edit summary, never the
+// raw YAML — the current itinerary is re-sent each turn via the system prompt).
+interface UiMessage extends ChatMessage {
+    /** Validated full itinerary YAML the model proposed via the update_itinerary tool. */
+    editYaml?: string;
+    /** Itinerary YAML at the time the edit was proposed, for a stable before/after diff. */
+    baseYaml?: string;
+    /** Whether the user has already applied this edit. */
+    editApplied?: boolean;
+    /** Validation error when the model's proposed edit was not a valid itinerary. */
+    editError?: string;
+}
 
 // In-memory only (v1): closing the tab keeps state, a page reload clears it.
-let messages = $state<ChatMessage[]>([]);
+let messages = $state<UiMessage[]>([]);
 let input = $state("");
 let isSending = $state(false);
 let errorText = $state<string | null>(null);
@@ -114,10 +136,27 @@ async function send(e: SubmitEvent) {
     isSending = true;
     await scrollToBottom();
 
+    // Snapshot the itinerary the model is editing against, so a proposed edit's
+    // before/after diff stays stable even after it (or another edit) is applied.
+    const baseYaml = buildItineraryContext(tripData);
+
     try {
         const activeModel = model || (models.length > 0 ? models[0].id : "gemini-3.5-flash");
-        const reply = await sendChatMessage(apiKey, activeModel, history, text, buildItineraryContext(tripData));
-        messages = [...messages, { role: "model", content: reply }];
+        const turn = await sendChatMessage(apiKey, activeModel, history, text, baseYaml);
+        // The edit tool's handler: validate the proposed YAML here, then surface
+        // it behind a confirm step. Invalid edits show an inline note instead.
+        const next: UiMessage = { role: "model", content: turn.text || turn.edit?.summary || "" };
+        if (turn.edit) {
+            next.content = turn.text || turn.edit.summary || "我已幫你準備好行程修改，請確認下方的變更。";
+            try {
+                validateYaml(turn.edit.yaml);
+                next.editYaml = turn.edit.yaml;
+                next.baseYaml = baseYaml;
+            } catch (e) {
+                next.editError = e instanceof Error ? e.message : "AI 產生的行程格式有誤。";
+            }
+        }
+        messages = [...messages, next];
     } catch (err) {
         // Keep the user's question in place so they can retry; surface the cause.
         errorText = err instanceof Error ? err.message : "發生未知錯誤，請再試一次。";
@@ -131,6 +170,13 @@ async function scrollToBottom() {
     await tick();
     scrollEl?.scrollTo({ top: scrollEl.scrollHeight, behavior: "smooth" });
 }
+
+// Hand the proposed YAML to App, which validates, backs up, and swaps it in.
+// Mark the card as applied only when it actually took.
+function applyEdit(message: UiMessage) {
+    if (!message.editYaml || message.editApplied) return;
+    if (onApplyEdit(message.editYaml)) message.editApplied = true;
+}
 </script>
 
 <div class="h-full flex flex-col">
@@ -142,7 +188,7 @@ async function scrollToBottom() {
                     <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
                         <Sparkles size={22} class="text-neon-blue" aria-hidden="true" />AI 行程小幫手
                     </h2>
-                    <p class="text-xs text-text-secondary mt-0.5">用自然語言詢問你的行程</p>
+                    <p class="text-xs text-text-secondary mt-0.5">用自然語言查詢或編輯你的行程</p>
                 </div>
                 <form onsubmit={saveKey} class="glass-panel rounded-2xl p-5 space-y-4">
                     <div class="flex items-start gap-2 text-text-secondary">
@@ -214,9 +260,10 @@ async function scrollToBottom() {
                 {#if messages.length === 0}
                     <div class="text-center text-text-muted text-sm py-10">
                         <Sparkles size={28} class="text-neon-purple/60 mx-auto mb-3" aria-hidden="true" />
-                        <p>試著問問看：</p>
+                        <p>試著問問看，或直接用說的編輯行程：</p>
                         <p class="mt-1 text-text-secondary">「第二天的行程是什麼？」</p>
-                        <p class="text-text-secondary">「這趟旅程住哪些飯店？」</p>
+                        <p class="text-text-secondary">「幫我在第三天下午加一個咖啡廳」</p>
+                        <p class="text-text-secondary">「把待辦加上『換日幣』」</p>
                     </div>
                 {/if}
                 {#each messages as message, i (i)}
@@ -232,6 +279,40 @@ async function scrollToBottom() {
                             {message.content}
                         </div>
                     </div>
+                    {#if message.editError}
+                        <!-- The model proposed an edit, but it failed validation. -->
+                        <div class="flex justify-start">
+                            <div class="max-w-[85%] flex items-start gap-1.5 text-xs text-neon-pink bg-neon-pink/10 border border-neon-pink/20 p-2.5 rounded-lg">
+                                <TriangleAlert size={14} class="shrink-0 mt-px" aria-hidden="true" />
+                                <span>AI 產生的行程無效，未套用。{message.editError}</span>
+                            </div>
+                        </div>
+                    {:else if message.editYaml}
+                        <!-- Conversational edit: confirm before changing the itinerary. -->
+                        <div class="flex justify-start">
+                            <div class="max-w-[85%] w-full rounded-2xl border border-neon-purple/30 bg-neon-purple/5 p-3 space-y-2.5">
+                                <div class="flex items-center gap-1.5 text-xs font-semibold text-neon-purple">
+                                    <WandSparkles size={14} aria-hidden="true" />AI 建議修改行程
+                                </div>
+                                <DiffView base={message.baseYaml ?? ""} proposed={message.editYaml} />
+                                {#if message.editApplied}
+                                    <div class="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
+                                        <Check size={14} aria-hidden="true" />已套用變更
+                                    </div>
+                                {:else}
+                                    <button
+                                        onclick={() => applyEdit(message)}
+                                        class="w-full bg-gradient-to-r from-neon-blue to-neon-purple text-black font-bold py-2.5 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer"
+                                    >
+                                        套用變更
+                                    </button>
+                                    <p class="text-[11px] text-text-muted leading-relaxed">
+                                        套用前會自動備份目前行程，可在設定中還原。
+                                    </p>
+                                {/if}
+                            </div>
+                        </div>
+                    {/if}
                 {/each}
                 {#if isSending}
                     <div class="flex justify-start">
@@ -256,7 +337,7 @@ async function scrollToBottom() {
                     bind:value={input}
                     aria-label="輸入問題"
                     autocomplete="off"
-                    placeholder="詢問你的行程…"
+                    placeholder="詢問或用說的編輯行程…"
                     disabled={isSending}
                     class="flex-1 min-w-0 bg-black/40 border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-neon-blue transition disabled:opacity-50"
                 />
