@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # pnpm version comes from package.json's packageManager field
       - name: Install pnpm
@@ -36,7 +36,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Cache dprint plugins
-        uses: actions/cache@v4
+        uses: actions/cache@v5.0.5
         with:
           path: ~/.cache/dprint
           key: dprint-${{ runner.os }}-${{ hashFiles('.dprint.jsonc') }}
