@@ -34,7 +34,7 @@
     "@tailwindcss/vite": "^4.3.0",
     "@tsconfig/svelte": "^5.0.8",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^24.12.3",
+    "@types/node": "^24.13.1",
     "@typescript/native-preview": "7.0.0-dev.20260610.1",
     "@vite-pwa/assets-generator": "^1.0.2",
     "dprint": "^0.54.0",
