@@ -3,9 +3,12 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
+const basePath = process.env.BASE_PATH?.replace(/^\/+|\/+$/g, "");
+const base = basePath ? `/${basePath}/` : "/";
+
 // https://vite.dev/config/
 export default defineConfig({
-    base: "/show-me-way/",
+    base,
     // A fixed, app-specific port keeps this app's localStorage on its own origin
     // (storage is keyed by host:port), so dev data never collides with another
     // Vite app on the default 5173. strictPort fails loudly instead of silently
@@ -32,7 +35,7 @@ export default defineConfig({
                 config: true,
             },
             manifest: {
-                id: "/show-me-way/",
+                id: base,
                 lang: "zh-TW",
                 dir: "ltr",
                 name: "下面一way 行程小助手",
