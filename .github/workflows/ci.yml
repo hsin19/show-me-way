@@ -42,3 +42,115 @@ jobs:
 
       - name: Run checks and build
         run: pnpm run check:ci
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.node-version'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: pnpm run test:e2e
+
+      - name: Upload Playwright report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
+
+  dependency-review:
+    name: Dependency Review
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: moderate
+          comment-summary-in-pr: on-failure
+
+  # Merges a green Dependabot PR with a dedicated PAT (Dependabot secret, NOT the
+  # default GITHUB_TOKEN) so the resulting push to main still triggers deploy.yml.
+  # See .github/workflows/README.md for the token setup.
+  auto-merge:
+    name: Auto-merge Dependabot
+    needs: [check, e2e, dependency-review]
+    if: ${{ success() && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+
+    steps:
+      - name: Squash-merge the PR
+        run: gh pr merge --squash --delete-branch --match-head-commit "$HEAD_SHA" "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+
+  jules-fix:
+    name: Jules fix on failure
+    needs: [check, e2e, dependency-review]
+    if: ${{ failure() && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Invoke Jules
+        uses: google-labs-code/jules-action@v1.0.0
+        with:
+          jules_api_key: ${{ secrets.JULES_API_KEY }}
+          starting_branch: ${{ github.head_ref }}
+          include_last_commit: true
+          prompt: |
+            A Dependabot dependency update on branch `${{ github.head_ref }}` is failing the PR checks (${{ github.event.pull_request.html_url }}).
+
+            This is a single-package pnpm project: a Svelte 5 (runes) + TypeScript + Vite + Tailwind CSS v4 PWA, built as a static site and deployed to GitHub Pages. There is no backend. Review `CLAUDE.md` for the full tech stack context. Run all commands from the repo root.
+
+            Please:
+            1. Run `pnpm install --frozen-lockfile`, then `pnpm run check` (format, lint, typecheck, vitest, build) to reproduce the failure. If those pass, also run `pnpm exec playwright install chromium` followed by `pnpm run test:e2e` — the Playwright smoke suite is part of the PR checks.
+            2. Make the change needed to make the checks pass, scoped to the dependency update. Editing `package.json` and `pnpm-lock.yaml` to align dependency versions IS the expected fix and is explicitly IN SCOPE — including dev/test dependencies and transitive peers (e.g. vite, vitest, svelte-check, eslint plugins, vite-plugin-pwa, workbox). This is NOT "unrelated code". "Unrelated code" / "do not touch" refers to application source logic and runtime behavior — do NOT change those.
+            3. Common causes, all in scope to fix:
+               - A package bumped without its peers — e.g. `svelte` updated but `@sveltejs/vite-plugin-svelte` / `svelte-check` / `eslint-plugin-svelte` / `svelte-eslint-parser` left behind, producing a type or peer mismatch. Bump the peers to the matching version.
+               - A version skew in `pnpm-lock.yaml` — e.g. `vite` resolving to two versions, or `vite-plugin-pwa` / `workbox-*` not satisfying a peer range. Align the versions (bump in `package.json` and/or `pnpm dedupe`) so a single version resolves.
+               In all cases, run `pnpm install` (without `--frozen-lockfile`) to update `pnpm-lock.yaml` to match.
+            4. Source-code edits ARE in scope when a dependency changed its API and call sites must be adapted to keep the SAME behavior — e.g. a renamed export, changed function signature, or moved import path. That mechanical, behavior-preserving migration is expected. What stays OUT of scope: changing what the app does, refactoring beyond the migration, or guessing at intent. If the migration is non-trivial/ambiguous, or you would be guessing, do NOT force it — leave a PR comment describing what is blocking instead.
+            5. Before opening the PR, run `pnpm run check` once more and confirm it passes. You start from branch `${{ github.head_ref }}` (the Dependabot branch), so your work already includes the dependency bump plus your fix. Open a pull request with that combined change. Give it a clear title and a description that states the root cause of the failure and what you changed to fix it, and link the original Dependabot PR (${{ github.event.pull_request.html_url }}).
