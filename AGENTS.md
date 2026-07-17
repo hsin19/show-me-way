@@ -30,10 +30,11 @@ These skills define the preferred Svelte 5 workflow. Before finalizing Svelte co
 - Lint: `pnpm run lint`
 - Typecheck: `pnpm run typecheck`
 - Test: `pnpm run test`
+- E2E tests: `pnpm run test:e2e` (Playwright smoke; builds and serves dist via `vite preview` on port 8046)
 - Build: `pnpm run build`
 - Full verification: `pnpm run check`
 
-`pnpm run check` runs format, lint, typecheck, tests, and build. Prefer it before handing off broader changes. For narrow changes, run the smallest relevant command first and report anything not run.
+`pnpm run check` runs format, lint, typecheck, tests, and build (e2e is not included — run it separately; CI runs it as its own job). Prefer it before handing off broader changes. For narrow changes, run the smallest relevant command first and report anything not run.
 
 ## Data Model
 
@@ -74,6 +75,7 @@ Other `localStorage` keys exist outside the itinerary YAML: `exchange_rate_<curr
 - Ledger pure calculations belong in `src/lib/ledger.ts` (covered by `src/lib/ledger.test.ts`); `Ledger.svelte` is a controlled component — expense records come in as the `expenses` prop (owned by `App.svelte`, persisted in the itinerary YAML) and add/delete/reset go back through callbacks. It keeps only its own input `$state` plus the manual exchange-rate localStorage, and wraps the pure functions in `$derived`.
 - Be careful with `YYYY-MM-DD` parsing. This project intentionally parses plain dates in local time to avoid UTC day shifts.
 - When changing PWA, Vite, or asset behavior, verify with `pnpm run build`.
+- Playwright e2e smoke lives in `e2e/tests/` (config `playwright.config.ts`): it tests the built app via `vite preview`, hermetically — `fixtures.ts` aborts every non-localhost request, service workers are blocked (`serviceWorkers: "block"`, otherwise the PWA SW bypasses `page.route`), and tests seed `showmeway_user_yaml` with a far-future fixture (no `city`/`currency`, so weather/exchange never fire). The seed init-script only writes when the key is absent — it re-runs on `page.reload()`, and an unconditional write would wipe state the app just persisted. UI assertions use exact zh-TW strings incl. fullwidth punctuation (`｜`, `—`). Changing user-visible copy may require updating `e2e/tests/smoke.spec.ts`.
 
 ## Git And Generated Files
 
