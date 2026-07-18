@@ -294,4 +294,71 @@ describe("loadDailyWeather", () => {
         expect(onUpdate).toHaveBeenCalledTimes(2);
         expect(onUpdate).toHaveBeenNthCalledWith(2, forecastOf(32), NOW);
     });
+
+    it("keeps the stale cache when the refreshed forecast is all null (model outage)", async () => {
+        const staleEntry = { timestamp: NOW - FORECAST_TTL, byDate: forecastOf(31) };
+        storage.setItem(FORECAST_KEY, JSON.stringify(staleEntry));
+        storage.setItem(GEOCODE_KEY, JSON.stringify(geocodeEntryOf(NOW - 1000)));
+        const fetchMock = vi.fn(() =>
+            Promise.resolve({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        daily: {
+                            time: ["2026-06-11"],
+                            weather_code: [null],
+                            temperature_2m_max: [null],
+                            temperature_2m_min: [null],
+                            precipitation_probability_max: [null],
+                        },
+                    }),
+            })
+        );
+        vi.stubGlobal("fetch", fetchMock);
+        const onUpdate = vi.fn();
+
+        loadDailyWeather("Tokyo", onUpdate);
+        await flushAsync();
+
+        expect(fetchMock).toHaveBeenCalledTimes(1); // forecast only, geocode cached
+        expect(onUpdate).toHaveBeenCalledTimes(1);
+        expect(onUpdate).toHaveBeenCalledWith(forecastOf(31), NOW - FORECAST_TTL);
+        expect(JSON.parse(storage.getItem(FORECAST_KEY)!)).toEqual(staleEntry);
+    });
+
+    it("keeps the stale cache when the forecast response has no daily block", async () => {
+        const staleEntry = { timestamp: NOW - FORECAST_TTL, byDate: forecastOf(31) };
+        storage.setItem(FORECAST_KEY, JSON.stringify(staleEntry));
+        storage.setItem(GEOCODE_KEY, JSON.stringify(geocodeEntryOf(NOW - 1000)));
+        const fetchMock = vi.fn(() =>
+            Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({}),
+            })
+        );
+        vi.stubGlobal("fetch", fetchMock);
+        const onUpdate = vi.fn();
+
+        loadDailyWeather("Tokyo", onUpdate);
+        await flushAsync();
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(onUpdate).toHaveBeenCalledTimes(1);
+        expect(onUpdate).toHaveBeenCalledWith(forecastOf(31), NOW - FORECAST_TTL);
+        expect(JSON.parse(storage.getItem(FORECAST_KEY)!)).toEqual(staleEntry);
+    });
+
+    it("fires no callback and caches nothing when the forecast request returns 500", async () => {
+        storage.setItem(GEOCODE_KEY, JSON.stringify(geocodeEntryOf(NOW - 1000)));
+        const fetchMock = vi.fn(() => Promise.resolve({ ok: false, status: 500, statusText: "Internal Server Error" }));
+        vi.stubGlobal("fetch", fetchMock);
+        const onUpdate = vi.fn();
+
+        loadDailyWeather("Tokyo", onUpdate);
+        await flushAsync();
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(onUpdate).not.toHaveBeenCalled();
+        expect(storage.getItem(FORECAST_KEY)).toBeNull();
+    });
 });

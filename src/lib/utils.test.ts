@@ -1,7 +1,9 @@
 import {
+    afterEach,
     describe,
     expect,
     it,
+    vi,
 } from "vitest";
 import {
     buildDayReport,
@@ -38,6 +40,22 @@ describe("parseLocalDate", () => {
     });
 });
 
+describe("parseLocalDate vs native UTC parsing", () => {
+    afterEach(() => {
+        vi.unstubAllEnvs();
+    });
+
+    it("keeps the calendar day west of UTC where native parsing shifts it", () => {
+        vi.stubEnv("TZ", "America/New_York");
+        // native parse reads YYYY-MM-DD as UTC midnight → previous local day
+        expect(new Date("2026-06-11").getDate()).toBe(10);
+        const d = parseLocalDate("2026-06-11");
+        expect(d.getDate()).toBe(11);
+        expect(d.getHours()).toBe(0);
+        expect(toLocalIsoDate(d)).toBe("2026-06-11");
+    });
+});
+
 describe("formatDayDate", () => {
     it("formats to MM/DD(weekday) in Chinese", () => {
         // 2026-06-11 is a Thursday
@@ -47,11 +65,26 @@ describe("formatDayDate", () => {
     it("returns the raw string for invalid input", () => {
         expect(formatDayDate("not-a-date")).toBe("not-a-date");
     });
+
+    it("maps Sunday (weekday 0) to 日", () => {
+        // 2026-06-14 is a Sunday
+        expect(formatDayDate("2026-06-14")).toBe("06/14(日)");
+    });
 });
 
 describe("getTodayIsoString", () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
     it("returns a YYYY-MM-DD string", () => {
         expect(getTodayIsoString()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it("uses the local calendar date even just before midnight", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date(2026, 5, 11, 23, 59));
+        expect(getTodayIsoString()).toBe("2026-06-11");
     });
 });
 
@@ -97,6 +130,10 @@ describe("parseEventStartMinutes", () => {
         expect(parseEventStartMinutes("14:75")).toBeNull();
         expect(parseEventStartMinutes("14:5")).toBeNull();
     });
+
+    it("parses midnight as 0 minutes (falsy but valid)", () => {
+        expect(parseEventStartMinutes("00:00")).toBe(0);
+    });
 });
 
 describe("findCurrentEventIndex", () => {
@@ -140,6 +177,11 @@ describe("findCurrentEventIndex", () => {
     it("never selects an after-midnight (25:30) entry on the same day", () => {
         expect(findCurrentEventIndex(timed("25:30"), new Date(2026, 5, 11, 23, 59)))
             .toBeNull();
+    });
+
+    it("treats a 00:00 event as started just after midnight (0 is not 'no time')", () => {
+        expect(findCurrentEventIndex(timed("00:00"), new Date(2026, 5, 11, 0, 5)))
+            .toBe(0);
     });
 });
 

@@ -267,6 +267,51 @@ describe("sendChatMessage", () => {
         vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("offline"))));
         await expect(sendChatMessage("key", "gemini-2.5-flash", [], "hi", buildContext())).rejects.toThrow("無法連線");
     });
+
+    it("embeds the itinerary YAML between its markers and the current time in the posted system instruction", async () => {
+        let captured: unknown;
+        const fetchMock = vi.fn((_url: string, init: { body: string; }) => {
+            captured = JSON.parse(init.body);
+            return Promise.resolve({ ok: true, json: () => Promise.resolve(modelOutput("好")) });
+        });
+        vi.stubGlobal("fetch", fetchMock);
+
+        const yaml = "trip:\n  name: '沖繩'";
+        await sendChatMessage("key", "gemini-2.5-flash", [], "hi", yaml);
+
+        const body = captured as { system_instruction: string; };
+        expect(body.system_instruction).toContain(`=== 行程資料 (YAML) ===\n${yaml}\n=== 行程資料結束 ===`);
+        expect(body.system_instruction).toMatch(/現在時間：\d{4}-\d{2}-\d{2} \(星期[日一二三四五六]\) \d{2}:\d{2}/);
+    });
+
+    it("throws the rate-limit message on 429", async () => {
+        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: false, status: 429, json: () => Promise.resolve({}) })));
+        await expect(sendChatMessage("key", "gemini-2.5-flash", [], "hi", buildContext())).rejects.toThrow("已達 Gemini 使用上限，請稍後再試。");
+    });
+
+    it("returns both the reply text and the proposed edit on a mixed turn", async () => {
+        const payload = {
+            steps: [
+                { type: "model_output", content: [{ type: "text", text: "幫你加好了。" }] },
+                { type: "function_call", id: "c1", name: "update_itinerary", arguments: { yaml: "trip: {}", summary: "加了景點" } },
+            ],
+        };
+        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(payload) })));
+
+        const turn = await sendChatMessage("key", "gemini-2.5-flash", [], "加景點", buildContext());
+        expect(turn.text).toBe("幫你加好了。");
+        expect(turn.edit).toEqual({ yaml: "trip: {}", summary: "加了景點" });
+    });
+
+    it("throws when update_itinerary lacks a usable yaml and there is no text", async () => {
+        const blankYaml = { steps: [{ type: "function_call", name: "update_itinerary", arguments: { yaml: "   ", summary: "x" } }] };
+        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(blankYaml) })));
+        await expect(sendChatMessage("key", "gemini-2.5-flash", [], "hi", buildContext())).rejects.toThrow("沒有回覆");
+
+        const missingYaml = { steps: [{ type: "function_call", name: "update_itinerary", arguments: { summary: "x" } }] };
+        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(missingYaml) })));
+        await expect(sendChatMessage("key", "gemini-2.5-flash", [], "hi", buildContext())).rejects.toThrow("沒有回覆");
+    });
 });
 
 function buildContext(): string {

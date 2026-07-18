@@ -90,6 +90,11 @@ export function getCurrencyConfig(code: string): CurrencyConfig {
     }
 }
 
+// An unusable rate (0 before setup, NaN from corrupt storage) behaves like empty input.
+function isUsableRate(exchangeRate: number): boolean {
+    return Number.isFinite(exchangeRate) && exchangeRate > 0;
+}
+
 export function roundQuickAmount(val: number): number {
     if (val < 1) return parseFloat(val.toFixed(1));
     if (val < 5) return Math.round(val);
@@ -102,7 +107,7 @@ export function roundQuickAmount(val: number): number {
 
 // Quick buttons follow fixed TWD price points converted at the current rate.
 export function computeQuickAmounts(activeCurrency: string, exchangeRate: number): number[] {
-    if (activeCurrency === "TWD" || !(Number.isFinite(exchangeRate) && exchangeRate > 0)) {
+    if (activeCurrency === "TWD" || !isUsableRate(exchangeRate)) {
         return [100, 200, 500, 1000, 2000, 5000];
     }
     const rounded = [50, 100, 250, 500, 1000, 2000]
@@ -111,14 +116,13 @@ export function computeQuickAmounts(activeCurrency: string, exchangeRate: number
 }
 
 export function foreignToTwd(foreignValue: string, exchangeRate: number): string {
-    // An unusable rate (0 before setup, NaN from corrupt storage) behaves like empty input.
-    if (!(Number.isFinite(exchangeRate) && exchangeRate > 0)) return "0";
+    if (!isUsableRate(exchangeRate)) return "0";
     const foreign = parseFloat(foreignValue) || 0;
     return Math.round(foreign / exchangeRate).toString();
 }
 
 export function twdToForeign(twdValue: string, exchangeRate: number): string {
-    if (!(Number.isFinite(exchangeRate) && exchangeRate > 0)) return "0";
+    if (!isUsableRate(exchangeRate)) return "0";
     const twd = parseFloat(twdValue) || 0;
     return Math.round(twd * exchangeRate).toString();
 }
