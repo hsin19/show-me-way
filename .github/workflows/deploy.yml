@@ -23,20 +23,20 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # pnpm version comes from package.json's packageManager field
       - name: Install pnpm
         uses: pnpm/action-setup@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v6.4.0
         with:
           node-version-file: '.node-version'
           cache: 'pnpm'
 
       - name: Cache dprint plugins
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/dprint
           key: dprint-${{ runner.os }}-${{ hashFiles('.dprint.jsonc') }}
