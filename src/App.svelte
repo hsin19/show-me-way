@@ -660,8 +660,11 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
 
 <!-- Fixed-height app shell: the window itself never scrolls; the header and nav
      are flow children and the content area between them owns its own scroll
-     (each itinerary day panel scrolls independently). -->
-<div class="flex flex-col h-dvh overflow-hidden bg-bg-main text-text-primary animate-fade-in">
+     (each itinerary day panel scrolls independently). standalone:h-screen — in
+     the installed PWA, dvh is stale on cold start (phantom browser chrome, no
+     correction event until the viewport is exercised) while 100vh is exact
+     because standalone mode has no dynamic chrome; browser tabs keep h-dvh. -->
+<div class="flex flex-col h-dvh standalone:h-screen overflow-hidden bg-bg-main text-text-primary animate-fade-in">
     <!-- Main content area: fills the shell; each branch
          owns its own scroll. The itinerary strip scrolls per-day internally; the
          other tabs scroll as a whole. -->
