@@ -194,6 +194,11 @@ describe("computeQuickAmounts", () => {
         expect(computeQuickAmounts("JPY", -1)).toEqual([100, 200, 500, 1000, 2000, 5000]);
     });
 
+    it("falls back to the TWD ladder when the rate is not finite (corrupt storage)", () => {
+        expect(computeQuickAmounts("KRW", NaN)).toEqual([100, 200, 500, 1000, 2000, 5000]);
+        expect(computeQuickAmounts("KRW", Infinity)).toEqual([100, 200, 500, 1000, 2000, 5000]);
+    });
+
     it("converts the TWD price points at a KRW-like rate", () => {
         expect(computeQuickAmounts("KRW", 41)).toEqual([2000, 4000, 10000, 20000, 40000, 80000]);
     });
@@ -230,6 +235,12 @@ describe("currency conversion math", () => {
     it("rounds decimals at a 1:1 rate", () => {
         expect(foreignToTwd("1234.4", 1)).toBe("1234");
         expect(twdToForeign("1234.6", 1)).toBe("1235");
+    });
+
+    it("returns 0 instead of Infinity/NaN when the rate is unusable", () => {
+        expect(foreignToTwd("100", 0)).toBe("0"); // rate 0 is the pre-setup default
+        expect(foreignToTwd("100", NaN)).toBe("0");
+        expect(twdToForeign("100", NaN)).toBe("0");
     });
 });
 
