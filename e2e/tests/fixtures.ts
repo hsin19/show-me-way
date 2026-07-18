@@ -69,3 +69,9 @@ export async function seedItinerary(page: Page, yaml: string = FIXTURE_YAML): Pr
         }
     }, ["showmeway_user_yaml", yaml] as const);
 }
+
+// 本機 dist/ 可能包含個人的 itinerary.local.yaml（gitignored）；強制 404 讓
+// 回退鏈一定跳過它，行為與乾淨的 CI 環境一致（page.route 優先於 context 層的攔截）。
+export async function stubMissingLocalItinerary(page: Page): Promise<void> {
+    await page.route("**/itinerary.local.yaml", route => route.fulfill({ status: 404, body: "not found" }));
+}

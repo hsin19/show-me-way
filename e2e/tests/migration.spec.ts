@@ -1,6 +1,7 @@
 import { type Page } from "@playwright/test";
 import {
     expect,
+    FIXTURE_YAML,
     test,
 } from "./fixtures";
 
@@ -10,38 +11,10 @@ import {
 
 // FIXTURE_YAML 的形狀，但清單項目帶舊 schema 的 `id`（遷移靠它對應勾選狀態），
 // 並加上 packing 清單以涵蓋兩條遷移路徑。
-const LEGACY_YAML = `trip:
-  name: 測試行程
-  start: '2099-01-01'
-  end: '2099-01-02'
-  departure: '2099-01-01T08:00:00+08:00'
-  hotels: []
-days:
-  - day: 1
-    date: '2099-01-01'
-    region: 測試區域一
-    pace: 輕鬆漫遊
-    timeline:
-      - time: '09:00'
-        title: 測試事件一
-        type: standard
-        desc: 第一天的測試事件
-  - day: 2
-    date: '2099-01-02'
-    region: 測試區域二
-    pace: 輕鬆漫遊
-    timeline:
-      - time: '10:00'
-        title: 測試事件二
-        type: standard
-        desc: 第二天的測試事件
-todo:
-  - text: 測試待辦項目
-    id: legacy-1
-packing:
-  - text: 測試打包項目
-    id: legacy-2
-`;
+const LEGACY_YAML = FIXTURE_YAML.replace(
+    "  - text: 測試待辦項目\n",
+    "  - text: 測試待辦項目\n    id: legacy-1\n",
+) + "packing:\n  - text: 測試打包項目\n    id: legacy-2\n";
 
 // 與 fixtures.ts 的 seedItinerary 相同的守門邏輯：只在 showmeway_user_yaml 不存在
 // 時寫入。三個舊 key 也放在同一個守門內 — 它們會被 App 遷移後刪除，init script

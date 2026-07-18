@@ -1,6 +1,7 @@
 import { encodeShareToken } from "../../src/lib/share";
 import {
     expect,
+    FIXTURE_YAML,
     seedItinerary,
     test,
 } from "./fixtures";
@@ -12,36 +13,19 @@ import {
 // Tokens are built in Node with the app's own encodeShareToken (share.ts is
 // pure; CompressionStream/btoa exist in Node 18+).
 
-// Same shape as FIXTURE_YAML (passes normalizeTripData) with distinct names,
-// so assertions can tell the imported trip from the seeded one.
-const SHARED_YAML = `trip:
-  name: 分享行程
-  start: '2099-02-01'
-  end: '2099-02-02'
-  departure: '2099-02-01T08:00:00+08:00'
-  hotels: []
-days:
-  - day: 1
-    date: '2099-02-01'
-    region: 分享區域一
-    pace: 輕鬆漫遊
-    timeline:
-      - time: '09:00'
-        title: 分享事件一
-        type: standard
-        desc: 分享行程的第一天事件
-  - day: 2
-    date: '2099-02-02'
-    region: 分享區域二
-    pace: 輕鬆漫遊
-    timeline:
-      - time: '10:00'
-        title: 分享事件二
-        type: standard
-        desc: 分享行程的第二天事件
-todo:
-  - text: 分享待辦項目
-`;
+// Derived from FIXTURE_YAML with distinct names/dates, so assertions can tell
+// the imported trip from the seeded one.
+const SHARED_YAML = FIXTURE_YAML
+    .replace("name: 測試行程", "name: 分享行程")
+    .replaceAll("2099-01-01", "2099-02-01")
+    .replaceAll("2099-01-02", "2099-02-02")
+    .replace("測試區域一", "分享區域一")
+    .replace("測試區域二", "分享區域二")
+    .replace("測試事件一", "分享事件一")
+    .replace("測試事件二", "分享事件二")
+    .replace("第一天的測試事件", "分享行程的第一天事件")
+    .replace("第二天的測試事件", "分享行程的第二天事件")
+    .replace("測試待辦項目", "分享待辦項目");
 
 test("分享連結匯入：接受後成為新行程，原行程保留可切回", async ({ page }) => {
     await seedItinerary(page);

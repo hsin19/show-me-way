@@ -1,6 +1,7 @@
 import {
     expect,
     seedItinerary,
+    stubMissingLocalItinerary,
     test,
 } from "./fixtures";
 
@@ -27,9 +28,7 @@ test("種子行程載入：顯示行程總覽且無執行期錯誤", async ({ pa
 });
 
 test("無使用者資料時回退載入預設範本", async ({ page }) => {
-    // 本機 dist/ 可能包含個人的 itinerary.local.yaml（gitignored）；強制 404
-    // 讓回退鏈走到 itinerary.yaml，行為與乾淨的 CI 環境一致。
-    await page.route("**/itinerary.local.yaml", route => route.fulfill({ status: 404, body: "not found" }));
+    await stubMissingLocalItinerary(page);
     await page.goto("/");
 
     await expect(page).toHaveTitle("我的探索之旅 (範本)");

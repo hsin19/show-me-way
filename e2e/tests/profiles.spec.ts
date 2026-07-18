@@ -1,6 +1,7 @@
 import {
     expect,
     seedItinerary,
+    stubMissingLocalItinerary,
     test,
 } from "./fixtures";
 
@@ -9,9 +10,8 @@ import {
 // 因此收合），所以每個步驟都先等 level-2 標題出現，再重新展開切換器。
 
 test("行程設定檔：建立、切換、刪除與取消刪除", async ({ page }) => {
-    // 本機 dist/ 可能包含個人的 itinerary.local.yaml（gitignored）；強制 404
-    // 讓「新增行程」一定取得內建範本（page.route 優先於 context 層的攔截）。
-    await page.route("**/itinerary.local.yaml", route => route.fulfill({ status: 404, body: "not found" }));
+    // 讓「新增行程」一定取得內建範本，而非本機的個人 itinerary.local.yaml。
+    await stubMissingLocalItinerary(page);
     await seedItinerary(page);
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
