@@ -340,7 +340,7 @@ export function serializeToYaml(data: TripData): string {
 
     const body = dumpYaml(clean, {
         lineWidth: -1, // no line folding — keep long strings on one readable line
-        quotingType: "'", // prefer single quotes to match the existing style
+        quoteStyle: "single", // prefer single quotes to match the existing style
         forceQuotes: false,
         noRefs: true, // never emit &anchor / *alias
     });
@@ -653,8 +653,14 @@ export async function fetchItinerary(): Promise<TripData> {
 // Validate raw YAML string (used by the in-app editor before saving)
 export function validateYaml(yamlStr: string): TripData {
     try {
-        return normalizeTripData(parseYaml(yamlStr));
+        // js-yaml v5 no longer returns undefined/null for empty inputs; it throws expected a document.
+        // We catch it and throw the expected user-facing message to keep the same behavior.
+        const parsed = parseYaml(yamlStr);
+        return normalizeTripData(parsed);
     } catch (e: unknown) {
+        if (e instanceof Error && e.message.includes("expected a document, but the input is empty")) {
+            throw new Error("YAML 內容為空或格式不正確", { cause: e });
+        }
         const message = e instanceof Error ? e.message : "無效的 YAML 語法";
         throw new Error(message, { cause: e });
     }
