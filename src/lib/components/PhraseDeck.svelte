@@ -36,7 +36,8 @@ let filteredPhrases = $derived(
 
 <!-- Survival phrase deck (tap a card to copy); hosted in the 常用語 ToolSheet. -->
 {#if availableCats.length > 0}
-    <div class="overflow-x-auto no-scrollbar mb-3">
+    <!-- Horizontally scrollable — opt out of the TabPager swipe gesture. -->
+    <div class="overflow-x-auto no-scrollbar mb-3" data-swipe-ignore>
         <div class="flex gap-2">
             {#each filterChips as cat (cat)}
                 <button

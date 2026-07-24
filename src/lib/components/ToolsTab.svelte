@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { Snippet } from "svelte";
+import TabPager from "./TabPager.svelte";
 
 type ToolTabId = "prep" | "ledger" | "phrases" | "settings";
 
@@ -36,16 +37,17 @@ let chips = $derived((["prep", "ledger", "phrases", "settings"] as const).filter
 let activeTabId = $derived(chips.includes(tab) ? tab : (hasTrip ? "prep" : "settings"));
 </script>
 
-<!-- Tools tab: the rarely-used features live behind a sub-tab row here, same
-     header pattern as the itinerary strip (sticky chips, scrolling content). -->
-<div class="flex flex-col h-full">
-    <header class="shrink-0 z-[100] bg-bg-main/90 backdrop-blur-xl border-b border-white/5 pt-[calc(12px+var(--safe-top))] px-5">
-        <div class="max-w-3xl mx-auto w-full overflow-x-auto no-scrollbar pb-3">
+<!-- 工具 tab: sub-pages behind sticky chips. Paging (swipe / wheel / slide
+     transition) is the shared TabPager — same interaction model as the
+     itinerary strip. -->
+<TabPager keys={chips} bind:current={tab}>
+    {#snippet header(select)}
+        <div class="overflow-x-auto no-scrollbar pb-3">
             <div class="flex gap-2">
                 {#each chips as id (id)}
                     <button
                         aria-pressed={activeTabId === id}
-                        onclick={() => (tab = id)}
+                        onclick={() => select(id)}
                         class="
                             flex-none min-h-[44px] px-4 rounded-xl border text-xs font-bold transition duration-200 cursor-pointer
                             {activeTabId === id
@@ -58,21 +60,16 @@ let activeTabId = $derived(chips.includes(tab) ? tab : (hasTrip ? "prep" : "sett
                 {/each}
             </div>
         </div>
-    </header>
-
-    <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-        {#key activeTabId}
-            <div class="max-w-3xl mx-auto w-full p-5 animate-fade-in">
-                {#if activeTabId === "prep"}
-                    {@render prep()}
-                {:else if activeTabId === "ledger"}
-                    {@render ledger()}
-                {:else if activeTabId === "phrases"}
-                    {@render phrases()}
-                {:else}
-                    {@render settings()}
-                {/if}
-            </div>
-        {/key}
-    </div>
-</div>
+    {/snippet}
+    {#snippet panel()}
+        {#if activeTabId === "prep"}
+            {@render prep()}
+        {:else if activeTabId === "ledger"}
+            {@render ledger()}
+        {:else if activeTabId === "phrases"}
+            {@render phrases()}
+        {:else}
+            {@render settings()}
+        {/if}
+    {/snippet}
+</TabPager>
