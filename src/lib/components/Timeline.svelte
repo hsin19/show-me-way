@@ -73,15 +73,15 @@ let expandedAlts = $state<Record<string, boolean>>({});
 </script>
 
 <!-- Day Overview Card -->
-<div class="glass-panel rounded-2xl p-5 mb-6 relative overflow-hidden before:content-[''] before:absolute before:top-0 before:left-0 before:w-1 before:h-full before:bg-gradient-to-b before:from-neon-blue before:to-neon-pink">
+<div class="panel rounded-2xl p-5 mb-6">
     <div class="flex justify-between items-center mb-3">
         <h3 class="text-xl font-extrabold tracking-tight">Day {dayData.day}｜{formatDayDate(dayData.date)}</h3>
-        <span class="text-xs bg-neon-blue/10 text-neon-blue px-2.5 py-1 rounded-xl font-semibold border border-neon-blue/20">
+        <span class="text-xs bg-white/6 text-text-secondary px-2.5 py-1 rounded-full font-semibold">
             {dayData.region}
         </span>
     </div>
     <p class="text-sm text-text-secondary leading-relaxed flex items-start gap-1.5">
-        <Zap size={15} class="text-neon-orange shrink-0 mt-0.5" aria-hidden="true" />
+        <Zap size={15} class="text-accent shrink-0 mt-0.5" aria-hidden="true" />
         <span><strong class="text-text-primary">今日節奏：</strong>{dayData.pace}</span>
     </p>
     {#if weather}
@@ -92,7 +92,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
     <button
         type="button"
         onclick={onShareDay}
-        class="mt-4 w-full min-h-[44px] bg-white/3 border border-neon-blue/30 text-neon-blue font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-neon-blue/10 transition active:scale-[0.98] cursor-pointer"
+        class="mt-4 w-full min-h-[44px] bg-accent text-accent-contrast font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition active:scale-[0.98] cursor-pointer"
     >
         <Share2 size={14} aria-hidden="true" /> 分享今日行程
     </button>
@@ -111,7 +111,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
             {href}
             target="_blank"
             rel="noopener noreferrer"
-            class="inline-flex items-center gap-1.5 min-h-[44px] bg-neon-blue/10 border border-neon-blue/20 text-neon-blue text-[11px] font-bold px-3 py-1.5 rounded-lg transition duration-300 hover:bg-neon-blue hover:text-black hover:shadow-[0_0_15px_rgba(0,240,255,0.25)]"
+            class="inline-flex items-center gap-1.5 min-h-[44px] bg-accent/10 text-accent text-xs font-bold px-3 py-1.5 rounded-lg transition duration-200 hover:bg-accent/20"
         >
             {#if isNaver}
                 <NaverIcon size={13} class="shrink-0" aria-hidden="true" />
@@ -126,7 +126,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
             href={mapDirections(localName, mapProvider)}
             target="_blank"
             rel="noopener noreferrer"
-            class="inline-flex items-center gap-1.5 min-h-[44px] bg-neon-blue/10 border border-neon-blue/20 text-neon-blue text-[11px] font-bold px-3 py-1.5 rounded-lg transition duration-300 hover:bg-neon-blue hover:text-black hover:shadow-[0_0_15px_rgba(0,240,255,0.25)]"
+            class="inline-flex items-center gap-1.5 min-h-[44px] bg-accent/10 text-accent text-xs font-bold px-3 py-1.5 rounded-lg transition duration-200 hover:bg-accent/20"
             title="從目前位置出發的大眾運輸路線"
         >
             <Navigation size={13} class="shrink-0" aria-hidden="true" />
@@ -134,7 +134,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
         </a>
         <button
             onclick={() => onEnlarge({ kind: "place", title, localName, address })}
-            class="min-w-[44px] min-h-[44px] flex items-center justify-center bg-neon-blue/5 border border-neon-blue/15 text-neon-blue/70 rounded-lg transition duration-300 hover:bg-neon-blue hover:text-black hover:shadow-[0_0_15px_rgba(0,240,255,0.25)] cursor-pointer"
+            class="min-w-[44px] min-h-[44px] flex items-center justify-center bg-accent/10 text-accent/80 rounded-lg transition duration-200 hover:bg-accent/20 cursor-pointer"
             aria-label="放大顯示當地名稱"
             title="放大給司機/店員看"
         >
@@ -149,7 +149,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        class="inline-flex items-center gap-1.5 min-h-[44px] bg-neon-blue/10 border border-neon-blue/20 text-neon-blue text-[11px] font-bold px-3 py-1.5 rounded-lg transition duration-300 hover:bg-neon-blue hover:text-black hover:shadow-[0_0_15px_rgba(0,240,255,0.25)]"
+        class="inline-flex items-center gap-1.5 min-h-[44px] bg-accent/10 text-accent text-xs font-bold px-3 py-1.5 rounded-lg transition duration-200 hover:bg-accent/20"
     >
         {#if url.includes("naver")}
             <NaverIcon size={13} class="shrink-0" aria-hidden="true" />
@@ -163,16 +163,16 @@ let expandedAlts = $state<Record<string, boolean>>({});
 {/snippet}
 
 <!-- Timeline List -->
-<div class="relative pl-6 before:content-[''] before:absolute before:top-2 before:left-[7px] before:w-[2px] before:h-[calc(100%-16px)] before:bg-gradient-to-b before:from-neon-blue/40 before:to-neon-pink/40">
+<div class="relative pl-6 before:content-[''] before:absolute before:top-2 before:left-[7px] before:w-[2px] before:h-[calc(100%-16px)] before:bg-white/10">
     {#if checkoutHotel}
         <!-- Auto-generated checkout entry at the top of the day (not persisted to
              YAML). No `data-timeline-event` index, so it never affects the
              time-based auto-scroll target. -->
         <div class="relative mb-6">
-            <div class="absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 border-neon-orange z-10"></div>
-            <div class="glass-panel rounded-2xl p-4 ml-2.5">
+            <div class="absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 border-booked z-10"></div>
+            <div class="panel rounded-2xl p-4 ml-2.5">
                 <div class="flex items-center gap-1.5 mb-1.5">
-                    <LogOut size={15} class="text-neon-orange shrink-0" aria-hidden="true" />
+                    <LogOut size={15} class="text-booked shrink-0" aria-hidden="true" />
                     <span class="text-[15px] font-bold text-text-primary">退房</span>
                 </div>
                 <p class="text-xs text-text-secondary leading-relaxed">{checkoutHotel.name}</p>
@@ -195,39 +195,31 @@ let expandedAlts = $state<Record<string, boolean>>({});
             <!-- Timeline Node Badge -->
             <div
                 class="
-                    absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 z-10 transition duration-300
-                    {event.type === 'booked' ? 'border-neon-orange shadow-[0_0_7px_rgba(255,123,0,0.6)]' : ''}
-                    {event.type === 'must-go' ? 'border-neon-pink shadow-[0_0_7px_rgba(255,42,116,0.6)]' : ''}
-                    {event.type === 'option' ? 'border-neon-purple' : ''}
-                    {event.type === 'standard' ? 'border-neon-blue/70' : ''}
+                    absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 z-10 transition duration-200
+                    {event.type === 'booked' ? 'border-booked' : ''}
+                    {event.type === 'must-go' ? 'border-must' : ''}
+                    {event.type === 'option' ? 'border-option' : ''}
+                    {event.type === 'standard' ? 'border-white/25' : ''}
                 "
             >
             </div>
 
-            <!-- Event Card (Glassmorphic) -->
-            <div class="glass-panel rounded-2xl p-4 ml-2.5 transition-transform duration-200 active:scale-[0.98] {!event.status && timeStatus === 'current' ? 'ring-2 ring-neon-blue/60 shadow-[0_0_18px_rgba(0,240,255,0.25)]' : ''}">
+            <!-- Event Card -->
+            <div class="panel rounded-2xl p-4 ml-2.5 transition-transform duration-200 active:scale-[0.98] {!event.status && timeStatus === 'current' ? 'ring-2 ring-accent/50' : ''}">
                 <div class="flex flex-wrap justify-between items-center gap-y-1 mb-2">
-                    <span
-                        class="
-                            text-xs font-bold px-2 py-0.5 rounded-lg border
-                            {event.type === 'booked' ? 'text-neon-orange bg-neon-orange/8 border-neon-orange/15' : ''}
-                            {event.type === 'must-go' ? 'text-neon-pink bg-neon-pink/8 border-neon-pink/15' : ''}
-                            {event.type === 'option' ? 'text-neon-purple bg-neon-purple/8 border-neon-purple/15' : ''}
-                            {event.type === 'standard' ? 'text-neon-blue bg-neon-blue/8 border-neon-blue/15' : ''}
-                        "
-                    >
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded-lg bg-white/6 text-text-secondary tabular-nums">
                         {event.time}
                     </span>
                     <div class="flex items-center gap-1.5 -mr-2">
                         {#if !event.status && timeStatus === "current"}
-                            <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-blue/15 text-neon-blue border border-neon-blue/30"><Play size={11} aria-hidden="true" />進行中</span>
+                            <span class="inline-flex items-center gap-1 text-[11px] font-bold text-accent"><Play size={11} aria-hidden="true" />進行中</span>
                         {/if}
                         {#if event.type === "booked"}
-                            <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-orange/15 text-neon-orange border border-neon-orange/30"><CalendarCheck size={11} aria-hidden="true" />預訂</span>
+                            <span class="inline-flex items-center gap-1 text-[11px] font-bold text-booked"><CalendarCheck size={11} aria-hidden="true" />預訂</span>
                         {:else if event.type === "must-go"}
-                            <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-pink/15 text-neon-pink border border-neon-pink/30"><Flame size={11} aria-hidden="true" />必訪</span>
+                            <span class="inline-flex items-center gap-1 text-[11px] font-bold text-must"><Flame size={11} aria-hidden="true" />必訪</span>
                         {:else if event.type === "option"}
-                            <span class="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-1 rounded-md bg-neon-purple/15 text-neon-purple border border-neon-purple/30"><ClipboardList size={11} aria-hidden="true" />備選</span>
+                            <span class="inline-flex items-center gap-1 text-[11px] font-bold text-option"><ClipboardList size={11} aria-hidden="true" />備選</span>
                         {/if}
                         <!-- Check-in buttons: 44px hot zones with a compact visible box;
                              -my keeps the header row height unchanged, and -ml-1.5 on
@@ -245,9 +237,9 @@ let expandedAlts = $state<Record<string, boolean>>({});
                             <span
                                 aria-hidden="true"
                                 class="
-                                    w-7 h-7 rounded-lg border flex items-center justify-center transition duration-300 {event.status === 'done'
-                                    ? 'border-accent-green bg-accent-green/15 text-accent-green'
-                                    : 'border-white/10 bg-white/3 text-text-muted hover:border-accent-green/50 hover:text-accent-green'}
+                                    w-7 h-7 rounded-lg border flex items-center justify-center transition duration-200 {event.status === 'done'
+                                    ? 'border-positive bg-positive/15 text-positive'
+                                    : 'border-white/10 bg-white/3 text-text-muted hover:border-positive/50 hover:text-positive'}
                                 "
                             >
                                 <Check size={14} class={event.status === "done" ? "stroke-[3]" : ""} />
@@ -264,7 +256,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
                             <span
                                 aria-hidden="true"
                                 class="
-                                    w-7 h-7 rounded-lg border flex items-center justify-center transition duration-300 {event.status === 'skipped'
+                                    w-7 h-7 rounded-lg border flex items-center justify-center transition duration-200 {event.status === 'skipped'
                                     ? 'border-white/30 bg-white/10 text-text-primary'
                                     : 'border-white/10 bg-white/3 text-text-muted hover:border-white/30 hover:text-text-primary'}
                                 "
@@ -308,10 +300,10 @@ let expandedAlts = $state<Record<string, boolean>>({});
                             type="button"
                             onclick={() => expandedAlts[altKey] = !expandedAlts[altKey]}
                             aria-expanded={!!expandedAlts[altKey]}
-                            class="w-full min-h-[44px] flex items-center justify-between gap-2 text-xs font-bold text-text-secondary transition duration-300 hover:text-neon-purple cursor-pointer"
+                            class="w-full min-h-[44px] flex items-center justify-between gap-2 text-xs font-bold text-text-secondary transition duration-200 hover:text-text-primary cursor-pointer"
                         >
                             <span class="inline-flex items-center gap-1.5">
-                                <ClipboardList size={13} class="text-neon-purple shrink-0" aria-hidden="true" />
+                                <ClipboardList size={13} class="text-option shrink-0" aria-hidden="true" />
                                 備案地點（{event.alternatives.length}）
                             </span>
                             <ChevronDown size={16} class="shrink-0 transition-transform duration-200 {expandedAlts[altKey] ? 'rotate-180' : ''}" aria-hidden="true" />
@@ -344,10 +336,10 @@ let expandedAlts = $state<Record<string, boolean>>({});
     {#if overnightHotel}
         <!-- Auto-generated overnight stay entry (not persisted to YAML) -->
         <div class="relative mb-6">
-            <div class="absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 border-neon-purple z-10"></div>
-            <div class="glass-panel rounded-2xl p-4 ml-2.5">
+            <div class="absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 border-white/25 z-10"></div>
+            <div class="panel rounded-2xl p-4 ml-2.5">
                 <div class="flex items-center gap-1.5 mb-1.5">
-                    <BedDouble size={15} class="text-neon-purple shrink-0" aria-hidden="true" />
+                    <BedDouble size={15} class="text-text-muted shrink-0" aria-hidden="true" />
                     <span class="text-[15px] font-bold text-text-primary">回飯店休息</span>
                 </div>
                 <p class="text-xs text-text-secondary leading-relaxed">{overnightHotel.name}</p>

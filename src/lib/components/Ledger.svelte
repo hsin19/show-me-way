@@ -234,9 +234,9 @@ function handleAddWallet() {
 </script>
 
 <!-- Currency Converter -->
-<div class="glass-panel rounded-2xl p-5 mb-5">
+<div class="panel rounded-2xl p-5 mb-5">
     <h3 class="text-base font-bold text-text-primary mb-4 flex items-center gap-2">
-        <Calculator size={18} class="text-neon-blue" aria-hidden="true" />
+        <Calculator size={18} class="text-accent" aria-hidden="true" />
         {activeCurrency === "TWD" ? "台幣計算機" : `${localConfig.currencyName}/台幣 雙向換算`}
     </h3>
     <div class="flex flex-col gap-4">
@@ -250,7 +250,7 @@ function handleAddWallet() {
                     bind:value={foreignValue}
                     oninput={() => convert("foreign")}
                     placeholder="輸入{localConfig.currencyName}"
-                    class="w-full bg-black/25 border border-card-border rounded-xl py-3 pl-4 pr-10 text-text-primary font-bold text-base outline-none focus:border-neon-blue transition"
+                    class="w-full bg-black/25 border border-card-border rounded-xl py-3 pl-4 pr-10 text-text-primary font-bold text-base outline-none focus:border-accent transition"
                 >
                 <span class="absolute right-4 font-bold text-text-secondary">{localConfig.currencySymbol}</span>
             </div>
@@ -261,7 +261,7 @@ function handleAddWallet() {
                 <button
                     onclick={swapCurrency}
                     aria-label="互換上下金額"
-                    class="w-11 h-11 rounded-full bg-white/5 border border-card-border flex items-center justify-center text-text-primary hover:bg-neon-blue hover:text-black cursor-pointer transition active:scale-90"
+                    class="w-11 h-11 rounded-full bg-white/5 border border-card-border flex items-center justify-center text-text-primary hover:bg-accent/15 hover:text-accent cursor-pointer transition active:scale-90"
                 >
                     <ArrowLeftRight size={16} aria-hidden="true" />
                 </button>
@@ -277,7 +277,7 @@ function handleAddWallet() {
                         bind:value={twdValue}
                         oninput={() => convert("twd")}
                         placeholder="輸入台幣"
-                        class="w-full bg-black/25 border border-card-border rounded-xl py-3 pl-4 pr-10 text-text-primary font-bold text-base outline-none focus:border-neon-blue transition"
+                        class="w-full bg-black/25 border border-card-border rounded-xl py-3 pl-4 pr-10 text-text-primary font-bold text-base outline-none focus:border-accent transition"
                     >
                     <span class="absolute right-4 font-bold text-text-secondary">$</span>
                 </div>
@@ -316,7 +316,7 @@ function handleAddWallet() {
         {#each quickAmounts as amount (amount)}
             <button
                 onclick={() => setQuickForeign(amount)}
-                class="min-h-[44px] bg-white/3 border border-card-border text-text-secondary px-3 rounded-lg text-xs font-semibold flex items-center hover:bg-neon-blue hover:text-black transition cursor-pointer"
+                class="min-h-[44px] bg-white/3 border border-card-border text-text-secondary px-3 rounded-lg text-xs font-semibold flex items-center hover:bg-accent/15 hover:text-accent transition cursor-pointer"
             >
                 {formatQuickAmount(amount)}
             </button>
@@ -325,14 +325,14 @@ function handleAddWallet() {
 </div>
 
 <!-- Ledger Management -->
-<div class="glass-panel rounded-2xl p-5 mb-5">
+<div class="panel rounded-2xl p-5 mb-5">
     <div class="flex justify-between items-center mb-4">
         <h3 class="text-base font-bold text-text-primary flex items-center gap-2">
-            <Wallet size={18} class="text-neon-blue" aria-hidden="true" />記帳與餘額管理
+            <Wallet size={18} class="text-accent" aria-hidden="true" />記帳與餘額管理
         </h3>
         <button
             onclick={resetBudget}
-            class="min-w-[44px] min-h-[44px] -my-2.5 -mr-2.5 flex items-center justify-center text-xs text-text-muted hover:text-neon-pink font-semibold cursor-pointer"
+            class="min-w-[44px] min-h-[44px] -my-2.5 -mr-2.5 flex items-center justify-center text-xs text-text-muted hover:text-danger font-semibold cursor-pointer"
         >
             重設
         </button>
@@ -342,15 +342,15 @@ function handleAddWallet() {
     <div class="grid grid-cols-3 gap-2 mb-2">
         <div class="bg-black/20 border border-white/2 rounded-xl p-2.5 flex flex-col items-center gap-0.5">
             <span class="text-[11px] text-text-secondary font-medium">儲值總額</span>
-            <span class="text-xs font-extrabold text-accent-green tabular-nums">{localConfig.currencySymbol}{totalDeposited.toLocaleString()}</span>
+            <span class="text-xs font-extrabold text-positive tabular-nums">{localConfig.currencySymbol}{totalDeposited.toLocaleString()}</span>
         </div>
         <div class="bg-black/20 border border-white/2 rounded-xl p-2.5 flex flex-col items-center gap-0.5">
             <span class="text-[11px] text-text-secondary font-medium">已花費</span>
-            <span class="text-xs font-extrabold text-neon-pink tabular-nums">{localConfig.currencySymbol}{totalSpent.toLocaleString()}</span>
+            <span class="text-xs font-extrabold text-danger tabular-nums">{localConfig.currencySymbol}{totalSpent.toLocaleString()}</span>
         </div>
         <div class="bg-black/20 border border-white/2 rounded-xl p-2.5 flex flex-col items-center gap-0.5">
             <span class="text-[11px] text-text-secondary font-medium">剩餘餘額</span>
-            <span class="text-xs font-extrabold text-neon-blue tabular-nums">{localConfig.currencySymbol}{balance.toLocaleString()}</span>
+            <span class="text-xs font-extrabold text-accent tabular-nums">{localConfig.currencySymbol}{balance.toLocaleString()}</span>
         </div>
     </div>
 
@@ -359,7 +359,7 @@ function handleAddWallet() {
         {#each walletBalances as wb (wb.wallet)}
             <div class="flex-1 basis-[30%] bg-black/20 border border-white/2 rounded-xl p-2.5 flex flex-col items-center gap-0.5">
                 <span class="text-[11px] text-text-secondary font-medium">{wb.wallet === "Cash" ? "現金" : wb.wallet} 餘額</span>
-                <span class="text-xs font-extrabold tabular-nums {wb.balance < 0 ? 'text-neon-pink' : 'text-neon-blue'}">
+                <span class="text-xs font-extrabold tabular-nums {wb.balance < 0 ? 'text-danger' : 'text-accent'}">
                     {wb.balance < 0 ? "-" : ""}{localConfig.currencySymbol}{Math.abs(wb.balance).toLocaleString()}
                 </span>
             </div>
@@ -374,7 +374,7 @@ function handleAddWallet() {
             aria-label="消費項目名稱"
             autocomplete="off"
             placeholder="項目 (如: {activeCurrency === 'TWD' ? '午餐' : '拉麵'})"
-            class="col-span-3 bg-black/25 border border-card-border rounded-xl p-2.5 text-xs text-text-primary font-semibold outline-none focus:border-neon-blue"
+            class="col-span-3 bg-black/25 border border-card-border rounded-xl p-2.5 text-xs text-text-primary font-semibold outline-none focus:border-accent"
         >
         <input
             type="number"
@@ -382,7 +382,7 @@ function handleAddWallet() {
             bind:value={expenseAmount}
             aria-label="金額"
             placeholder="金額 ({localConfig.currencySymbol})"
-            class="col-span-2 bg-black/25 border border-card-border rounded-xl p-2.5 text-xs text-text-primary font-semibold outline-none focus:border-neon-blue"
+            class="col-span-2 bg-black/25 border border-card-border rounded-xl p-2.5 text-xs text-text-primary font-semibold outline-none focus:border-accent"
         >
         <select
             bind:value={expenseType}
@@ -411,12 +411,12 @@ function handleAddWallet() {
                 aria-label="新增自訂卡片或錢包名稱"
                 autocomplete="off"
                 placeholder="新增自訂卡片/錢包 (如: ICOCA, 悠遊卡)"
-                class="flex-1 bg-black/40 border border-card-border rounded-xl px-3 py-1.5 text-[11px] text-text-primary outline-none focus:border-neon-blue transition"
+                class="flex-1 bg-black/40 border border-card-border rounded-xl px-3 py-1.5 text-[11px] text-text-primary outline-none focus:border-accent transition"
             >
             <button
                 type="button"
                 onclick={handleAddWallet}
-                class="min-w-[44px] min-h-[44px] bg-white/5 border border-card-border text-text-secondary hover:bg-neon-blue hover:text-black font-bold px-3 rounded-xl text-[10px] flex items-center justify-center transition active:scale-[0.96] cursor-pointer"
+                class="min-w-[44px] min-h-[44px] bg-white/5 border border-card-border text-text-secondary hover:bg-accent/15 hover:text-accent font-bold px-3 rounded-xl text-[11px] flex items-center justify-center transition active:scale-[0.96] cursor-pointer"
             >
                 新增
             </button>
@@ -424,7 +424,7 @@ function handleAddWallet() {
 
         <button
             onclick={addExpense}
-            class="col-span-3 bg-gradient-to-r from-neon-blue to-neon-purple text-black font-extrabold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1 transition active:scale-[0.98] cursor-pointer shadow-[0_0_15px_rgba(0,240,255,0.2)] mt-2"
+            class="col-span-3 bg-accent text-accent-contrast font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1 transition active:scale-[0.98] cursor-pointer mt-2"
         >
             <Plus size={14} class="stroke-[3]" aria-hidden="true" />
             記一筆
@@ -449,12 +449,12 @@ function handleAddWallet() {
                         </span>
                     </div>
                     <div class="flex items-center gap-3">
-                        <span class="font-bold tabular-nums {item.type.startsWith('Deposit') ? 'text-accent-green' : 'text-text-primary'}">
+                        <span class="font-bold tabular-nums {item.type.startsWith('Deposit') ? 'text-positive' : 'text-text-primary'}">
                             {item.type.startsWith("Deposit") ? "+" : "-"}{localConfig.currencySymbol}{item.amount.toLocaleString()}
                         </span>
                         <button
                             onclick={() => onDeleteExpense(item._id ?? "")}
-                            class="text-text-muted hover:text-neon-pink cursor-pointer transition min-w-[44px] min-h-[44px] -my-2 flex items-center justify-center"
+                            class="text-text-muted hover:text-danger cursor-pointer transition min-w-[44px] min-h-[44px] -my-2 flex items-center justify-center"
                             aria-label="刪除紀錄"
                             title="刪除"
                         >

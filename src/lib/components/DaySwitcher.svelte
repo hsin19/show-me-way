@@ -48,18 +48,18 @@ $effect(() => {
     <div class="flex">
         <!-- Pinned overview chip: sticky with an opaque backing (pr-2 masks the
              gap) so it stays reachable while long trips scroll beneath it. -->
-        <div class="sticky left-0 z-10 shrink-0 bg-[#0d0e15] pr-2">
+        <div class="sticky left-0 z-10 shrink-0 bg-bg-main pr-2">
             <button
                 class="
-                    h-full w-[56px] flex flex-col items-center justify-center p-2 rounded-xl border transition duration-300 cursor-pointer
+                    h-full w-[56px] flex flex-col items-center justify-center p-2 rounded-xl border transition duration-200 cursor-pointer
                     {currentDay === 0
-                    ? 'bg-gradient-to-br from-neon-blue/15 to-neon-pink/10 border-neon-blue shadow-[0_0_15px_rgba(0,240,255,0.25)]'
+                    ? 'bg-accent/15 border-transparent'
                     : 'bg-white/3 border-card-border hover:bg-white/5'}
                 "
                 onclick={() => onSelect(0)}
             >
-                <Plane size={15} class={currentDay === 0 ? "text-neon-blue" : "text-text-muted"} aria-hidden="true" />
-                <span class="text-[11px] font-bold mt-1 {currentDay === 0 ? 'text-text-primary' : 'text-text-secondary'}">總覽</span>
+                <Plane size={15} class={currentDay === 0 ? "text-accent" : "text-text-muted"} aria-hidden="true" />
+                <span class="text-[11px] font-bold mt-1 {currentDay === 0 ? 'text-accent' : 'text-text-secondary'}">總覽</span>
             </button>
         </div>
         <div class="flex gap-2">
@@ -67,19 +67,19 @@ $effect(() => {
                 <button
                     data-day
                     class="
-                        relative flex-none w-[76px] flex flex-col items-center justify-center p-2 rounded-xl border transition duration-300 cursor-pointer
+                        relative flex-none w-[76px] flex flex-col items-center justify-center p-2 rounded-xl border transition duration-200 cursor-pointer
                         {currentDay === day
-                        ? 'bg-gradient-to-br from-neon-blue/15 to-neon-pink/10 border-neon-blue shadow-[0_0_15px_rgba(0,240,255,0.25)]'
+                        ? 'bg-accent/15 border-transparent'
                         : 'bg-white/3 border-card-border hover:bg-white/5'}
                     "
                     aria-current={todayDay === day ? "date" : undefined}
                     onclick={() => onSelect(day)}
                 >
                     {#if todayDay === day}
-                        <span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-neon-pink shadow-[0_0_6px_rgba(255,42,116,0.8)]" aria-hidden="true"></span>
+                        <span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-must" aria-hidden="true"></span>
                         <span class="sr-only">今天</span>
                     {/if}
-                    <span class="text-[11px] font-medium {currentDay === day ? 'text-neon-blue' : 'text-text-muted'}">DAY {String(day).padStart(2, "0")}</span>
+                    <span class="text-[11px] font-medium {currentDay === day ? 'text-accent' : 'text-text-muted'}">DAY {String(day).padStart(2, "0")}</span>
                     <span class="text-[15px] font-bold mt-0.5 {currentDay === day ? 'text-text-primary' : 'text-text-secondary'}">
                         {date.split("(")[0]}
                     </span>

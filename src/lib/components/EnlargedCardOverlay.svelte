@@ -57,7 +57,7 @@ $effect(() => {
             aria-label="放大顯示：{data.title}"
             tabindex="-1"
             onclick={(e => e.stopPropagation())}
-            class="bg-[#121422] border border-white/8 rounded-3xl w-full max-w-[400px] p-6 shadow-2xl overscroll-contain"
+            class="panel border border-white/8 rounded-2xl w-full max-w-[400px] p-6 overscroll-contain"
         >
             <div class="flex justify-between items-center mb-6">
                 <h3 class="text-sm text-text-secondary">
@@ -82,7 +82,7 @@ $effect(() => {
                     <button
                         type="button"
                         onclick={() => copyToClipboard(data.code, "已複製確認碼")}
-                        class="text-neon-blue text-4xl font-black leading-normal tracking-widest block w-full break-all cursor-pointer transition active:scale-[0.98] drop-shadow-[0_0_8px_rgba(0,240,255,0.3)]"
+                        class="text-accent text-4xl font-black leading-normal tracking-widest block w-full break-all cursor-pointer transition active:scale-[0.98]"
                         title="點一下複製"
                     >
                         {data.code}
@@ -106,7 +106,7 @@ $effect(() => {
                         <button
                             type="button"
                             onclick={() => copyToClipboard(data.address ?? "", "已複製地址")}
-                            class="text-neon-blue text-3xl font-black leading-normal block w-full break-words mt-3 cursor-pointer transition active:scale-[0.98] drop-shadow-[0_0_8px_rgba(0,240,255,0.3)]"
+                            class="text-accent text-3xl font-black leading-normal block w-full break-words mt-3 cursor-pointer transition active:scale-[0.98]"
                             title="點一下複製"
                         >
                             {data.address}

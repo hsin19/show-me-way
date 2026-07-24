@@ -56,8 +56,8 @@ function jump(dir: 1 | -1) {
     <summary class="text-xs text-text-secondary cursor-pointer select-none hover:text-text-primary transition flex items-center gap-2">
         查看變更
         <span class="font-mono text-[11px]">
-            <span class="text-emerald-400">+{stats.added}</span>
-            <span class="text-neon-pink">-{stats.removed}</span>
+            <span class="text-positive">+{stats.added}</span>
+            <span class="text-danger">-{stats.removed}</span>
         </span>
     </summary>
     {#if hunkStarts.length === 0}
@@ -71,14 +71,14 @@ function jump(dir: 1 | -1) {
                 <button
                     onclick={() => jump(-1)}
                     aria-label="上一處變更"
-                    class="p-1 rounded-md bg-black/40 border border-card-border text-text-secondary hover:text-neon-blue hover:border-neon-blue transition cursor-pointer"
+                    class="p-1 rounded-md bg-black/40 border border-card-border text-text-secondary hover:text-accent hover:border-accent transition cursor-pointer"
                 >
                     <ChevronUp size={14} aria-hidden="true" />
                 </button>
                 <button
                     onclick={() => jump(1)}
                     aria-label="下一處變更"
-                    class="p-1 rounded-md bg-black/40 border border-card-border text-text-secondary hover:text-neon-blue hover:border-neon-blue transition cursor-pointer"
+                    class="p-1 rounded-md bg-black/40 border border-card-border text-text-secondary hover:text-accent hover:border-accent transition cursor-pointer"
                 >
                     <ChevronDown size={14} aria-hidden="true" />
                 </button>
@@ -93,9 +93,9 @@ function jump(dir: 1 | -1) {
                     bind:this={lineEls[i]}
                     class="
                         px-2 whitespace-pre-wrap break-words {line.type === 'added'
-                        ? 'bg-emerald-500/15 text-emerald-300'
+                        ? 'bg-positive/15 text-positive'
                         : line.type === 'removed'
-                        ? 'bg-neon-pink/15 text-neon-pink'
+                        ? 'bg-danger/15 text-danger'
                         : 'text-text-muted'}
                     "
                 >

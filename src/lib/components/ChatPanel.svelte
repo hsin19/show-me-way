@@ -186,13 +186,13 @@ function applyEdit(message: UiMessage) {
             <div class="max-w-md mx-auto w-full p-5 pt-[calc(20px+var(--safe-top))]">
                 <div class="mb-4">
                     <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
-                        <Sparkles size={22} class="text-neon-blue" aria-hidden="true" />AI 行程小幫手
+                        <Sparkles size={22} class="text-accent" aria-hidden="true" />AI 行程小幫手
                     </h2>
                     <p class="text-xs text-text-secondary mt-0.5">用自然語言查詢或編輯你的行程</p>
                 </div>
-                <form onsubmit={saveKey} class="glass-panel rounded-2xl p-5 space-y-4">
+                <form onsubmit={saveKey} class="panel rounded-2xl p-5 space-y-4">
                     <div class="flex items-start gap-2 text-text-secondary">
-                        <KeyRound size={18} class="text-neon-purple shrink-0 mt-0.5" aria-hidden="true" />
+                        <KeyRound size={18} class="text-accent shrink-0 mt-0.5" aria-hidden="true" />
                         <p class="text-sm leading-relaxed">
                             請輸入你的 Google Gemini API 金鑰。金鑰只會儲存在這台裝置上，不會上傳。
                         </p>
@@ -203,12 +203,12 @@ function applyEdit(message: UiMessage) {
                         autocomplete="off"
                         aria-label="Gemini API 金鑰"
                         placeholder="貼上 API 金鑰…"
-                        class="w-full bg-black/40 border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-neon-blue transition"
+                        class="w-full bg-black/40 border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent transition"
                     />
                     <button
                         type="submit"
                         disabled={!keyInput.trim()}
-                        class="w-full bg-gradient-to-r from-neon-blue to-neon-purple text-black font-bold py-3 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer disabled:opacity-40"
+                        class="w-full bg-accent text-accent-contrast font-bold py-3 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer disabled:opacity-40"
                     >
                         儲存並開始
                     </button>
@@ -216,7 +216,7 @@ function applyEdit(message: UiMessage) {
                         href="https://aistudio.google.com/app/apikey"
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="block text-center text-xs text-neon-blue hover:underline"
+                        class="block text-center text-xs text-accent hover:underline"
                     >
                         前往 Google AI Studio 取得免費金鑰
                     </a>
@@ -227,7 +227,7 @@ function applyEdit(message: UiMessage) {
         <!-- Header -->
         <div class="shrink-0 px-5 pt-[calc(16px+var(--safe-top))] pb-3 border-b border-white/5 flex items-center justify-between gap-3">
             <h2 class="text-lg font-extrabold text-text-primary tracking-tight flex items-center gap-2 min-w-0">
-                <Sparkles size={20} class="text-neon-blue shrink-0" aria-hidden="true" /><span class="truncate">AI 行程小幫手</span>
+                <Sparkles size={20} class="text-accent shrink-0" aria-hidden="true" /><span class="truncate">AI 行程小幫手</span>
             </h2>
             <div class="flex items-center gap-2 shrink-0">
                 <select
@@ -235,7 +235,7 @@ function applyEdit(message: UiMessage) {
                     onchange={persistModel}
                     disabled={modelsLoading}
                     aria-label="選擇 AI 模型"
-                    class="max-w-[9rem] bg-black/40 border border-card-border rounded-lg px-2 py-1.5 text-xs text-text-primary outline-none focus:border-neon-blue transition cursor-pointer disabled:opacity-50"
+                    class="max-w-[9rem] bg-black/40 border border-card-border rounded-lg px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent transition cursor-pointer disabled:opacity-50"
                 >
                     {#if models.length === 0}
                         <option value={model}>{modelsLoading ? "載入模型中…" : (model || "自動選擇")}</option>
@@ -247,7 +247,7 @@ function applyEdit(message: UiMessage) {
                 </select>
                 <button
                     onclick={changeKey}
-                    class="text-xs text-text-muted hover:text-neon-pink transition cursor-pointer shrink-0"
+                    class="text-xs text-text-muted hover:text-danger transition cursor-pointer shrink-0"
                 >
                     更換金鑰
                 </button>
@@ -259,7 +259,7 @@ function applyEdit(message: UiMessage) {
             <div class="max-w-3xl mx-auto w-full space-y-3">
                 {#if messages.length === 0}
                     <div class="text-center text-text-muted text-sm py-10">
-                        <Sparkles size={28} class="text-neon-purple/60 mx-auto mb-3" aria-hidden="true" />
+                        <Sparkles size={28} class="text-text-muted mx-auto mb-3" aria-hidden="true" />
                         <p>試著問問看，或直接用說的編輯行程：</p>
                         <p class="mt-1 text-text-secondary">「第二天的行程是什麼？」</p>
                         <p class="text-text-secondary">「幫我在第三天下午加一個咖啡廳」</p>
@@ -272,8 +272,8 @@ function applyEdit(message: UiMessage) {
                             class="
                                 max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words
                                 {message.role === 'user'
-                                ? 'bg-gradient-to-r from-neon-blue to-neon-purple text-black font-medium'
-                                : 'glass-panel text-text-primary'}
+                                ? 'bg-accent text-accent-contrast font-medium'
+                                : 'panel text-text-primary'}
                             "
                         >
                             {message.content}
@@ -282,7 +282,7 @@ function applyEdit(message: UiMessage) {
                     {#if message.editError}
                         <!-- The model proposed an edit, but it failed validation. -->
                         <div class="flex justify-start">
-                            <div class="max-w-[85%] flex items-start gap-1.5 text-xs text-neon-pink bg-neon-pink/10 border border-neon-pink/20 p-2.5 rounded-lg">
+                            <div class="max-w-[85%] flex items-start gap-1.5 text-xs text-danger bg-danger/10 border border-danger/20 p-2.5 rounded-lg">
                                 <TriangleAlert size={14} class="shrink-0 mt-px" aria-hidden="true" />
                                 <span>AI 產生的行程無效，未套用。{message.editError}</span>
                             </div>
@@ -290,19 +290,19 @@ function applyEdit(message: UiMessage) {
                     {:else if message.editYaml}
                         <!-- Conversational edit: confirm before changing the itinerary. -->
                         <div class="flex justify-start">
-                            <div class="max-w-[85%] w-full rounded-2xl border border-neon-purple/30 bg-neon-purple/5 p-3 space-y-2.5">
-                                <div class="flex items-center gap-1.5 text-xs font-semibold text-neon-purple">
+                            <div class="max-w-[85%] w-full rounded-2xl border border-accent/25 bg-accent/8 p-3 space-y-2.5">
+                                <div class="flex items-center gap-1.5 text-xs font-semibold text-accent">
                                     <WandSparkles size={14} aria-hidden="true" />AI 建議修改行程
                                 </div>
                                 <DiffView base={message.baseYaml ?? ""} proposed={message.editYaml} />
                                 {#if message.editApplied}
-                                    <div class="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
+                                    <div class="flex items-center gap-1.5 text-xs font-semibold text-positive">
                                         <Check size={14} aria-hidden="true" />已套用變更
                                     </div>
                                 {:else}
                                     <button
                                         onclick={() => applyEdit(message)}
-                                        class="w-full bg-gradient-to-r from-neon-blue to-neon-purple text-black font-bold py-2.5 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer"
+                                        class="w-full bg-accent text-accent-contrast font-bold py-2.5 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer"
                                     >
                                         套用變更
                                     </button>
@@ -316,13 +316,13 @@ function applyEdit(message: UiMessage) {
                 {/each}
                 {#if isSending}
                     <div class="flex justify-start">
-                        <div class="glass-panel rounded-2xl px-3.5 py-2.5 text-text-secondary">
+                        <div class="panel rounded-2xl px-3.5 py-2.5 text-text-secondary">
                             <Loader2 size={16} class="animate-spin" aria-hidden="true" />
                         </div>
                     </div>
                 {/if}
                 {#if errorText}
-                    <div class="flex items-start gap-1.5 text-xs text-neon-pink bg-neon-pink/10 border border-neon-pink/20 p-2.5 rounded-lg">
+                    <div class="flex items-start gap-1.5 text-xs text-danger bg-danger/10 border border-danger/20 p-2.5 rounded-lg">
                         <TriangleAlert size={14} class="shrink-0 mt-px" aria-hidden="true" />
                         <span>{errorText}</span>
                     </div>
@@ -339,13 +339,13 @@ function applyEdit(message: UiMessage) {
                     autocomplete="off"
                     placeholder="詢問或用說的編輯行程…"
                     disabled={isSending}
-                    class="flex-1 min-w-0 bg-black/40 border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-neon-blue transition disabled:opacity-50"
+                    class="flex-1 min-w-0 bg-black/40 border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent transition disabled:opacity-50"
                 />
                 <button
                     type="submit"
                     aria-label="送出"
                     disabled={!input.trim() || isSending}
-                    class="flex-shrink-0 bg-gradient-to-r from-neon-blue to-neon-purple text-black rounded-xl p-2.5 transition active:scale-[0.96] cursor-pointer disabled:opacity-40"
+                    class="flex-shrink-0 bg-accent text-accent-contrast rounded-xl p-2.5 transition active:scale-[0.96] cursor-pointer disabled:opacity-40"
                 >
                     <Send size={18} class="stroke-[2.5]" aria-hidden="true" />
                 </button>

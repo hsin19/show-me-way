@@ -40,7 +40,7 @@ const WeatherIcon = $derived(ICONS[info.icon]);
     <WeatherIcon size={14} class="shrink-0" aria-hidden="true" />
     <span>{info.label} {Math.round(weather.tempMin)}° / {Math.round(weather.tempMax)}°</span>
     {#if weather.precipProb !== null && weather.precipProb >= 20}
-        <span class="flex items-center gap-0.5 text-neon-blue/80">
+        <span class="flex items-center gap-0.5 text-accent/80">
             <Droplets size={11} class="shrink-0" aria-hidden="true" /><span class="sr-only">降雨機率</span>{weather.precipProb}%
         </span>
     {/if}

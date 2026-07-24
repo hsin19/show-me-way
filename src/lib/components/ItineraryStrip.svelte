@@ -68,8 +68,8 @@ let {
 const EVENT_SCROLL_GAP = 8;
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 // Day-change slide transition (ms / px). Tweak here for feel.
-const PAGE_MS = 1000;
-const PAGE_SHIFT = 120;
+const PAGE_MS = 280;
+const PAGE_SHIFT = 80;
 
 // "Today" derivations (consumed by the DaySwitcher marker and the overview capsule).
 let todayData = $derived(days.find(d => d.date === toLocalIsoDate(clockNow)) ?? null);
@@ -183,7 +183,7 @@ $effect(() => {
 
 <div class="flex flex-col h-full">
     <!-- Day switcher header: chips drive the same `currentDay` as the pager below. -->
-    <header class="shrink-0 z-[100] bg-[#0d0e15]/85 backdrop-blur-xl border-b border-white/5 pt-[calc(12px+var(--safe-top))] px-5">
+    <header class="shrink-0 z-[100] bg-bg-main/90 backdrop-blur-xl border-b border-white/5 pt-[calc(12px+var(--safe-top))] px-5">
         <div class="max-w-3xl mx-auto w-full">
             <DaySwitcher days={days.map(d => ({ day: d.day, date: formatDayDate(d.date) }))} {currentDay} onSelect={goToDay} {todayDay} />
         </div>

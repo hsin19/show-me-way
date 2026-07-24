@@ -55,15 +55,15 @@ let showProfiles = $state(false);
 </script>
 
 <!-- Trip hero card -->
-<div class="glass-panel rounded-2xl p-6 mb-6 relative overflow-hidden before:content-[''] before:absolute before:top-0 before:left-0 before:w-1 before:h-full before:bg-gradient-to-b before:from-neon-blue before:to-neon-pink">
-    <h2 class="text-2xl font-black bg-gradient-to-r from-white to-[#cbd5e1] bg-clip-text text-transparent tracking-tight">
+<div class="panel rounded-2xl p-6 mb-6">
+    <h2 class="text-2xl font-extrabold text-text-primary tracking-tight">
         {trip.name}
     </h2>
     <p class="text-xs text-text-secondary font-medium tracking-wide mt-1.5 flex items-center gap-1.5">
         <CalendarRange size={14} class="shrink-0" aria-hidden="true" />
         {formatDateRange(trip.start, trip.end)}・共 {days.length} 天
     </p>
-    <div class="mt-4 inline-flex max-w-full items-center bg-neon-pink/12 border border-neon-pink/30 text-neon-pink text-xs font-bold px-3.5 py-2 rounded-full shadow-[0_0_15px_rgba(255,42,116,0.25)] text-shadow-[0_0_4px_rgba(255,42,116,0.3)]">
+    <div class="mt-4 inline-flex max-w-full items-center bg-accent/12 text-accent text-xs font-bold px-3.5 py-2 rounded-full">
         <span class="truncate">{countdownText}</span>
     </div>
 </div>
@@ -74,10 +74,10 @@ let showProfiles = $state(false);
         {@const weather = weatherFor(day)}
         <button
             onclick={() => onSelectDay(day.day)}
-            class="w-full glass-panel rounded-xl p-3.5 flex items-center gap-3 text-left hover:bg-white/5 transition cursor-pointer"
+            class="w-full panel rounded-xl p-3.5 flex items-center gap-3 text-left hover:bg-white/5 transition cursor-pointer"
         >
             <div class="shrink-0 w-[56px] flex flex-col items-center">
-                <span class="text-[10px] font-bold text-neon-blue">DAY {String(day.day).padStart(2, "0")}</span>
+                <span class="text-[11px] font-bold text-accent">DAY {String(day.day).padStart(2, "0")}</span>
                 <span class="text-sm font-bold text-text-primary mt-0.5">{formatDayDate(day.date).split("(")[0]}</span>
             </div>
             <div class="flex-1 min-w-0">
@@ -100,11 +100,11 @@ let showProfiles = $state(false);
     <button
         onclick={() => (showProfiles = !showProfiles)}
         aria-expanded={showProfiles}
-        class="w-full glass-panel rounded-xl p-3.5 flex items-center gap-2.5 text-left hover:bg-white/5 transition cursor-pointer"
+        class="w-full panel rounded-xl p-3.5 flex items-center gap-2.5 text-left hover:bg-white/5 transition cursor-pointer"
     >
-        <Layers size={16} class="shrink-0 text-neon-blue" aria-hidden="true" />
+        <Layers size={16} class="shrink-0 text-accent" aria-hidden="true" />
         <span class="flex-1 min-w-0">
-            <span class="block text-[10px] font-bold text-text-muted">目前行程</span>
+            <span class="block text-[11px] font-bold text-text-muted">目前行程</span>
             <span class="block text-sm font-bold text-text-primary truncate">{trip.name}</span>
         </span>
         <ChevronDown size={16} class="shrink-0 text-text-muted transition-transform {showProfiles ? 'rotate-180' : ''}" aria-hidden="true" />
@@ -115,7 +115,7 @@ let showProfiles = $state(false);
                 <div class="flex items-center gap-1">
                     <button
                         onclick={() => onSwitchProfile(profile.id)}
-                        class="flex-1 min-w-0 min-h-[44px] flex items-center justify-between gap-2 px-3.5 rounded-xl bg-white/3 border border-card-border text-text-secondary hover:text-neon-blue hover:bg-white/5 transition cursor-pointer"
+                        class="flex-1 min-w-0 min-h-[44px] flex items-center justify-between gap-2 px-3.5 rounded-xl bg-white/3 border border-card-border text-text-secondary hover:text-accent hover:bg-white/5 transition cursor-pointer"
                     >
                         <span class="truncate text-sm font-semibold">{profile.name}</span>
                         <span class="shrink-0 text-[11px] font-bold">切換</span>
@@ -123,7 +123,7 @@ let showProfiles = $state(false);
                     <button
                         onclick={() => onDeleteProfile(profile.id, profile.name)}
                         aria-label="刪除行程 {profile.name}"
-                        class="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-text-muted hover:text-neon-pink transition cursor-pointer"
+                        class="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-text-muted hover:text-danger transition cursor-pointer"
                     >
                         <Trash2 size={16} aria-hidden="true" />
                     </button>
@@ -131,7 +131,7 @@ let showProfiles = $state(false);
             {/each}
             <button
                 onclick={onCreateProfile}
-                class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-white/3 border border-dashed border-card-border text-text-secondary hover:text-neon-blue hover:bg-white/5 transition cursor-pointer text-xs font-bold"
+                class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-white/3 border border-dashed border-card-border text-text-secondary hover:text-accent hover:bg-white/5 transition cursor-pointer text-xs font-bold"
             >
                 <Plus size={14} aria-hidden="true" /> 新增行程
             </button>
@@ -144,7 +144,7 @@ let showProfiles = $state(false);
 <div class="grid grid-cols-2 gap-2 mt-3">
     <button
         onclick={onShare}
-        class="bg-white/3 border border-neon-blue/30 text-neon-blue font-bold py-3.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-neon-blue/10 transition active:scale-[0.98] cursor-pointer"
+        class="bg-accent/10 text-accent font-bold py-3.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-accent/15 transition active:scale-[0.98] cursor-pointer"
     >
         <Share2 size={14} aria-hidden="true" /> 分享行程
     </button>

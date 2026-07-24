@@ -34,7 +34,7 @@ days:
     pace: 輕鬆漫遊，當天以休息與覓食為主
     timeline:
       - time: '08:00'
-        title: ✈️ 出發前往東京
+        title: 出發前往東京
         type: booked
         desc: 桃園機場第一航廈出發，記得提早 2.5 小時到機場。
         status: done
@@ -43,11 +43,11 @@ days:
           name: 'WANG XIAO MING'
           note: 線上登機證存手機，托運行李限重 23kg
       - time: '14:00'
-        title: 🏨 飯店 Check-in
+        title: 飯店 Check-in
         type: standard
         desc: 抵達飯店辦理入住、放置行李，確認 Wi-Fi 與早餐時間。
       - time: '18:00 - 19:30'
-        title: 🍜 晚餐探店
+        title: 晚餐探店
         type: must-go
         desc: 造訪當地熱門拉麵名店，開啟美食之旅。
         localName: 一蘭 新宿中央東口店
@@ -68,7 +68,7 @@ days:
     pace: 腳步略快，行程豐富
     timeline:
       - time: '09:30 - 11:00'
-        title: 🎟️ teamLab 預約入場
+        title: teamLab 預約入場
         type: booked
         desc: 數位藝術展，須持預約 QR code 於指定時段入場。
         localName: チームラボプラネッツ TOKYO
@@ -80,19 +80,19 @@ days:
           code: 'TL-0099123'
           note: 出示 App 內 QR code
       - time: '12:30 - 13:30'
-        title: 🍱 午餐
+        title: 午餐
         type: standard
         desc: 在澀谷一帶找間定食或丼飯店解決午餐。
         alternatives:
           - title: 平價迴轉壽司
             note: 想快速解決就選這個
       - time: '15:00'
-        title: ☕ 下午茶時光
+        title: 下午茶時光
         type: option
         desc: 網紅咖啡廳點杯咖啡與招牌甜點，稍作休息。
         status: skipped
       - time: '19:00'
-        title: 🛍️ 澀谷逛街採購
+        title: 澀谷逛街採購
         type: standard
         desc: 逛 PARCO、唐吉訶德補貨，注意免稅門檻與營業時間。
         links:
@@ -105,7 +105,7 @@ days:
     pace: 早出晚歸，當天移動到京都
     timeline:
       - time: '07:30'
-        title: 🚄 新幹線前往京都
+        title: 新幹線前往京都
         type: booked
         desc: 東京站搭乘東海道新幹線「のぞみ」前往京都，約 2 小時 15 分。
         bullets:
@@ -115,7 +115,7 @@ days:
           code: 'EX-778812'
           note: 進站刷 IC 卡與預約紀錄
       - time: '10:00 - 12:00'
-        title: ⛩️ 伏見稻荷大社
+        title: 伏見稻荷大社
         type: must-go
         desc: 千本鳥居必訪，建議早到避開人潮，體力夠可走到山腰。
         localName: 伏見稲荷大社
@@ -123,7 +123,7 @@ days:
         bullets:
           - 來回約 2 小時，穿好走的鞋
       - time: '13:00 - 14:00'
-        title: 🍵 京都午餐
+        title: 京都午餐
         type: standard
         desc: 祇園或錦市場一帶用餐，順道逛逛。
         localName: 錦市場
@@ -132,7 +132,7 @@ days:
             localName: 南禅寺 順正
             note: 想吃正式一點選這間，建議先訂位
       - time: '18:30'
-        title: 🚄 返回東京
+        title: 返回東京
         type: booked
         desc: 京都站搭新幹線返回東京，回飯店休息。
         confirmation:
@@ -143,11 +143,11 @@ days:
     pace: 收尾行程，不排太滿
     timeline:
       - time: '10:00 - 12:00'
-        title: 🎁 最後採購與打包
+        title: 最後採購與打包
         type: standard
         desc: 到藥妝店或機場免稅店補齊伴手禮，回飯店整理行李、退房。
       - time: '15:00'
-        title: ✈️ 搭機回國
+        title: 搭機回國
         type: booked
         desc: 帶著滿滿的回憶搭乘回程班機，記得預留退稅與安檢時間。
         confirmation:

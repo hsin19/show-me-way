@@ -87,8 +87,8 @@ let filteredPhrases = $derived(
     {#each hotels as hotel (hotel.name)}
         <div
             class="
-                glass-panel rounded-2xl p-5 relative overflow-hidden
-                {isCurrentStay(hotel) ? 'border-neon-blue shadow-[0_0_15px_rgba(0,240,255,0.15)] before:content-[\'\'] before:absolute before:top-0 before:left-0 before:w-1 before:h-full before:bg-neon-blue' : ''}
+                panel rounded-2xl p-5
+                {isCurrentStay(hotel) ? 'ring-1 ring-accent/40' : ''}
             "
         >
             <div class="flex justify-between items-start mb-3">
@@ -96,7 +96,7 @@ let filteredPhrases = $derived(
                     <div class="flex items-center gap-2 flex-wrap">
                         <span class="text-sm font-bold text-text-primary block">{hotel.name}</span>
                         {#if isCurrentStay(hotel)}
-                            <span class="inline-flex items-center gap-1 text-[10px] bg-neon-blue/15 text-neon-blue font-extrabold px-1.5 py-0.5 rounded border border-neon-blue/30 animate-pulse">
+                            <span class="inline-flex items-center gap-1 text-[11px] bg-accent/12 text-accent font-bold px-1.5 py-0.5 rounded-md">
                                 <BedDouble size={11} aria-hidden="true" /> 當前入住
                             </span>
                         {/if}
@@ -119,7 +119,7 @@ let filteredPhrases = $derived(
                 </button>
             </div>
 
-            <div class="bg-black/25 border border-card-border p-3.5 rounded-xl text-center font-bold text-base text-neon-blue tracking-wide my-3">
+            <div class="bg-black/25 border border-card-border p-3.5 rounded-xl text-center font-bold text-base text-text-primary tracking-wide my-3">
                 {hotel.address}
             </div>
 
@@ -131,7 +131,7 @@ let filteredPhrases = $derived(
 
             <button
                 onclick={() => showAddressForDriver(hotel)}
-                class="w-full bg-gradient-to-r from-neon-blue to-neon-purple text-black font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition active:scale-[0.98] cursor-pointer shadow-[0_0_10px_rgba(0,240,255,0.15)]"
+                class="w-full bg-accent text-accent-contrast font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition active:scale-[0.98] cursor-pointer"
             >
                 <Maximize2 size={12} aria-hidden="true" />
                 全螢幕放大給司機看
@@ -144,7 +144,7 @@ let filteredPhrases = $derived(
 {#if phrases.length > 0}
     <div class="mt-6">
         <h3 class="text-base font-bold text-text-primary mb-4 flex items-center gap-2">
-            <MessageSquareText size={18} class="text-neon-blue" aria-hidden="true" />實用常用語
+            <MessageSquareText size={18} class="text-accent" aria-hidden="true" />實用常用語
         </h3>
 
         {#if availableCats.length > 0}
@@ -156,9 +156,9 @@ let filteredPhrases = $derived(
                             aria-pressed={activeFilter === cat}
                             onclick={() => (phraseFilter = cat)}
                             class="
-                                flex-none min-h-[44px] px-4 rounded-xl border text-xs font-bold transition duration-300 cursor-pointer
+                                flex-none min-h-[44px] px-4 rounded-xl border text-xs font-bold transition duration-200 cursor-pointer
                                 {activeFilter === cat
-                                ? 'bg-gradient-to-br from-neon-blue/15 to-neon-pink/10 border-neon-blue text-neon-blue shadow-[0_0_15px_rgba(0,240,255,0.25)]'
+                                ? 'bg-accent/15 border-transparent text-accent'
                                 : 'bg-white/3 border-card-border text-text-secondary hover:bg-white/5'}
                             "
                         >
@@ -177,9 +177,9 @@ let filteredPhrases = $derived(
                     class="bg-card-bg border border-card-border rounded-xl p-3.5 flex justify-between items-center w-full text-left cursor-pointer transition duration-200 active:scale-[0.98] hover:bg-white/5 group"
                 >
                     <div class="flex flex-col gap-1">
-                        <span class="text-sm font-bold text-text-primary group-hover:text-neon-blue transition-colors">{p.zh}</span>
-                        <span class="text-base font-extrabold text-neon-pink">{p.text}</span>
-                        <span class="text-[10px] text-text-secondary italic">{p.rom}</span>
+                        <span class="text-xs font-semibold text-text-secondary group-hover:text-accent transition-colors">{p.zh}</span>
+                        <span class="text-base font-bold text-text-primary">{p.text}</span>
+                        <span class="text-[11px] text-text-muted italic">{p.rom}</span>
                     </div>
                     <div class="text-text-muted group-hover:text-text-primary transition-colors">
                         <Copy size={14} aria-hidden="true" />

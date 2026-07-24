@@ -28,9 +28,9 @@ function submitNew(e: SubmitEvent) {
 }
 </script>
 
-<div class="glass-panel rounded-2xl p-5 mb-5">
+<div class="panel rounded-2xl p-5 mb-5">
     <h3 class="text-base font-bold text-text-primary mb-4 flex items-center gap-2">
-        {#if TitleIcon}<TitleIcon size={18} class="text-neon-blue" aria-hidden="true" />{/if}
+        {#if TitleIcon}<TitleIcon size={18} class="text-accent" aria-hidden="true" />{/if}
         {title}
     </h3>
     <ul class="space-y-1">
@@ -46,18 +46,18 @@ function submitNew(e: SubmitEvent) {
                     <span
                         aria-hidden="true"
                         class="
-                            w-5 h-5 rounded-md border-2 border-text-muted bg-white/2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors duration-300
-                            {item.checked ? 'border-accent-green bg-accent-green/15' : 'group-hover:border-neon-blue'}
+                            w-5 h-5 rounded-md border-2 border-text-muted bg-white/2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors duration-200
+                            {item.checked ? 'border-positive bg-positive/15' : 'group-hover:border-accent'}
                         "
                     >
                         {#if item.checked}
-                            <Check size={12} class="stroke-accent-green stroke-[4]" aria-hidden="true" />
+                            <Check size={12} class="stroke-positive stroke-[4]" aria-hidden="true" />
                         {/if}
                     </span>
                     <span
                         class="
-                            text-sm transition-colors duration-300 break-words
-                            {item.checked ? 'text-text-muted line-through' : 'text-text-primary group-hover:text-neon-blue'}
+                            text-sm transition-colors duration-200 break-words
+                            {item.checked ? 'text-text-muted line-through' : 'text-text-primary group-hover:text-accent'}
                         "
                     >
                         {item.text}
@@ -66,7 +66,7 @@ function submitNew(e: SubmitEvent) {
                 <button
                     onclick={() => onDelete(item._id!)}
                     aria-label="刪除項目"
-                    class="text-text-muted hover:text-neon-pink min-w-[44px] min-h-[44px] -m-2.5 flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition cursor-pointer"
+                    class="text-text-muted hover:text-danger min-w-[44px] min-h-[44px] -m-2.5 flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition cursor-pointer"
                 >
                     <Trash2 size={16} aria-hidden="true" />
                 </button>
@@ -83,12 +83,12 @@ function submitNew(e: SubmitEvent) {
             aria-label="{title} — 新增項目"
             autocomplete="off"
             placeholder="新增項目…"
-            class="flex-1 min-w-0 bg-black/40 border border-card-border rounded-xl px-3 py-2 text-sm text-text-primary outline-none focus:border-neon-blue transition"
+            class="flex-1 min-w-0 bg-black/40 border border-card-border rounded-xl px-3 py-2 text-sm text-text-primary outline-none focus:border-accent transition"
         />
         <button
             type="submit"
             aria-label="新增項目"
-            class="flex-shrink-0 bg-gradient-to-r from-neon-blue to-neon-purple text-black rounded-xl p-2 transition active:scale-[0.96] cursor-pointer disabled:opacity-40"
+            class="flex-shrink-0 bg-accent text-accent-contrast rounded-xl p-2 transition active:scale-[0.96] cursor-pointer disabled:opacity-40"
             disabled={!newText.trim()}
         >
             <Plus size={18} class="stroke-[3]" aria-hidden="true" />

@@ -671,18 +671,18 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
     <main class="flex-1 min-h-0 w-full">
         {#if isLoading}
             <div class="h-full flex flex-col items-center justify-center gap-3 pt-[var(--safe-top)]">
-                <Loader2 class="animate-spin text-neon-blue" size={36} />
+                <Loader2 class="animate-spin text-accent" size={36} />
                 <p class="text-text-secondary text-sm">正在載入行程資料…</p>
             </div>
         {:else if loadError}
             <div class="h-full overflow-y-auto">
                 <div class="max-w-3xl mx-auto w-full p-5 pt-[calc(20px+var(--safe-top))]">
-                    <div class="glass-panel rounded-2xl p-6 text-center border-neon-pink/35 shadow-[0_0_15px_rgba(255,42,116,0.1)]">
-                        <TriangleAlert size={32} class="text-neon-pink mx-auto mb-3" aria-hidden="true" />
+                    <div class="panel rounded-2xl p-6 text-center border border-danger/30">
+                        <TriangleAlert size={32} class="text-danger mx-auto mb-3" aria-hidden="true" />
                         <p class="text-text-primary text-sm font-semibold mb-4">{loadError}</p>
                         <button
                             onclick={() => (showSettings = true)}
-                            class="bg-gradient-to-r from-neon-blue to-neon-purple text-black font-bold py-2.5 px-6 rounded-xl text-xs transition active:scale-[0.98] cursor-pointer"
+                            class="bg-accent text-accent-contrast font-bold py-2.5 px-6 rounded-xl text-xs transition active:scale-[0.98] cursor-pointer"
                         >
                             開啟設定並貼上 YAML
                         </button>
@@ -719,7 +719,7 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
                         {#if activeTab === "todo"}
                             <div class="mb-4">
                                 <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
-                                    <ListChecks size={22} class="text-neon-blue" aria-hidden="true" />行前準備與打包
+                                    <ListChecks size={22} class="text-accent" aria-hidden="true" />行前準備與打包
                                 </h2>
                                 <p class="text-xs text-text-secondary mt-0.5">狀態將自動快取於手機</p>
                             </div>
@@ -742,7 +742,7 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
                         {:else if activeTab === "taxi"}
                             <div class="mb-4">
                                 <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
-                                    <Car size={22} class="text-neon-blue" aria-hidden="true" />乘車助手 & 實用常用語
+                                    <Car size={22} class="text-accent" aria-hidden="true" />乘車助手 & 實用常用語
                                 </h2>
                                 <p class="text-xs text-text-secondary mt-0.5">出示給司機或快速複製使用</p>
                             </div>
@@ -756,7 +756,7 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
                         {:else if activeTab === "calc"}
                             <div class="mb-4">
                                 <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
-                                    <Wallet size={22} class="text-neon-blue" aria-hidden="true" />匯率與消費記帳
+                                    <Wallet size={22} class="text-accent" aria-hidden="true" />匯率與消費記帳
                                 </h2>
                                 <p class="text-xs text-text-secondary mt-0.5">出國換算與儲值餘額管理</p>
                             </div>
@@ -778,41 +778,41 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
 
     <!-- Bottom Tab Navigation: a flow child of the fixed-height shell (no longer
          position:fixed — the shell doesn't scroll). -->
-    <nav class="shrink-0 h-[calc(64px+var(--safe-bottom))] bg-[#0d0e15]/88 backdrop-blur-2xl border-t border-white/5 z-[100]">
+    <nav class="shrink-0 h-[calc(64px+var(--safe-bottom))] bg-bg-main/90 backdrop-blur-2xl border-t border-white/5 z-[100]">
         <div class="max-w-3xl mx-auto w-full h-full flex justify-around items-center pb-[var(--safe-bottom)]">
             <button
                 onclick={() => (activeTab = "itinerary")}
-                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'itinerary' ? 'text-neon-blue' : ''}"
+                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'itinerary' ? 'text-accent' : ''}"
             >
-                <Calendar size={20} class={activeTab === "itinerary" ? "stroke-neon-blue filter drop-shadow-[0_0_4px_rgba(0,240,255,0.4)]" : ""} />
+                <Calendar size={20} />
                 <span class="text-[10px] font-semibold mt-1">行程</span>
             </button>
             <button
                 onclick={() => (activeTab = "todo")}
-                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'todo' ? 'text-neon-blue' : ''}"
+                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'todo' ? 'text-accent' : ''}"
             >
-                <CheckSquare size={20} class={activeTab === "todo" ? "stroke-neon-blue filter drop-shadow-[0_0_4px_rgba(0,240,255,0.4)]" : ""} />
+                <CheckSquare size={20} />
                 <span class="text-[10px] font-semibold mt-1">準備</span>
             </button>
             <button
                 onclick={() => (activeTab = "taxi")}
-                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'taxi' ? 'text-neon-blue' : ''}"
+                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'taxi' ? 'text-accent' : ''}"
             >
-                <Compass size={20} class={activeTab === "taxi" ? "stroke-neon-blue filter drop-shadow-[0_0_4px_rgba(0,240,255,0.4)]" : ""} />
+                <Compass size={20} />
                 <span class="text-[10px] font-semibold mt-1">助手</span>
             </button>
             <button
                 onclick={() => (activeTab = "calc")}
-                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'calc' ? 'text-neon-blue' : ''}"
+                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'calc' ? 'text-accent' : ''}"
             >
-                <DollarSign size={20} class={activeTab === "calc" ? "stroke-neon-blue filter drop-shadow-[0_0_4px_rgba(0,240,255,0.4)]" : ""} />
+                <DollarSign size={20} />
                 <span class="text-[10px] font-semibold mt-1">記帳</span>
             </button>
             <button
                 onclick={() => (activeTab = "ai")}
-                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'ai' ? 'text-neon-blue' : ''}"
+                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'ai' ? 'text-accent' : ''}"
             >
-                <Sparkles size={20} class={activeTab === "ai" ? "stroke-neon-blue filter drop-shadow-[0_0_4px_rgba(0,240,255,0.4)]" : ""} />
+                <Sparkles size={20} />
                 <span class="text-[10px] font-semibold mt-1">AI</span>
             </button>
         </div>

@@ -6,31 +6,26 @@
    because standalone mode has no dynamic chrome. */
 @custom-variant standalone (@media (display-mode: standalone));
 
-/* Tailwind v4 Custom Theme Configurations */
 @theme {
-    --color-neon-pink: #ff2a74;
-    --color-neon-blue: #00f0ff;
-    --color-neon-purple: #9d4edd;
-    --color-neon-orange: #ff7b00;
-    --color-bg-main: #0b0c13;
-    --color-card-bg: rgba(26, 28, 43, 0.65);
-    --color-card-border: rgba(255, 255, 255, 0.07);
-    --color-text-primary: #f8f9fa;
-    --color-text-secondary: #c2c6dc;
-    --color-text-muted: #8c92b0;
-    --color-accent-green: #00f5d4;
+    /* Refined Dark（沉穩深藍）design tokens.
+       `accent` is the ONLY interactive color; booked/must/option are semantic
+       event-type colors and never mark interactive chrome. */
+    --color-accent: #4cc2f7; /* sky — interactive: links, active states, CTAs */
+    --color-accent-contrast: #06202e; /* text on solid accent surfaces */
+    --color-booked: #fbbf24; /* amber-400 — 預訂 events / confirmation codes */
+    --color-must: #fb7185; /* rose-400 — 必訪 events / today marker */
+    --color-option: #a78bfa; /* violet-400 — 備選 events */
+    --color-positive: #34d399; /* emerald-400 — done / deposits / diff added */
+    --color-danger: #fb7185; /* destructive hovers, errors, diff removed */
+    --color-bg-main: #0f172a; /* slate-900 — page & nav/header material */
+    --color-card-bg: #1c2740; /* raised card / dialog surface */
+    --color-card-border: rgba(148, 163, 184, 0.16); /* input & quiet borders */
+    --color-text-primary: #f1f5f9;
+    --color-text-secondary: #cbd5e1;
+    --color-text-muted: #8fa0b8;
 
-    --animate-pulse-flag: pulseFlag 3s infinite ease-in-out;
     --animate-fade-in: fadeIn 0.4s ease-out;
 
-    @keyframes pulseFlag {
-        0%, 100% {
-            transform: scale(1);
-        }
-        50% {
-            transform: scale(1.1);
-        }
-    }
     @keyframes fadeIn {
         from {
             opacity: 0;
@@ -53,7 +48,6 @@
 
 body {
     background-color: var(--color-bg-main);
-    background-image: linear-gradient(135deg, #090a0f 0%, #121420 100%);
     color: var(--color-text-primary);
     font-family: "Plus Jakarta Sans Variable", "Noto Sans TC Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     min-height: 100vh;
@@ -63,13 +57,11 @@ body {
     touch-action: manipulation;
 }
 
-/* Glassmorphism Common Utilities */
-.glass-panel {
+/* Raised surface shared by cards and dialogs: solid fill plus a hairline top
+   light — no drop shadows or glows anywhere in this theme. */
+.panel {
     background: var(--color-card-bg);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid var(--color-card-border);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 /* Custom Scrollbars */
@@ -115,7 +107,7 @@ body {
 
 /* Visible keyboard focus for interactive elements (low specificity so components can override) */
 :where(a, button, input, select, textarea, [role="button"], [role="checkbox"], [tabindex]):focus-visible {
-    outline: 2px solid var(--color-neon-blue);
+    outline: 2px solid var(--color-accent);
     outline-offset: 2px;
     border-radius: 6px;
 }
