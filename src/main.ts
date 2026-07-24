@@ -8,6 +8,12 @@ import "@fontsource-variable/plus-jakarta-sans/index.css";
 import "@fontsource-variable/noto-sans-tc/index.css";
 import "./app.css";
 import App from "./App.svelte";
+import { initTheme } from "./lib/theme.svelte";
+
+// Adopt the stored theme preference and start following the OS. The inline
+// script in index.html already set data-theme before paint; this wires up the
+// live `prefers-color-scheme` listener and the module's reactive state.
+initTheme();
 
 const app = mount(App, {
     target: document.getElementById("app")!,

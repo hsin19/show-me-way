@@ -5,6 +5,29 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <meta name="theme-color" content="#0f172a" />
 
+        <!-- Set the theme before first paint. This has to be an inline classic
+             script: src/main.ts is a module, so it runs after the stylesheet has
+             already painted the dark default, which flashes dark on a light
+             theme. Mirrors readThemePref/resolveTheme in src/lib/theme.svelte.ts
+             — keep both in sync (e2e/tests/theme.spec.ts guards the pair).
+
+             Deliberately does NOT touch the theme-color meta above: the color
+             would have to be duplicated here as a literal, and initTheme() sets
+             it from --color-bg-main a few ms later anyway. A browser-chrome tint
+             arriving one frame late is invisible; a literal drifting out of sync
+             with app.css is not. -->
+        <script>
+        try {
+            var pref = localStorage.getItem("showmeway_theme");
+            if (pref !== "dark" && pref !== "light") pref = "system";
+            var dark = pref === "dark"
+                || (pref === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+            document.documentElement.dataset.theme = dark ? "dark" : "light";
+        } catch (e) {
+            document.documentElement.dataset.theme = "dark";
+        }
+        </script>
+
         <!-- PWA & Mobile Web Capabilities -->
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

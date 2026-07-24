@@ -69,6 +69,67 @@
     color-scheme: dark;
 }
 
+/* 紙感淺色（Warm Paper）. Overrides every token whose meaning is theme-dependent;
+   `scrim` is deliberately absent because the enlarged-card blackout stays
+   near-black in both themes. The translucent ramps flip from added white to
+   added ink (#221d15, the palette's own near-black) — and `well`/`well-deep`
+   drop from 22%/40% to 4.5%/7.5%, because on a white card a 22% recess would
+   read as dark grey rather than a dent. `data-theme` is set by the inline boot
+   script in index.html; this rule is un-layered on purpose so it outranks
+   Tailwind's `@layer theme` defaults. */
+:root[data-theme="light"] {
+    /* 柿橘, a stop deeper than mockup B's #c2410c. Sky fails outright on paper
+       (≈1.8:1), but #c2410c only reached 4.70:1 on the card and dropped to
+       3.8:1 once its own `bg-accent/15` chip fill sat behind it — under AA.
+       orange-800 holds 6.7:1 on the card and 5.3:1 on the tint. */
+    --color-accent: #9a3412;
+    --color-accent-contrast: #fff8f2;
+    /* yellow-800. mockup B's #a16207 measured 4.49:1 on the card — 0.01 short of
+       AA, and 預訂 badges / confirmation codes are information, not decoration.
+       Kept yellower than `accent` so the two stay tellable apart on paper. */
+    --color-booked: #854d0e;
+    --color-must: #be123c;
+    --color-option: #6d28d9;
+    --color-positive: #047857;
+    --color-danger: #be123c;
+    /* No pure white anywhere: #ffffff is the brightest value a screen can emit,
+       and cards cover most of the viewport, so a white card is what makes a
+       light theme feel harsh indoors. Both surfaces sit a step down (card
+       L*≈96, page L*≈91) — still paper, less glare. */
+    --color-bg-main: #ece5d8;
+    --color-card-bg: #f8f4ec;
+    --color-card-border: rgba(34, 29, 21, 0.14);
+    --color-text-primary: #221d15;
+    --color-text-secondary: #4a4237;
+    /* Deeper than mockup B's #857a68, which measured 3.4:1 on the paper page —
+       muted still carries real information (nav labels, dates), so it has to
+       clear AA rather than merely look quiet. Given headroom past 4.5 because
+       most of its uses are small text. */
+    --color-text-muted: #675e4e;
+
+    /* Alphas are NOT the mirror of the dark ramp. Measured against their parent
+       surface, an equal-alpha ink fill lands ~25% weaker in ΔL* than the same
+       white fill on navy, so the fills are stepped up to match; the lines needed
+       no help (they already measured level with or above their dark twins). */
+    --color-tint-1: rgba(34, 29, 21, 0.04);
+    --color-tint-2: rgba(34, 29, 21, 0.07);
+    --color-tint-3: rgba(34, 29, 21, 0.13);
+    --color-line-faint: rgba(34, 29, 21, 0.055);
+    --color-line: rgba(34, 29, 21, 0.085);
+    --color-line-raised: rgba(34, 29, 21, 0.14);
+    --color-line-emphasis: rgba(34, 29, 21, 0.32);
+    --color-well: rgba(34, 29, 21, 0.06);
+    --color-well-deep: rgba(34, 29, 21, 0.105);
+    --color-lift: rgba(34, 29, 21, 0.12);
+
+    /* Elevation flips direction: no inset top light on paper, a soft drop
+       instead. It also does more work here than in dark — the card sits only
+       ΔL*≈5 above the page (vs ≈8 in dark), so the shadow carries the rest of
+       the separation rather than the fill contrast. */
+    --panel-shadow: 0 1px 3px rgba(34, 29, 21, 0.08), 0 1px 1px rgba(34, 29, 21, 0.04);
+    color-scheme: light;
+}
+
 body {
     background-color: var(--color-bg-main);
     color: var(--color-text-primary);
