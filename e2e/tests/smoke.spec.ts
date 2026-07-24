@@ -6,10 +6,11 @@ import {
 } from "./fixtures";
 
 // Smoke suite for the built app (vite build + vite preview): boots the PWA,
-// walks each bottom tab, and verifies that edits round-trip through the YAML
-// in localStorage (showmeway_user_yaml) across a reload. All assertions use
-// the app's real Traditional Chinese UI strings — punctuation is fullwidth
-// where the UI uses fullwidth (｜ U+FF5C, — U+2014), copy verbatim.
+// walks the bottom tabs (行程/工具/AI — 準備/記帳/常用語/自訂行程 are sub-pages
+// inside 工具) and the overview tool entries, and verifies that edits
+// round-trip through the YAML in localStorage (showmeway_user_yaml) across a
+// reload. All assertions use the app's real Traditional Chinese UI strings —
+// punctuation is fullwidth where the UI uses fullwidth (｜ U+FF5C, — U+2014).
 
 test("種子行程載入：顯示行程總覽且無執行期錯誤", async ({ page }) => {
     const pageErrors: Error[] = [];
@@ -70,7 +71,7 @@ test("清單：勾選與新增項目並於重新載入後保留", async ({ page 
     await seedItinerary(page);
     await page.goto("/");
 
-    await page.locator("nav").getByRole("button", { name: "準備", exact: true }).click();
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await expect(page.getByRole("heading", { name: "行前準備與打包" })).toBeVisible();
 
     // 勾選既有項目（<button role="checkbox">，非 <input>）
@@ -86,7 +87,7 @@ test("清單：勾選與新增項目並於重新載入後保留", async ({ page 
     await expect(page.getByRole("checkbox", { name: "新增的測試項目" })).toBeVisible();
 
     await page.reload();
-    await page.locator("nav").getByRole("button", { name: "準備", exact: true }).click();
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await expect(page.getByRole("checkbox", { name: "測試待辦項目" })).toBeChecked();
     await expect(page.getByRole("checkbox", { name: "新增的測試項目" })).toBeVisible();
 });
@@ -95,7 +96,8 @@ test("記帳：新增一筆消費並於重新載入後保留", async ({ page }) 
     await seedItinerary(page);
     await page.goto("/");
 
-    await page.locator("nav").getByRole("button", { name: "記帳", exact: true }).click();
+    // 記帳是工具分頁的子頁 — 總覽的工具入口會直接深連結過去
+    await page.getByRole("button", { name: "匯率與記帳" }).click();
     await expect(page.getByRole("heading", { name: "匯率與消費記帳" })).toBeVisible();
 
     await page.getByLabel("消費項目名稱").fill("測試消費");
@@ -107,8 +109,20 @@ test("記帳：新增一筆消費並於重新載入後保留", async ({ page }) 
     await expect(page.getByText("-NT$100")).toHaveCount(2);
 
     await page.reload();
-    await page.locator("nav").getByRole("button", { name: "記帳", exact: true }).click();
+    await page.getByRole("button", { name: "匯率與記帳" }).click();
     await expect(page.getByText("-NT$100")).toHaveCount(2);
+});
+
+test("總覽工具入口：深連結到常用語頁後可返回總覽", async ({ page }) => {
+    await seedItinerary(page);
+    await page.goto("/");
+
+    // fixture 未指定 trip.lang → 回退英文字卡組，入口仍會顯示
+    await page.getByRole("button", { name: "實用常用語" }).click();
+    await expect(page.getByRole("heading", { name: "實用常用語" })).toBeVisible();
+
+    await page.locator("nav").getByRole("button", { name: "行程", exact: true }).click();
+    await expect(page.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
 });
 
 test("無效的使用者 YAML：顯示錯誤畫面與設定入口", async ({ page }) => {

@@ -234,7 +234,7 @@ export function formatDateRange(startIso: string, endIso: string): string {
  * Is `date` a night spent at this hotel? Check-in day yes, checkout day NO
  * (`date < checkOut`) — on a changeover day the checkout hotel and the next
  * check-in hotel share the date, and the night belongs to the new one. Single
- * source for the 回飯店 node, the 今晚住宿 report line, and TaxiHelper's
+ * source for the 回飯店 node, the 今晚住宿 report line, and HotelCards'
  * "current stay" badge, so all three agree (no double-highlight on move days).
  */
 export function isOvernightStay(

@@ -1,22 +1,36 @@
 <script lang="ts">
+import BedDouble from "@lucide/svelte/icons/bed-double";
 import CalendarRange from "@lucide/svelte/icons/calendar-range";
 import ChevronDown from "@lucide/svelte/icons/chevron-down";
 import ChevronRight from "@lucide/svelte/icons/chevron-right";
 import Layers from "@lucide/svelte/icons/layers";
+import ListChecks from "@lucide/svelte/icons/list-checks";
+import Maximize2 from "@lucide/svelte/icons/maximize-2";
+import MessageSquareText from "@lucide/svelte/icons/message-square-text";
 import Plus from "@lucide/svelte/icons/plus";
 import Settings from "@lucide/svelte/icons/settings";
 import Share2 from "@lucide/svelte/icons/share-2";
 import Trash2 from "@lucide/svelte/icons/trash-2";
+import Wallet from "@lucide/svelte/icons/wallet";
 import type {
     DayItinerary,
     ProfileInfo,
     TripData,
 } from "../api";
+import type { EnlargedCard } from "../enlarge";
+import {
+    computeLedgerTotals,
+    type ExpenseItem,
+    getCurrencyConfig,
+} from "../ledger";
+import { getLanguageConfig } from "../phrases";
 import {
     formatDateRange,
     formatDayDate,
+    isOvernightStay,
 } from "../utils";
 import type { DailyWeather } from "../weather";
+import HotelCards from "./HotelCards.svelte";
 import WeatherBadge from "./WeatherBadge.svelte";
 
 interface Props {
@@ -26,9 +40,23 @@ interface Props {
     countdownText: string;
     /** Other saved trips (the active one is `trip` itself); empty when none parked. */
     profiles: ProfileInfo[];
+    /** Local YYYY-MM-DD "today"; drives the phase card and the 今晚入住 highlight. */
+    todayIso: string;
+    /** Checked / total across todo + packing, for the pre-trip progress card. */
+    prepDone: number;
+    prepTotal: number;
+    /** Expense records, for the post-trip spend summary card. */
+    expenses: ExpenseItem[];
     /** This day's forecast; null hides the badge (same contract as Timeline). */
     weatherFor: (day: DayItinerary) => DailyWeather | null;
     onSelectDay: (day: number) => void;
+    /** Show a hotel's address/confirmation enlarged; the overlay is a single app-level instance. */
+    onEnlarge: (card: EnlargedCard) => void;
+    /** Jump to the 準備 tab (pre-trip progress card). */
+    onOpenPrepare: () => void;
+    /** Open the ledger / phrase-deck tool sheets (owned by App). */
+    onOpenLedger: () => void;
+    onOpenPhrases: () => void;
     onSwitchProfile: (id: string) => void;
     onCreateProfile: () => void;
     onDeleteProfile: (id: string, name: string) => void;
@@ -41,8 +69,16 @@ let {
     days,
     countdownText,
     profiles,
+    todayIso,
+    prepDone,
+    prepTotal,
+    expenses,
     weatherFor,
     onSelectDay,
+    onEnlarge,
+    onOpenPrepare,
+    onOpenLedger,
+    onOpenPhrases,
     onSwitchProfile,
     onCreateProfile,
     onDeleteProfile,
@@ -52,6 +88,21 @@ let {
 
 // Collapsed by default — the switcher is a secondary action below the day list.
 let showProfiles = $state(false);
+
+// Trip phase drives which single helper card shows under the hero: prep
+// progress before the trip, tonight's hotel during it, spend summary after.
+// Plain string compare is safe for local-time YYYY-MM-DD dates.
+let phase = $derived(todayIso < trip.start ? "before" : todayIso > trip.end ? "after" : "during");
+
+let hotelList = $derived(trip.hotels ?? []);
+// Same overnight semantics as Timeline (checkout day belongs to the next hotel).
+let tonightHotel = $derived(hotelList.find(h => isOvernightStay(h, todayIso)) ?? null);
+
+// Built-in phrase deck / driver prompt resolved from trip.lang (English fallback).
+let langConfig = $derived(getLanguageConfig(trip.lang));
+
+let ledgerTotals = $derived(computeLedgerTotals(expenses));
+let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpperCase()).currencySymbol);
 </script>
 
 <!-- Trip hero card -->
@@ -67,6 +118,50 @@ let showProfiles = $state(false);
         <span class="truncate">{countdownText}</span>
     </div>
 </div>
+
+<!-- Phase-aware helper card: exactly one of prep progress (before the trip),
+     tonight's hotel (during), or the spend summary (after). -->
+{#if phase === "before" && prepTotal > 0}
+    <button
+        onclick={onOpenPrepare}
+        class="w-full panel rounded-xl p-3.5 mb-6 flex items-center gap-3 text-left hover:bg-white/5 transition cursor-pointer"
+    >
+        <ListChecks size={16} class="shrink-0 text-accent" aria-hidden="true" />
+        <span class="flex-1 min-w-0">
+            <span class="block text-[11px] font-bold text-text-muted">行前準備</span>
+            <span class="block text-sm font-bold text-text-primary">{prepDone}/{prepTotal} 項完成</span>
+        </span>
+        <ChevronRight size={16} class="text-text-muted shrink-0" aria-hidden="true" />
+    </button>
+{:else if phase === "during" && tonightHotel}
+    {@const hotel = tonightHotel}
+    <div class="panel rounded-xl p-3.5 mb-6 flex items-center gap-3">
+        <BedDouble size={16} class="shrink-0 text-accent" aria-hidden="true" />
+        <span class="flex-1 min-w-0">
+            <span class="block text-[11px] font-bold text-text-muted">今晚入住</span>
+            <span class="block text-sm font-bold text-text-primary truncate">{hotel.name}</span>
+        </span>
+        <button
+            onclick={() => onEnlarge({ kind: "place", title: hotel.name, localName: hotel.localName ?? hotel.name, address: hotel.address, prompt: langConfig.driverPrompt })}
+            aria-label="放大顯示今晚飯店給司機看"
+            class="shrink-0 min-w-[44px] min-h-[44px] -my-1.5 flex items-center justify-center bg-accent/10 text-accent rounded-lg transition duration-200 hover:bg-accent/20 cursor-pointer"
+        >
+            <Maximize2 size={15} aria-hidden="true" />
+        </button>
+    </div>
+{:else if phase === "after" && expenses.length > 0}
+    <button
+        onclick={onOpenLedger}
+        class="w-full panel rounded-xl p-3.5 mb-6 flex items-center gap-3 text-left hover:bg-white/5 transition cursor-pointer"
+    >
+        <Wallet size={16} class="shrink-0 text-accent" aria-hidden="true" />
+        <span class="flex-1 min-w-0">
+            <span class="block text-[11px] font-bold text-text-muted">旅程消費總結</span>
+            <span class="block text-sm font-bold text-text-primary">共 {expenses.length} 筆・花費 {currencySymbol}{ledgerTotals.totalSpent.toLocaleString()}</span>
+        </span>
+        <ChevronRight size={16} class="text-text-muted shrink-0" aria-hidden="true" />
+    </button>
+{/if}
 
 <!-- Per-day jump list -->
 <div class="space-y-2">
@@ -91,6 +186,36 @@ let showProfiles = $state(false);
             <ChevronRight size={16} class="text-text-muted shrink-0" aria-hidden="true" />
         </button>
     {/each}
+</div>
+
+<!-- Hotels: moved here from the removed 助手 tab — during the trip you're on
+     this panel anyway, so the driver card is one tap away. -->
+{#if hotelList.length > 0}
+    <div class="mt-6">
+        <h3 class="text-[11px] font-bold text-text-muted mb-2 px-1">住宿</h3>
+        <HotelCards hotels={hotelList} {todayIso} driverPrompt={langConfig.driverPrompt} {onEnlarge} />
+    </div>
+{/if}
+
+<!-- Tool entries: rarely-used features demoted from the tab bar into sheets. -->
+<div class="grid grid-cols-2 gap-2 mt-6">
+    <button
+        onclick={onOpenLedger}
+        class={[
+            "bg-white/3 border border-card-border text-text-secondary font-bold py-3.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-white/5 hover:text-accent transition cursor-pointer",
+            langConfig.phrases.length === 0 && "col-span-2",
+        ]}
+    >
+        <Wallet size={14} aria-hidden="true" /> 匯率與記帳
+    </button>
+    {#if langConfig.phrases.length > 0}
+        <button
+            onclick={onOpenPhrases}
+            class="bg-white/3 border border-card-border text-text-secondary font-bold py-3.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-white/5 hover:text-accent transition cursor-pointer"
+        >
+            <MessageSquareText size={14} aria-hidden="true" /> 實用常用語
+        </button>
+    {/if}
 </div>
 
 <!-- Trip profile switcher: swap to another saved trip or start a new one.

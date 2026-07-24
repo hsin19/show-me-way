@@ -1,4 +1,4 @@
-/** Situational category for a survival phrase; used by the TaxiHelper filter chips. */
+/** Situational category for a survival phrase; used by the PhraseDeck filter chips. */
 export type PhraseCategory = "basic" | "transport" | "dining" | "shopping" | "help";
 
 export interface PhraseInfo {

@@ -219,7 +219,7 @@ function normalizeTripData(raw: unknown): TripData {
         throw new Error("trip 區塊缺少 start, end, departure 或 hotels 屬性");
     }
     // Same bare-`-` hazard as days/timeline: a null or malformed hotel entry
-    // would otherwise crash later while rendering Timeline / TaxiHelper.
+    // would otherwise crash later while rendering Timeline / HotelCards.
     for (const [i, hotel] of data.trip.hotels.entries()) {
         if (!hotel || typeof hotel !== "object" || Array.isArray(hotel)) {
             throw new Error(`hotels 第 ${i + 1} 項必須是物件 (不可為空白列表項)`);

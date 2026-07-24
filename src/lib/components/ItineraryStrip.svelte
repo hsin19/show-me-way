@@ -6,6 +6,7 @@ import type {
     TripData,
 } from "../api";
 import type { EnlargedCard } from "../enlarge";
+import type { ExpenseItem } from "../ledger";
 import {
     findCurrentEventIndex,
     formatDayDate,
@@ -27,12 +28,21 @@ interface Props {
     /** App's ticking clock (passed to Timeline; also drives "today" derivations and the current-event scroll). */
     clockNow: Date;
     profiles: ProfileInfo[];
+    /** Checked / total across todo + packing (overview pre-trip progress card). */
+    prepDone: number;
+    prepTotal: number;
+    /** Expense records (overview post-trip spend summary card). */
+    expenses: ExpenseItem[];
     showWeatherAttribution: boolean;
     staleWeatherHours: number | null;
     weatherForDay: (day: DayItinerary) => DailyWeather | null;
     onEnlarge: (card: EnlargedCard) => void;
     onSetEventStatus: (id: string, status: "done" | "skipped" | undefined) => void;
     onShareDay: (day: DayItinerary) => void;
+    /** Overview entries into App-owned surfaces: 準備 tab and the tool sheets. */
+    onOpenPrepare: () => void;
+    onOpenLedger: () => void;
+    onOpenPhrases: () => void;
     onSwitchProfile: (id: string) => void;
     onCreateProfile: () => void;
     onDeleteProfile: (id: string, name: string) => void;
@@ -46,12 +56,18 @@ let {
     currentDay = $bindable(),
     clockNow,
     profiles,
+    prepDone,
+    prepTotal,
+    expenses,
     showWeatherAttribution,
     staleWeatherHours,
     weatherForDay,
     onEnlarge,
     onSetEventStatus,
     onShareDay,
+    onOpenPrepare,
+    onOpenLedger,
+    onOpenPhrases,
     onSwitchProfile,
     onCreateProfile,
     onDeleteProfile,
@@ -72,7 +88,8 @@ const PAGE_MS = 280;
 const PAGE_SHIFT = 80;
 
 // "Today" derivations (consumed by the DaySwitcher marker and the overview capsule).
-let todayData = $derived(days.find(d => d.date === toLocalIsoDate(clockNow)) ?? null);
+let todayIso = $derived(toLocalIsoDate(clockNow));
+let todayData = $derived(days.find(d => d.date === todayIso) ?? null);
 let todayDay = $derived(todayData?.day ?? null);
 let nextEvent = $derived(todayData ? getNextEventInfo(todayData.timeline, todayData.date, clockNow) : null);
 let countdownText = $derived.by(() => {
@@ -208,8 +225,16 @@ $effect(() => {
                             {days}
                             {countdownText}
                             {profiles}
+                            {todayIso}
+                            {prepDone}
+                            {prepTotal}
+                            {expenses}
                             weatherFor={weatherForDay}
                             onSelectDay={goToDay}
+                            {onEnlarge}
+                            {onOpenPrepare}
+                            {onOpenLedger}
+                            {onOpenPhrases}
                             {onSwitchProfile}
                             {onCreateProfile}
                             {onDeleteProfile}

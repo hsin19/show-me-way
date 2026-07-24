@@ -53,12 +53,14 @@ test("舊版 localStorage 狀態折疊進 YAML，移除舊 key 且重新載入�
     await page.goto("/");
 
     // 勾選狀態依舊 `id` 對回清單項目（todo 與 packing 各一）
-    await page.locator("nav").getByRole("button", { name: "準備", exact: true }).click();
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await expect(page.getByRole("checkbox", { name: "測試待辦項目" })).toBeChecked();
     await expect(page.getByRole("checkbox", { name: "測試打包項目" })).toBeChecked();
 
     // 舊帳本紀錄折疊進 expenses：紀錄列顯示名稱、金額與付款方式標籤
-    await page.locator("nav").getByRole("button", { name: "記帳", exact: true }).click();
+    // （先回行程總覽，再從工具入口深連結到記帳頁）
+    await page.locator("nav").getByRole("button", { name: "行程", exact: true }).click();
+    await page.getByRole("button", { name: "匯率與記帳" }).click();
     const expenseRow = page.locator("li").filter({ hasText: "舊消費" });
     await expect(expenseRow).toContainText("-NT$120");
     await expect(expenseRow).toContainText("現金支付");
@@ -74,11 +76,12 @@ test("舊版 localStorage 狀態折疊進 YAML，移除舊 key 且重新載入�
     // 重新載入：init script 因 showmeway_user_yaml 已存在而不再播種，
     // 狀態維持不變且消費紀錄只出現一次（不重複匯入）
     await page.reload();
-    await page.locator("nav").getByRole("button", { name: "準備", exact: true }).click();
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await expect(page.getByRole("checkbox", { name: "測試待辦項目" })).toBeChecked();
     await expect(page.getByRole("checkbox", { name: "測試打包項目" })).toBeChecked();
 
-    await page.locator("nav").getByRole("button", { name: "記帳", exact: true }).click();
+    await page.locator("nav").getByRole("button", { name: "行程", exact: true }).click();
+    await page.getByRole("button", { name: "匯率與記帳" }).click();
     await expect(page.getByText("舊消費")).toHaveCount(1);
     await expect(expenseRow).toContainText("-NT$120");
 

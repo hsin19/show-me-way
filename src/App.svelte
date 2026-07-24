@@ -1,13 +1,11 @@
 <script lang="ts">
 import Calendar from "@lucide/svelte/icons/calendar";
-import Car from "@lucide/svelte/icons/car";
-import CheckSquare from "@lucide/svelte/icons/check-square";
-import Compass from "@lucide/svelte/icons/compass";
-import DollarSign from "@lucide/svelte/icons/dollar-sign";
+import LayoutGrid from "@lucide/svelte/icons/layout-grid";
 import ListChecks from "@lucide/svelte/icons/list-checks";
 import ListTodo from "@lucide/svelte/icons/list-todo";
 import Loader2 from "@lucide/svelte/icons/loader-2";
 import Luggage from "@lucide/svelte/icons/luggage";
+import MessageSquareText from "@lucide/svelte/icons/message-square-text";
 import Sparkles from "@lucide/svelte/icons/sparkles";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import Wallet from "@lucide/svelte/icons/wallet";
@@ -39,13 +37,15 @@ import Checklist from "./lib/components/Checklist.svelte";
 import EnlargedCardOverlay from "./lib/components/EnlargedCardOverlay.svelte";
 import ItineraryStrip from "./lib/components/ItineraryStrip.svelte";
 import Ledger from "./lib/components/Ledger.svelte";
-import SettingsDialog from "./lib/components/SettingsDialog.svelte";
-import TaxiHelper from "./lib/components/TaxiHelper.svelte";
+import PhraseDeck from "./lib/components/PhraseDeck.svelte";
+import SettingsPanel from "./lib/components/SettingsPanel.svelte";
 import Toast from "./lib/components/Toast.svelte";
+import ToolsTab from "./lib/components/ToolsTab.svelte";
 import UpdatePrompt from "./lib/components/UpdatePrompt.svelte";
 import type { EnlargedCard } from "./lib/enlarge";
 import { parseLegacyExpenses } from "./lib/ledger";
 import { getLanguageConfig } from "./lib/phrases";
+import { settingsDraft } from "./lib/settings-draft.svelte";
 import {
     buildShareUrl,
     clearShareHash,
@@ -72,7 +72,7 @@ import {
 // App State using Svelte 5 Runes
 let tripData = $state<TripData | null>(null);
 let currentDay = $state(1);
-let activeTab = $state("itinerary"); // itinerary | todo | taxi | calc | ai
+let activeTab = $state("itinerary"); // itinerary | tools | ai
 let isLoading = $state(true);
 let loadError = $state<string | null>(null);
 
@@ -123,9 +123,14 @@ const updateSW = registerSW({
     },
 });
 
-// Settings dialog open state (the editor/backup/export logic lives in
-// SettingsDialog; App only owns whether it's shown).
-let showSettings = $state(false);
+// 工具 tab sub-page selection; App owns it so the overview's phase card /
+// tool entries and the load-error CTA can deep-link to a specific page.
+let toolsTab = $state<"prep" | "ledger" | "phrases" | "settings">("prep");
+
+function openTools(tab: typeof toolsTab) {
+    toolsTab = tab;
+    activeTab = "tools";
+}
 // Parked (inactive) trip profiles; the active trip lives in USER_YAML_KEY.
 let profiles = $state<ProfileInfo[]>([]);
 
@@ -148,6 +153,10 @@ $effect(() => {
 // Resolve the built-in phrase set and driver-card labels from `trip.lang`,
 // falling back to English when unset/unsupported.
 let langConfig = $derived(getLanguageConfig(tripData?.trip.lang));
+
+// Checked / total across both checklists — the overview's pre-trip progress card.
+let prepDone = $derived(tripData ? [...tripData.todo, ...tripData.packing].filter(i => i.checked).length : 0);
+let prepTotal = $derived(tripData ? tripData.todo.length + tripData.packing.length : 0);
 
 // --- Daily weather (Open-Meteo), keyed by the exact city string from the YAML ---
 let weatherByCity = $state<Record<string, { byDate: DailyWeatherByDate; fetchedAt: number; }>>({});
@@ -607,12 +616,14 @@ async function handleCreateProfile() {
         return;
     }
     // Park the current trip, start the new one from the default template, then
-    // open Settings so the user fills in its content (and renames it) right away.
+    // open the 自訂行程 page so the user fills in its content right away. Any
+    // stale editor draft belongs to the previous trip — drop it.
     saveTripData(tripData);
     createProfile(yaml);
+    settingsDraft.yaml = null;
     await loadTripData();
     showToast("已建立新行程，請填入行程內容");
-    showSettings = true;
+    openTools("settings");
 }
 
 async function handleSwitchProfile(id: string) {
@@ -626,6 +637,8 @@ async function handleSwitchProfile(id: string) {
         profiles = listProfiles();
         return;
     }
+    // The editor draft (if any) was written against the previous trip.
+    settingsDraft.yaml = null;
     showToast("已切換行程");
     await loadTripData();
 }
@@ -674,6 +687,74 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
                 <Loader2 class="animate-spin text-accent" size={36} />
                 <p class="text-text-secondary text-sm">正在載入行程資料…</p>
             </div>
+        {:else if activeTab === "tools"}
+            <!-- 工具 tab renders even on a YAML load error so 自訂行程 stays
+                 reachable to fix the data; trip-dependent pages hide instead. -->
+            <ToolsTab bind:tab={toolsTab} hasTrip={!!tripData} hasPhrases={langConfig.phrases.length > 0}>
+                {#snippet prep()}
+                    {#if tripData}
+                        <div class="mb-4">
+                            <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
+                                <ListChecks size={22} class="text-accent" aria-hidden="true" />行前準備與打包
+                            </h2>
+                            <p class="text-xs text-text-secondary mt-0.5">狀態將自動快取於手機</p>
+                        </div>
+                        <Checklist
+                            title="待辦事項"
+                            icon={ListTodo}
+                            items={tripData.todo}
+                            onToggle={id => toggleChecklistItem("todo", id)}
+                            onAdd={text => addChecklistItem("todo", text)}
+                            onDelete={id => deleteChecklistItem("todo", id)}
+                        />
+                        <Checklist
+                            title="隨身行李與打包"
+                            icon={Luggage}
+                            items={tripData.packing}
+                            onToggle={id => toggleChecklistItem("packing", id)}
+                            onAdd={text => addChecklistItem("packing", text)}
+                            onDelete={id => deleteChecklistItem("packing", id)}
+                        />
+                    {/if}
+                {/snippet}
+                {#snippet ledger()}
+                    {#if tripData}
+                        <div class="mb-4">
+                            <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
+                                <Wallet size={22} class="text-accent" aria-hidden="true" />匯率與消費記帳
+                            </h2>
+                            <p class="text-xs text-text-secondary mt-0.5">出國換算與儲值餘額管理</p>
+                        </div>
+                        <Ledger
+                            currency={tripData.trip.currency}
+                            wallets={tripData.trip.wallets}
+                            expenses={tripData.expenses}
+                            onAddWallet={addTripWallet}
+                            onAddExpense={addExpense}
+                            onDeleteExpense={deleteExpense}
+                            onReset={resetLedger}
+                        />
+                    {/if}
+                {/snippet}
+                {#snippet phrases()}
+                    <div class="mb-4">
+                        <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
+                            <MessageSquareText size={22} class="text-accent" aria-hidden="true" />實用常用語
+                        </h2>
+                        <p class="text-xs text-text-secondary mt-0.5">點字卡即可複製，出示給店員或司機看</p>
+                    </div>
+                    <PhraseDeck phrases={langConfig.phrases} />
+                {/snippet}
+                {#snippet settings()}
+                    <SettingsPanel
+                        onReload={loadTripData}
+                        onDone={() => (activeTab = "itinerary")}
+                        onExportYaml={exportTripYaml}
+                        onExportUrl={exportTripUrl}
+                        onExportCsv={exportLedgerCsv}
+                    />
+                {/snippet}
+            </ToolsTab>
         {:else if loadError}
             <div class="h-full overflow-y-auto">
                 <div class="max-w-3xl mx-auto w-full p-5 pt-[calc(20px+var(--safe-top))]">
@@ -681,7 +762,7 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
                         <TriangleAlert size={32} class="text-danger mx-auto mb-3" aria-hidden="true" />
                         <p class="text-text-primary text-sm font-semibold mb-4">{loadError}</p>
                         <button
-                            onclick={() => (showSettings = true)}
+                            onclick={() => openTools("settings")}
                             class="bg-accent text-accent-contrast font-bold py-2.5 px-6 rounded-xl text-xs transition active:scale-[0.98] cursor-pointer"
                         >
                             開啟設定並貼上 YAML
@@ -698,80 +779,27 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
                         bind:currentDay
                         {clockNow}
                         {profiles}
+                        {prepDone}
+                        {prepTotal}
+                        expenses={tripData.expenses}
                         {showWeatherAttribution}
                         {staleWeatherHours}
                         weatherForDay={weatherForDay}
                         onEnlarge={card => (enlargedCard = card)}
                         onSetEventStatus={setEventStatus}
                         onShareDay={shareDayReport}
+                        onOpenPrepare={() => openTools("prep")}
+                        onOpenLedger={() => openTools("ledger")}
+                        onOpenPhrases={() => openTools("phrases")}
                         onSwitchProfile={handleSwitchProfile}
                         onCreateProfile={handleCreateProfile}
                         onDeleteProfile={handleDeleteProfile}
                         onShare={shareCurrentTrip}
-                        onOpenSettings={() => (showSettings = true)}
+                        onOpenSettings={() => openTools("settings")}
                     />
                 {/if}
             {:else if activeTab === "ai"}
                 <ChatPanel {tripData} onApplyEdit={applyAiEdit} />
-            {:else}
-                <div class="h-full overflow-y-auto overscroll-contain">
-                    <div class="max-w-3xl mx-auto w-full p-5 pt-[calc(20px+var(--safe-top))] animate-fade-in">
-                        {#if activeTab === "todo"}
-                            <div class="mb-4">
-                                <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
-                                    <ListChecks size={22} class="text-accent" aria-hidden="true" />行前準備與打包
-                                </h2>
-                                <p class="text-xs text-text-secondary mt-0.5">狀態將自動快取於手機</p>
-                            </div>
-                            <Checklist
-                                title="待辦事項"
-                                icon={ListTodo}
-                                items={tripData.todo}
-                                onToggle={id => toggleChecklistItem("todo", id)}
-                                onAdd={text => addChecklistItem("todo", text)}
-                                onDelete={id => deleteChecklistItem("todo", id)}
-                            />
-                            <Checklist
-                                title="隨身行李與打包"
-                                icon={Luggage}
-                                items={tripData.packing}
-                                onToggle={id => toggleChecklistItem("packing", id)}
-                                onAdd={text => addChecklistItem("packing", text)}
-                                onDelete={id => deleteChecklistItem("packing", id)}
-                            />
-                        {:else if activeTab === "taxi"}
-                            <div class="mb-4">
-                                <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
-                                    <Car size={22} class="text-accent" aria-hidden="true" />乘車助手 & 實用常用語
-                                </h2>
-                                <p class="text-xs text-text-secondary mt-0.5">出示給司機或快速複製使用</p>
-                            </div>
-                            <TaxiHelper
-                                hotels={tripData.trip.hotels}
-                                phrases={langConfig.phrases}
-                                driverPrompt={langConfig.driverPrompt}
-                                {clockNow}
-                                onEnlarge={card => (enlargedCard = card)}
-                            />
-                        {:else if activeTab === "calc"}
-                            <div class="mb-4">
-                                <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
-                                    <Wallet size={22} class="text-accent" aria-hidden="true" />匯率與消費記帳
-                                </h2>
-                                <p class="text-xs text-text-secondary mt-0.5">出國換算與儲值餘額管理</p>
-                            </div>
-                            <Ledger
-                                currency={tripData.trip.currency}
-                                wallets={tripData.trip.wallets}
-                                expenses={tripData.expenses}
-                                onAddWallet={addTripWallet}
-                                onAddExpense={addExpense}
-                                onDeleteExpense={deleteExpense}
-                                onReset={resetLedger}
-                            />
-                        {/if}
-                    </div>
-                </div>
             {/if}
         {/if}
     </main>
@@ -782,35 +810,21 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
         <div class="max-w-3xl mx-auto w-full h-full flex justify-around items-center pb-[var(--safe-bottom)]">
             <button
                 onclick={() => (activeTab = "itinerary")}
-                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'itinerary' ? 'text-accent' : ''}"
+                class="flex flex-col items-center justify-center flex-1 h-full transition-colors cursor-pointer {activeTab === 'itinerary' ? 'text-accent' : 'text-text-muted'}"
             >
                 <Calendar size={20} />
                 <span class="text-[10px] font-semibold mt-1">行程</span>
             </button>
             <button
-                onclick={() => (activeTab = "todo")}
-                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'todo' ? 'text-accent' : ''}"
+                onclick={() => (activeTab = "tools")}
+                class="flex flex-col items-center justify-center flex-1 h-full transition-colors cursor-pointer {activeTab === 'tools' ? 'text-accent' : 'text-text-muted'}"
             >
-                <CheckSquare size={20} />
-                <span class="text-[10px] font-semibold mt-1">準備</span>
-            </button>
-            <button
-                onclick={() => (activeTab = "taxi")}
-                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'taxi' ? 'text-accent' : ''}"
-            >
-                <Compass size={20} />
-                <span class="text-[10px] font-semibold mt-1">助手</span>
-            </button>
-            <button
-                onclick={() => (activeTab = "calc")}
-                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'calc' ? 'text-accent' : ''}"
-            >
-                <DollarSign size={20} />
-                <span class="text-[10px] font-semibold mt-1">記帳</span>
+                <LayoutGrid size={20} />
+                <span class="text-[10px] font-semibold mt-1">工具</span>
             </button>
             <button
                 onclick={() => (activeTab = "ai")}
-                class="flex flex-col items-center justify-center flex-1 h-full text-text-muted transition-colors cursor-pointer {activeTab === 'ai' ? 'text-accent' : ''}"
+                class="flex flex-col items-center justify-center flex-1 h-full transition-colors cursor-pointer {activeTab === 'ai' ? 'text-accent' : 'text-text-muted'}"
             >
                 <Sparkles size={20} />
                 <span class="text-[10px] font-semibold mt-1">AI</span>
@@ -825,12 +839,4 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
     <UpdatePrompt show={needRefresh} onUpdate={() => void updateSW(true)} onDismiss={() => (needRefresh = false)} />
 
     <EnlargedCardOverlay card={enlargedCard} onClose={() => (enlargedCard = null)} />
-
-    <SettingsDialog
-        bind:open={showSettings}
-        onReload={loadTripData}
-        onExportYaml={exportTripYaml}
-        onExportUrl={exportTripUrl}
-        onExportCsv={exportLedgerCsv}
-    />
 </div>

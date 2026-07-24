@@ -13,7 +13,7 @@ test("清單項目刪除後可復原並保留原本位置", async ({ page }) => 
     await seedItinerary(page);
     await page.goto("/");
 
-    await page.locator("nav").getByRole("button", { name: "準備", exact: true }).click();
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await expect(page.getByRole("heading", { name: "行前準備與打包" })).toBeVisible();
 
     // 先補一個項目，讓「復原後回到第一位」的斷言有意義（fixture 只有一筆 todo）。
@@ -42,7 +42,7 @@ test("清單項目刪除後可復原並保留原本位置", async ({ page }) => 
 
     // 復原結果已 persist 回 YAML，重新載入後仍在
     await page.reload();
-    await page.locator("nav").getByRole("button", { name: "準備", exact: true }).click();
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await expect(page.getByRole("checkbox", { name: "測試待辦項目" })).toBeVisible();
     await expect(page.getByRole("checkbox").first()).toHaveAccessibleName("測試待辦項目");
 });
@@ -51,7 +51,8 @@ test("消費紀錄刪除後可復原並於重新載入後保留", async ({ page 
     await seedItinerary(page);
     await page.goto("/");
 
-    await page.locator("nav").getByRole("button", { name: "記帳", exact: true }).click();
+    // 記帳是工具分頁的子頁 — 從總覽的工具入口深連結過去
+    await page.getByRole("button", { name: "匯率與記帳" }).click();
     await expect(page.getByRole("heading", { name: "匯率與消費記帳" })).toBeVisible();
 
     await page.getByLabel("消費項目名稱").fill("測試消費");
@@ -71,6 +72,6 @@ test("消費紀錄刪除後可復原並於重新載入後保留", async ({ page 
     await expect(page.getByText("-NT$100")).toHaveCount(2);
 
     await page.reload();
-    await page.locator("nav").getByRole("button", { name: "記帳", exact: true }).click();
+    await page.getByRole("button", { name: "匯率與記帳" }).click();
     await expect(page.getByText("-NT$100")).toHaveCount(2);
 });

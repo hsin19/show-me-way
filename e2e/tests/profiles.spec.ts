@@ -19,16 +19,16 @@ test("行程設定檔：建立、切換、刪除與取消刪除", async ({ page 
     const expander = page.getByRole("button", { name: /目前行程/ });
     const status = page.getByRole("status");
 
-    // (1) 建立：展開切換器 → 新增行程 → 設定視窗自動開啟 → 關閉後顯示範本行程
+    // (1) 建立：展開切換器 → 新增行程 → 自動導向自訂行程頁（頁面，非模態）
+    //     → 回行程分頁後顯示範本行程
     await expect(expander).toHaveAttribute("aria-expanded", "false");
     await expander.click();
     await expect(expander).toHaveAttribute("aria-expanded", "true");
     await page.getByRole("button", { name: "新增行程" }).click();
     await expect(status).toContainText("已建立新行程");
 
-    const settingsDialog = page.getByRole("dialog", { name: "自訂 YAML 行程設定" });
-    await expect(settingsDialog).toBeVisible();
-    await settingsDialog.getByRole("button", { name: "關閉設定" }).click();
+    await expect(page.getByRole("heading", { name: "自訂 YAML 行程設定" })).toBeVisible();
+    await page.locator("nav").getByRole("button", { name: "行程", exact: true }).click();
 
     await expect(page).toHaveTitle("我的探索之旅 (範本)");
     await expect(page.getByRole("heading", { level: 2, name: "我的探索之旅 (範本)" })).toBeVisible();

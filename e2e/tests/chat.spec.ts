@@ -63,12 +63,12 @@ test("AI 聊天：儲存金鑰、AI 建議修改行程、套用後保留至重�
     await expect(page.getByRole("status")).toContainText("已套用");
     await expect(page.getByText("已套用變更")).toBeVisible();
 
-    // 套用結果出現在「準備」分頁，且已寫入 showmeway_user_yaml（重新載入後保留）
-    await page.locator("nav").getByRole("button", { name: "準備", exact: true }).click();
+    // 套用結果出現在工具分頁的準備頁，且已寫入 showmeway_user_yaml（重新載入後保留）
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await expect(page.getByRole("checkbox", { name: "換日幣" })).toBeVisible();
 
     await page.reload();
-    await page.locator("nav").getByRole("button", { name: "準備", exact: true }).click();
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await expect(page.getByRole("checkbox", { name: "換日幣" })).toBeVisible();
 });
 
