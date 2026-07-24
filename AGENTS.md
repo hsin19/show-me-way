@@ -62,6 +62,16 @@ Other `localStorage` keys exist outside the itinerary YAML: `exchange_rate_<curr
 - Keep mobile ergonomics in mind; this app is meant to be installed and used on a phone while traveling.
 - Avoid introducing large visual redesigns while making functional changes unless explicitly requested.
 
+## Design Tokens And Color
+
+All color lives in the `@theme` block of `src/app.css`, where each token carries a comment on its role. Components must contain **zero** literal colors — no hex, no raw Tailwind palette (`slate-700`), and no `white/N` / `black/N`. A light theme is planned, and `bg-white/5` hardcodes "lighter = add white", which inverts on a light background.
+
+Opacity modifiers on tokens are fine (`bg-accent/15`, `hover:border-positive/50`): they `color-mix` a `var(--color-*)`, so they still flip with the theme. Only `white`/`black` literals are banned.
+
+Besides the semantic colors (`accent`, `booked`/`must`/`option`, `positive`/`danger`, `bg-main`, `card-bg`, `text-*`) there are translucent ramps for surfaces stacked on other surfaces: `tint-1/2/3` (lift), `line-faint`/`line`/`line-raised`/`line-emphasis` (edges), `well`/`well-deep` (recess), plus `scrim`, `lift`, and `.panel`'s `--panel-shadow`.
+
+Changing `bg-main` also means updating `<meta name="theme-color">` in `index.html`, the manifest colors in `vite.config.ts`, and `:root`'s `color-scheme`.
+
 ## Formatting And Style
 
 - Formatting is handled by dprint with 4-space indentation for TypeScript/Svelte-related files and 2-space indentation for YAML/JSON.

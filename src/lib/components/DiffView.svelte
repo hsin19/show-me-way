@@ -71,14 +71,14 @@ function jump(dir: 1 | -1) {
                 <button
                     onclick={() => jump(-1)}
                     aria-label="上一處變更"
-                    class="p-1 rounded-md bg-black/40 border border-card-border text-text-secondary hover:text-accent hover:border-accent transition cursor-pointer"
+                    class="p-1 rounded-md bg-well-deep border border-card-border text-text-secondary hover:text-accent hover:border-accent transition cursor-pointer"
                 >
                     <ChevronUp size={14} aria-hidden="true" />
                 </button>
                 <button
                     onclick={() => jump(1)}
                     aria-label="下一處變更"
-                    class="p-1 rounded-md bg-black/40 border border-card-border text-text-secondary hover:text-accent hover:border-accent transition cursor-pointer"
+                    class="p-1 rounded-md bg-well-deep border border-card-border text-text-secondary hover:text-accent hover:border-accent transition cursor-pointer"
                 >
                     <ChevronDown size={14} aria-hidden="true" />
                 </button>
@@ -86,7 +86,7 @@ function jump(dir: 1 | -1) {
         </div>
         <div
             bind:this={scrollEl}
-            class="relative mt-1.5 max-h-60 overflow-auto rounded-lg bg-black/40 py-1 font-mono text-[11px] leading-relaxed"
+            class="relative mt-1.5 max-h-60 overflow-auto rounded-lg bg-well-deep py-1 font-mono text-[11px] leading-relaxed"
         >
             {#each lines as line, i (i)}
                 <div

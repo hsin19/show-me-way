@@ -24,6 +24,25 @@
     --color-text-secondary: #cbd5e1;
     --color-text-muted: #8fa0b8;
 
+    /* Translucent overlays. Each says "one step away from whatever surface is
+       behind me", which is why none of them can be a `white/N` literal — a
+       light theme has to tint with black instead. `tint-*` lifts a surface,
+       `line-*` draws its edges, `well-*` recesses it. */
+    --color-tint-1: rgba(255, 255, 255, 0.03); /* quiet resting fill: chips, list rows */
+    --color-tint-2: rgba(255, 255, 255, 0.05); /* a step up: hovers, resting buttons */
+    --color-tint-3: rgba(255, 255, 255, 0.1); /* selected fill, timeline rail */
+    --color-line-faint: rgba(255, 255, 255, 0.025); /* edges inside quiet boxes */
+    --color-line: rgba(255, 255, 255, 0.05); /* section dividers, chrome edges */
+    --color-line-raised: rgba(255, 255, 255, 0.1); /* resting interactive borders */
+    --color-line-emphasis: rgba(255, 255, 255, 0.28); /* selected borders, node rings */
+    --color-well: rgba(0, 0, 0, 0.22); /* recessed box: note panels, stat tiles */
+    --color-well-deep: rgba(0, 0, 0, 0.4); /* recessed field: inputs, code, diffs */
+    --color-lift: rgba(0, 0, 0, 0.3); /* elevation shadow under floating pills */
+    /* Blackout behind the driver-facing enlarged card. Deliberately stays
+       near-black in every theme: a stranger reading it at arm's length needs
+       maximum contrast more than the app needs theme consistency. */
+    --color-scrim: rgba(0, 0, 0, 0.95);
+
     --animate-fade-in: fadeIn 0.4s ease-out;
 
     @keyframes fadeIn {
@@ -42,6 +61,10 @@
 :root {
     --safe-bottom: env(safe-area-inset-bottom, 0px);
     --safe-top: env(safe-area-inset-top, 0px);
+    /* .panel's elevation. A var rather than a literal because the direction
+       flips per theme: dark lifts with an inset top light, light casts a
+       downward shadow. */
+    --panel-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
     /* Dark theme hint so native UI (scrollbars, number/date inputs, form controls) renders dark */
     color-scheme: dark;
 }
@@ -61,7 +84,7 @@ body {
    light — no drop shadows or glows anywhere in this theme. */
 .panel {
     background: var(--color-card-bg);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    box-shadow: var(--panel-shadow);
 }
 
 /* Custom Scrollbars */
@@ -75,12 +98,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--color-tint-3);
     border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--color-line-emphasis);
 }
 
 /* Hide scrollbar utility */

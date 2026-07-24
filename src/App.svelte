@@ -807,7 +807,7 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
 
     <!-- Bottom Tab Navigation: a flow child of the fixed-height shell (no longer
          position:fixed — the shell doesn't scroll). -->
-    <nav class="shrink-0 h-[calc(64px+var(--safe-bottom))] bg-bg-main/90 backdrop-blur-2xl border-t border-white/5 z-[100]">
+    <nav class="shrink-0 h-[calc(64px+var(--safe-bottom))] bg-bg-main/90 backdrop-blur-2xl border-t border-line z-[100]">
         <div class="max-w-3xl mx-auto w-full h-full flex justify-around items-center pb-[var(--safe-bottom)]">
             <button
                 onclick={() => (activeTab = "itinerary")}

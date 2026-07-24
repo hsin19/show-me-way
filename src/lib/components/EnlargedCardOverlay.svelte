@@ -47,7 +47,7 @@ $effect(() => {
         transition:fade={{ duration: 300 }}
         onoutrostart={e => e.currentTarget.classList.add("pointer-events-none")}
         onclick={onClose}
-        class="fixed inset-0 bg-black/95 z-[1000] flex items-center justify-center p-5"
+        class="fixed inset-0 bg-scrim z-[1000] flex items-center justify-center p-5"
     >
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
@@ -57,7 +57,7 @@ $effect(() => {
             aria-label="放大顯示：{data.title}"
             tabindex="-1"
             onclick={(e => e.stopPropagation())}
-            class="panel border border-white/8 rounded-2xl w-full max-w-[400px] p-6 overscroll-contain"
+            class="panel border border-line-raised rounded-2xl w-full max-w-[400px] p-6 overscroll-contain"
         >
             <div class="flex justify-between items-center mb-6">
                 <h3 class="text-sm text-text-secondary">
@@ -88,7 +88,7 @@ $effect(() => {
                         {data.code}
                     </button>
                     {#if data.name}
-                        <p class="text-white text-2xl font-black leading-normal break-words mt-3">{data.name}</p>
+                        <p class="text-text-primary text-2xl font-black leading-normal break-words mt-3">{data.name}</p>
                     {/if}
                     {#if data.note}
                         <p class="text-xs text-text-secondary leading-relaxed mt-3">{data.note}</p>
@@ -97,7 +97,7 @@ $effect(() => {
                     <button
                         type="button"
                         onclick={() => copyToClipboard(data.localName, "已複製名稱")}
-                        class="text-white text-2xl font-black leading-normal block w-full break-words cursor-pointer transition active:scale-[0.98]"
+                        class="text-text-primary text-2xl font-black leading-normal block w-full break-words cursor-pointer transition active:scale-[0.98]"
                         title="點一下複製"
                     >
                         {data.localName}

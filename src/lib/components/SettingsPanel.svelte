@@ -216,7 +216,7 @@ function clearEditor() {
     <button
         onclick={() => (showProfiles = !showProfiles)}
         aria-expanded={showProfiles}
-        class="w-full panel rounded-xl p-3.5 flex items-center gap-2.5 text-left hover:bg-white/5 transition cursor-pointer"
+        class="w-full panel rounded-xl p-3.5 flex items-center gap-2.5 text-left hover:bg-tint-2 transition cursor-pointer"
     >
         <Layers size={16} class="shrink-0 text-accent" aria-hidden="true" />
         <span class="flex-1 min-w-0">
@@ -231,7 +231,7 @@ function clearEditor() {
                 <div class="flex items-center gap-1">
                     <button
                         onclick={() => onSwitchProfile(profile.id)}
-                        class="flex-1 min-w-0 min-h-[44px] flex items-center justify-between gap-2 px-3.5 rounded-xl bg-white/3 border border-card-border text-text-secondary hover:text-accent hover:bg-white/5 transition cursor-pointer"
+                        class="flex-1 min-w-0 min-h-[44px] flex items-center justify-between gap-2 px-3.5 rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer"
                     >
                         <span class="truncate text-sm font-semibold">{profile.name}</span>
                         <span class="shrink-0 text-[11px] font-bold">切換</span>
@@ -247,7 +247,7 @@ function clearEditor() {
             {/each}
             <button
                 onclick={onCreateProfile}
-                class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-white/3 border border-dashed border-card-border text-text-secondary hover:text-accent hover:bg-white/5 transition cursor-pointer text-xs font-bold"
+                class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-tint-1 border border-dashed border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-xs font-bold"
             >
                 <Plus size={14} aria-hidden="true" /> 新增行程
             </button>
@@ -270,14 +270,14 @@ function clearEditor() {
                 >
                     全選
                 </button>
-                <span class="text-[9px] text-white/10 select-none">|</span>
+                <span class="text-[9px] text-line-raised select-none">|</span>
                 <button
                     onclick={clearEditor}
                     class="text-[11px] min-w-[44px] min-h-[44px] -mt-3 -mb-1.5 pt-1.5 px-1 text-text-secondary hover:text-danger flex items-center justify-center gap-0.5 cursor-pointer font-medium transition"
                 >
                     清空
                 </button>
-                <span class="text-[9px] text-white/10 select-none">|</span>
+                <span class="text-[9px] text-line-raised select-none">|</span>
                 <button
                     onclick={() => copyToClipboard(yamlInput, "已複製編輯器中的 YAML")}
                     class="text-[11px] min-w-[44px] min-h-[44px] -mt-3 -mb-1.5 pt-1.5 px-1 text-text-secondary hover:text-accent flex items-center justify-center gap-1 cursor-pointer font-medium transition"
@@ -293,7 +293,7 @@ function clearEditor() {
             spellcheck="false"
             autocapitalize="off"
             placeholder="貼上你的 YAML 行程，或直接貼上分享連結…"
-            class="w-full h-[45dvh] min-h-[240px] bg-black/40 border border-card-border rounded-xl p-3 text-[11px] text-text-primary font-mono outline-none focus:border-accent resize-none overflow-y-auto overscroll-contain"
+            class="w-full h-[45dvh] min-h-[240px] bg-well-deep border border-card-border rounded-xl p-3 text-[11px] text-text-primary font-mono outline-none focus:border-accent resize-none overflow-y-auto overscroll-contain"
         ></textarea>
     </div>
 
@@ -305,16 +305,16 @@ function clearEditor() {
         </div>
     {/if}
 
-    <div class="text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2 space-y-1">
+    <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint space-y-1">
         <p class="flex items-center gap-1">
             <Lightbulb size={12} class="shrink-0 text-accent" aria-hidden="true" />行程僅存於本機、不會上傳。
         </p>
         <ul class="list-disc pl-4 mt-1 space-y-1.5">
             <li>貼上 YAML 行程內容，或他人的分享連結，按下方儲存即可。</li>
-            <li>清空並儲存會還原為預設的 <a href="./itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-accent underline hover:text-white transition">itinerary.yaml</a>。</li>
+            <li>清空並儲存會還原為預設的 <a href="./itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-accent underline hover:text-text-primary transition">itinerary.yaml</a>。</li>
             <li>
                 可用此指令安裝行程小幫手 Skill：
-                <div class="bg-black/60 border border-white/5 rounded px-2 py-1 mt-1 font-mono text-[10px] select-all break-all text-text-primary">
+                <div class="bg-well-deep border border-line rounded px-2 py-1 mt-1 font-mono text-[10px] select-all break-all text-text-primary">
                     npx skills add https://github.com/hsin19/show-me-way --skill itinerary-yaml-builder
                 </div>
             </li>
@@ -322,7 +322,7 @@ function clearEditor() {
     </div>
 
     <!-- Auto-backup restore list: snapshots taken before each destructive overwrite -->
-    <div class="text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2">
+    <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint">
         <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
             <History size={12} class="shrink-0 text-accent" aria-hidden="true" />還原備份
         </p>
@@ -334,7 +334,7 @@ function clearEditor() {
                     <li>
                         <button
                             onclick={() => restore(backup.savedAt)}
-                            class="w-full min-h-[44px] flex items-center justify-between gap-2 px-3 rounded-lg bg-white/3 border border-card-border text-[11px] text-text-secondary hover:text-accent hover:bg-white/5 transition cursor-pointer"
+                            class="w-full min-h-[44px] flex items-center justify-between gap-2 px-3 rounded-lg bg-tint-1 border border-card-border text-[11px] text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer"
                         >
                             <span class="font-mono">{formatBackupTime(backup.savedAt)}</span>
                             <span class="text-[10px] font-bold">還原</span>
@@ -348,7 +348,7 @@ function clearEditor() {
     <!-- File export: data leaves the device — the transfer link moves the trip
          (incl. expenses) between your own devices, the YAML file is a backup
          against localStorage loss. 分享給同行者 lives on the overview hero. -->
-    <div class="text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2">
+    <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint">
         <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
             <Download size={12} class="shrink-0 text-accent" aria-hidden="true" />匯出資料
         </p>
@@ -361,7 +361,7 @@ function clearEditor() {
         </button>
         <button
             onclick={onExportYaml}
-            class="w-full min-h-[44px] flex items-center justify-center gap-1 px-3 rounded-lg bg-white/3 border border-card-border text-[11px] font-bold text-text-secondary hover:text-accent hover:bg-white/5 transition cursor-pointer mt-2"
+            class="w-full min-h-[44px] flex items-center justify-center gap-1 px-3 rounded-lg bg-tint-1 border border-card-border text-[11px] font-bold text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer mt-2"
         >
             匯出行程 YAML
         </button>
@@ -370,7 +370,7 @@ function clearEditor() {
     <div class="grid grid-cols-2 gap-2 mt-1">
         <button
             onclick={reset}
-            class="bg-white/3 border border-card-border text-text-secondary font-bold py-3 px-4 rounded-xl text-xs hover:bg-white/5 transition cursor-pointer"
+            class="bg-tint-1 border border-card-border text-text-secondary font-bold py-3 px-4 rounded-xl text-xs hover:bg-tint-2 transition cursor-pointer"
         >
             回復預設行程
         </button>

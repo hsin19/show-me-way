@@ -76,7 +76,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
 <div class="panel rounded-2xl p-5 mb-6">
     <div class="flex justify-between items-center mb-3">
         <h3 class="text-xl font-extrabold tracking-tight">Day {dayData.day}｜{formatDayDate(dayData.date)}</h3>
-        <span class="text-xs bg-white/6 text-text-secondary px-2.5 py-1 rounded-full font-semibold">
+        <span class="text-xs bg-tint-2 text-text-secondary px-2.5 py-1 rounded-full font-semibold">
             {dayData.region}
         </span>
     </div>
@@ -85,7 +85,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
         <span><strong class="text-text-primary">今日節奏：</strong>{dayData.pace}</span>
     </p>
     {#if weather}
-        <div class="flex flex-wrap gap-4 mt-4 pt-4 border-t border-white/5">
+        <div class="flex flex-wrap gap-4 mt-4 pt-4 border-t border-line">
             <WeatherBadge {weather} />
         </div>
     {/if}
@@ -163,7 +163,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
 {/snippet}
 
 <!-- Timeline List -->
-<div class="relative pl-6 before:content-[''] before:absolute before:top-2 before:left-[7px] before:w-[2px] before:h-[calc(100%-16px)] before:bg-white/10">
+<div class="relative pl-6 before:content-[''] before:absolute before:top-2 before:left-[7px] before:w-[2px] before:h-[calc(100%-16px)] before:bg-tint-3">
     {#if checkoutHotel}
         <!-- Auto-generated checkout entry at the top of the day (not persisted to
              YAML). No `data-timeline-event` index, so it never affects the
@@ -178,7 +178,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
                 <p class="text-xs text-text-secondary leading-relaxed">{checkoutHotel.name}</p>
 
                 {#if checkoutHotel.localName || checkoutHotel.mapLink}
-                    <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-white/5">
+                    <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-line">
                         {@render placeActions(checkoutHotel.localName, checkoutHotel.name, checkoutHotel.address, checkoutHotel.mapLink)}
                     </div>
                 {/if}
@@ -199,7 +199,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
                     {event.type === 'booked' ? 'border-booked' : ''}
                     {event.type === 'must-go' ? 'border-must' : ''}
                     {event.type === 'option' ? 'border-option' : ''}
-                    {event.type === 'standard' ? 'border-white/25' : ''}
+                    {event.type === 'standard' ? 'border-line-emphasis' : ''}
                 "
             >
             </div>
@@ -207,7 +207,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
             <!-- Event Card -->
             <div class="panel rounded-2xl p-4 ml-2.5 transition-transform duration-200 active:scale-[0.98] {!event.status && timeStatus === 'current' ? 'ring-2 ring-accent/50' : ''}">
                 <div class="flex flex-wrap justify-between items-center gap-y-1 mb-2">
-                    <span class="text-xs font-semibold px-2 py-0.5 rounded-lg bg-white/6 text-text-secondary tabular-nums">
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded-lg bg-tint-2 text-text-secondary tabular-nums">
                         {event.time}
                     </span>
                     <div class="flex items-center gap-1.5 -mr-2">
@@ -239,7 +239,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
                                 class="
                                     w-7 h-7 rounded-lg border flex items-center justify-center transition duration-200 {event.status === 'done'
                                     ? 'border-positive bg-positive/15 text-positive'
-                                    : 'border-white/10 bg-white/3 text-text-muted hover:border-positive/50 hover:text-positive'}
+                                    : 'border-line-raised bg-tint-1 text-text-muted hover:border-positive/50 hover:text-positive'}
                                 "
                             >
                                 <Check size={14} class={event.status === "done" ? "stroke-[3]" : ""} />
@@ -257,8 +257,8 @@ let expandedAlts = $state<Record<string, boolean>>({});
                                 aria-hidden="true"
                                 class="
                                     w-7 h-7 rounded-lg border flex items-center justify-center transition duration-200 {event.status === 'skipped'
-                                    ? 'border-white/30 bg-white/10 text-text-primary'
-                                    : 'border-white/10 bg-white/3 text-text-muted hover:border-white/30 hover:text-text-primary'}
+                                    ? 'border-line-emphasis bg-tint-3 text-text-primary'
+                                    : 'border-line-raised bg-tint-1 text-text-muted hover:border-line-emphasis hover:text-text-primary'}
                                 "
                             >
                                 <SkipForward size={14} class={event.status === "skipped" ? "stroke-[3]" : ""} />
@@ -282,7 +282,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
                 {/if}
 
                 {#if event.confirmation || event.localName || event.mapLink || (event.links && event.links.length > 0)}
-                    <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-white/5">
+                    <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-line">
                         {#if event.confirmation}
                             <ConfirmationChips confirmation={event.confirmation} title={event.title} {onEnlarge} />
                         {/if}
@@ -295,7 +295,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
 
                 {#if event.alternatives && event.alternatives.length > 0}
                     {@const altKey = event._id ?? event.time + event.title}
-                    <div class="mt-3 border-t border-white/5">
+                    <div class="mt-3 border-t border-line">
                         <button
                             type="button"
                             onclick={() => expandedAlts[altKey] = !expandedAlts[altKey]}
@@ -311,7 +311,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
                         {#if expandedAlts[altKey]}
                             <ul class="space-y-2 pb-1">
                                 {#each event.alternatives as alt, k (`${k}-${alt.title}`)}
-                                    <li class="flex flex-wrap items-center gap-x-2 gap-y-1 bg-white/3 border border-white/5 rounded-xl px-3 py-2">
+                                    <li class="flex flex-wrap items-center gap-x-2 gap-y-1 bg-tint-1 border border-line rounded-xl px-3 py-2">
                                         <div class="min-w-0 flex-1">
                                             <span class="text-xs font-bold text-text-primary">{alt.title}</span>
                                             {#if alt.note}
@@ -336,7 +336,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
     {#if overnightHotel}
         <!-- Auto-generated overnight stay entry (not persisted to YAML) -->
         <div class="relative mb-6">
-            <div class="absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 border-white/25 z-10"></div>
+            <div class="absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 border-line-emphasis z-10"></div>
             <div class="panel rounded-2xl p-4 ml-2.5">
                 <div class="flex items-center gap-1.5 mb-1.5">
                     <BedDouble size={15} class="text-text-muted shrink-0" aria-hidden="true" />
@@ -345,7 +345,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
                 <p class="text-xs text-text-secondary leading-relaxed">{overnightHotel.name}</p>
 
                 {#if overnightHotel.localName || overnightHotel.mapLink}
-                    <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-white/5">
+                    <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-line">
                         {@render placeActions(overnightHotel.localName, overnightHotel.name, overnightHotel.address, overnightHotel.mapLink)}
                     </div>
                 {/if}

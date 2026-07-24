@@ -113,7 +113,7 @@ $effect(() => {
 
 <div class="flex flex-col h-full">
     <!-- Sticky chip header: chips drive the same `current` as the pager below. -->
-    <header class="shrink-0 z-[100] bg-bg-main/90 backdrop-blur-xl border-b border-white/5 pt-[calc(12px+var(--safe-top))] px-5">
+    <header class="shrink-0 z-[100] bg-bg-main/90 backdrop-blur-xl border-b border-line pt-[calc(12px+var(--safe-top))] px-5">
         <div class="max-w-3xl mx-auto w-full">
             {@render header(select)}
         </div>

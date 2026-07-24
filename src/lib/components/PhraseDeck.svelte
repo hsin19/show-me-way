@@ -48,7 +48,7 @@ let filteredPhrases = $derived(
                         flex-none min-h-[44px] px-4 rounded-xl border text-xs font-bold transition duration-200 cursor-pointer
                         {activeFilter === cat
                         ? 'bg-accent/15 border-transparent text-accent'
-                        : 'bg-white/3 border-card-border text-text-secondary hover:bg-white/5'}
+                        : 'bg-tint-1 border-card-border text-text-secondary hover:bg-tint-2'}
                     "
                 >
                     {cat === "all" ? "全部" : CATEGORY_LABELS[cat]}
@@ -63,7 +63,7 @@ let filteredPhrases = $derived(
         <button
             type="button"
             onclick={() => copyToClipboard(p.text, `已複製：${p.text} (${p.zh})`)}
-            class="panel rounded-xl p-3.5 flex justify-between items-center w-full text-left cursor-pointer transition duration-200 active:scale-[0.98] hover:bg-white/5 group"
+            class="panel rounded-xl p-3.5 flex justify-between items-center w-full text-left cursor-pointer transition duration-200 active:scale-[0.98] hover:bg-tint-2 group"
         >
             <div class="flex flex-col gap-1">
                 <span class="text-xs font-semibold text-text-secondary group-hover:text-accent transition-colors">{p.zh}</span>

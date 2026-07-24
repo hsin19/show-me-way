@@ -81,7 +81,7 @@ function formatShortDate(dateStr: string): string {
 
                 <button
                     onclick={() => copyToClipboard(`${hotel.name}\n${hotel.address}`, "已複製飯店地址資訊")}
-                    class="min-w-[44px] min-h-[44px] flex items-center justify-center text-text-secondary border border-card-border rounded-lg transition hover:bg-white/5 hover:text-text-primary cursor-pointer flex-shrink-0"
+                    class="min-w-[44px] min-h-[44px] flex items-center justify-center text-text-secondary border border-card-border rounded-lg transition hover:bg-tint-2 hover:text-text-primary cursor-pointer flex-shrink-0"
                     aria-label="複製地址"
                     title="複製地址"
                 >
@@ -89,7 +89,7 @@ function formatShortDate(dateStr: string): string {
                 </button>
             </div>
 
-            <div class="bg-black/25 border border-card-border p-3.5 rounded-xl text-center font-bold text-base text-text-primary tracking-wide my-3">
+            <div class="bg-well border border-card-border p-3.5 rounded-xl text-center font-bold text-base text-text-primary tracking-wide my-3">
                 {hotel.address}
             </div>
 

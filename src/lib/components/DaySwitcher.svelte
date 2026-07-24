@@ -54,7 +54,7 @@ $effect(() => {
                     h-full w-[56px] flex flex-col items-center justify-center p-2 rounded-xl border transition duration-200 cursor-pointer
                     {currentDay === 0
                     ? 'bg-accent/15 border-transparent'
-                    : 'bg-white/3 border-card-border hover:bg-white/5'}
+                    : 'bg-tint-1 border-card-border hover:bg-tint-2'}
                 "
                 onclick={() => onSelect(0)}
             >
@@ -70,7 +70,7 @@ $effect(() => {
                         relative flex-none w-[76px] flex flex-col items-center justify-center p-2 rounded-xl border transition duration-200 cursor-pointer
                         {currentDay === day
                         ? 'bg-accent/15 border-transparent'
-                        : 'bg-white/3 border-card-border hover:bg-white/5'}
+                        : 'bg-tint-1 border-card-border hover:bg-tint-2'}
                     "
                     aria-current={todayDay === day ? "date" : undefined}
                     onclick={() => onSelect(day)}

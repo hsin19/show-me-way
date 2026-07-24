@@ -52,7 +52,7 @@ let activeTabId = $derived(chips.includes(tab) ? tab : (hasTrip ? "prep" : "sett
                             flex-none min-h-[44px] px-4 rounded-xl border text-xs font-bold transition duration-200 cursor-pointer
                             {activeTabId === id
                             ? 'bg-accent/15 border-transparent text-accent'
-                            : 'bg-white/3 border-card-border text-text-secondary hover:bg-white/5'}
+                            : 'bg-tint-1 border-card-border text-text-secondary hover:bg-tint-2'}
                         "
                     >
                         {LABELS[id]}

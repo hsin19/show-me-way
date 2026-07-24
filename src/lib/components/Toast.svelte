@@ -14,7 +14,7 @@ import {
     role="status"
     aria-live="polite"
     class="
-        pointer-events-none fixed bottom-[calc(96px+var(--safe-bottom))] left-1/2 -translate-x-1/2 bg-accent text-accent-contrast font-bold text-xs py-2.5 px-5 rounded-full z-[2000] shadow-lg shadow-black/30 transition-[opacity,transform] duration-300 flex items-center gap-1.5
+        pointer-events-none fixed bottom-[calc(96px+var(--safe-bottom))] left-1/2 -translate-x-1/2 bg-accent text-accent-contrast font-bold text-xs py-2.5 px-5 rounded-full z-[2000] shadow-lg shadow-lift transition-[opacity,transform] duration-300 flex items-center gap-1.5
         {toast.visible ? 'opacity-100 translate-y-0 visible' : 'opacity-0 translate-y-5 invisible'}
     "
 >

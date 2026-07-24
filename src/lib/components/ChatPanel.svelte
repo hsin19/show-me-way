@@ -203,7 +203,7 @@ function applyEdit(message: UiMessage) {
                         autocomplete="off"
                         aria-label="Gemini API 金鑰"
                         placeholder="貼上 API 金鑰…"
-                        class="w-full bg-black/40 border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent transition"
+                        class="w-full bg-well-deep border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent transition"
                     />
                     <button
                         type="submit"
@@ -225,7 +225,7 @@ function applyEdit(message: UiMessage) {
         </div>
     {:else}
         <!-- Header -->
-        <div class="shrink-0 px-5 pt-[calc(16px+var(--safe-top))] pb-3 border-b border-white/5 flex items-center justify-between gap-3">
+        <div class="shrink-0 px-5 pt-[calc(16px+var(--safe-top))] pb-3 border-b border-line flex items-center justify-between gap-3">
             <h2 class="text-lg font-extrabold text-text-primary tracking-tight flex items-center gap-2 min-w-0">
                 <Sparkles size={20} class="text-accent shrink-0" aria-hidden="true" /><span class="truncate">AI 行程小幫手</span>
             </h2>
@@ -235,7 +235,7 @@ function applyEdit(message: UiMessage) {
                     onchange={persistModel}
                     disabled={modelsLoading}
                     aria-label="選擇 AI 模型"
-                    class="max-w-[9rem] bg-black/40 border border-card-border rounded-lg px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent transition cursor-pointer disabled:opacity-50"
+                    class="max-w-[9rem] bg-well-deep border border-card-border rounded-lg px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent transition cursor-pointer disabled:opacity-50"
                 >
                     {#if models.length === 0}
                         <option value={model}>{modelsLoading ? "載入模型中…" : (model || "自動選擇")}</option>
@@ -331,7 +331,7 @@ function applyEdit(message: UiMessage) {
         </div>
 
         <!-- Input -->
-        <div class="shrink-0 px-5 pb-4 pt-2 border-t border-white/5">
+        <div class="shrink-0 px-5 pb-4 pt-2 border-t border-line">
             <form onsubmit={send} class="max-w-3xl mx-auto w-full flex items-center gap-2">
                 <input
                     bind:value={input}
@@ -339,7 +339,7 @@ function applyEdit(message: UiMessage) {
                     autocomplete="off"
                     placeholder="詢問或用說的編輯行程…"
                     disabled={isSending}
-                    class="flex-1 min-w-0 bg-black/40 border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent transition disabled:opacity-50"
+                    class="flex-1 min-w-0 bg-well-deep border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent transition disabled:opacity-50"
                 />
                 <button
                     type="submit"

@@ -16,7 +16,7 @@ let { show, onUpdate, onDismiss }: Props = $props();
     <!-- z-[200]: above the nav (z-[100]) but below full-screen overlays
          (z-[1000]) so it never intercepts taps meant for an open modal.
          148px+safe keeps it clear of the toast at 96px+safe. -->
-    <div class="fixed bottom-[calc(148px+var(--safe-bottom))] left-1/2 -translate-x-1/2 z-[200] bg-card-bg border border-white/10 rounded-full py-1.5 pl-4 pr-1.5 flex items-center gap-2 shadow-lg shadow-black/30 whitespace-nowrap animate-fade-in">
+    <div class="fixed bottom-[calc(148px+var(--safe-bottom))] left-1/2 -translate-x-1/2 z-[200] bg-card-bg border border-line-raised rounded-full py-1.5 pl-4 pr-1.5 flex items-center gap-2 shadow-lg shadow-lift whitespace-nowrap animate-fade-in">
         <span role="alert" class="text-xs font-bold text-text-primary">已有新版本，可立即更新</span>
         <button
             onclick={onUpdate}

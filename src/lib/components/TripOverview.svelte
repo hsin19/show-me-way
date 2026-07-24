@@ -108,7 +108,7 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
 {#if phase === "before" && prepTotal > 0}
     <button
         onclick={onOpenPrepare}
-        class="w-full panel rounded-xl p-3.5 mb-6 flex items-center gap-3 text-left hover:bg-white/5 transition cursor-pointer"
+        class="w-full panel rounded-xl p-3.5 mb-6 flex items-center gap-3 text-left hover:bg-tint-2 transition cursor-pointer"
     >
         <ListChecks size={16} class="shrink-0 text-accent" aria-hidden="true" />
         <span class="flex-1 min-w-0">
@@ -136,7 +136,7 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
 {:else if phase === "after" && expenses.length > 0}
     <button
         onclick={onOpenLedger}
-        class="w-full panel rounded-xl p-3.5 mb-6 flex items-center gap-3 text-left hover:bg-white/5 transition cursor-pointer"
+        class="w-full panel rounded-xl p-3.5 mb-6 flex items-center gap-3 text-left hover:bg-tint-2 transition cursor-pointer"
     >
         <Wallet size={16} class="shrink-0 text-accent" aria-hidden="true" />
         <span class="flex-1 min-w-0">
@@ -153,7 +153,7 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
         {@const weather = weatherFor(day)}
         <button
             onclick={() => onSelectDay(day.day)}
-            class="w-full panel rounded-xl p-3.5 flex items-center gap-3 text-left hover:bg-white/5 transition cursor-pointer"
+            class="w-full panel rounded-xl p-3.5 flex items-center gap-3 text-left hover:bg-tint-2 transition cursor-pointer"
         >
             <div class="shrink-0 w-[56px] flex flex-col items-center">
                 <span class="text-[11px] font-bold text-accent">DAY {String(day.day).padStart(2, "0")}</span>
