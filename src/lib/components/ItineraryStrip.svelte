@@ -1,7 +1,6 @@
 <script lang="ts">
 import type {
     DayItinerary,
-    ProfileInfo,
     TripData,
 } from "../api";
 import type { EnlargedCard } from "../enlarge";
@@ -27,7 +26,6 @@ interface Props {
     currentDay: number;
     /** App's ticking clock (passed to Timeline; also drives "today" derivations and the current-event scroll). */
     clockNow: Date;
-    profiles: ProfileInfo[];
     /** Checked / total across todo + packing (overview pre-trip progress card). */
     prepDone: number;
     prepTotal: number;
@@ -39,15 +37,11 @@ interface Props {
     onEnlarge: (card: EnlargedCard) => void;
     onSetEventStatus: (id: string, status: "done" | "skipped" | undefined) => void;
     onShareDay: (day: DayItinerary) => void;
-    /** Overview entries into App-owned surfaces: the 工具 tab sub-pages. */
+    /** Overview phase-card deep-links into the 工具 tab sub-pages. */
     onOpenPrepare: () => void;
     onOpenLedger: () => void;
-    onOpenPhrases: () => void;
-    onSwitchProfile: (id: string) => void;
-    onCreateProfile: () => void;
-    onDeleteProfile: (id: string, name: string) => void;
+    /** Share the whole trip from the overview hero card. */
     onShare: () => void;
-    onOpenSettings: () => void;
 }
 
 let {
@@ -55,7 +49,6 @@ let {
     days,
     currentDay = $bindable(),
     clockNow,
-    profiles,
     prepDone,
     prepTotal,
     expenses,
@@ -67,12 +60,7 @@ let {
     onShareDay,
     onOpenPrepare,
     onOpenLedger,
-    onOpenPhrases,
-    onSwitchProfile,
-    onCreateProfile,
-    onDeleteProfile,
     onShare,
-    onOpenSettings,
 }: Props = $props();
 
 // Gap kept above the current event card when a day panel auto-scrolls to it.
@@ -128,7 +116,6 @@ function positionPanel(day: number, panel: HTMLElement) {
                 {trip}
                 {days}
                 {countdownText}
-                {profiles}
                 {todayIso}
                 {prepDone}
                 {prepTotal}
@@ -138,12 +125,7 @@ function positionPanel(day: number, panel: HTMLElement) {
                 {onEnlarge}
                 {onOpenPrepare}
                 {onOpenLedger}
-                {onOpenPhrases}
-                {onSwitchProfile}
-                {onCreateProfile}
-                {onDeleteProfile}
                 {onShare}
-                {onOpenSettings}
             />
         {:else if currentDayData}
             <Timeline

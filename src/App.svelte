@@ -616,7 +616,7 @@ async function handleCreateProfile() {
         return;
     }
     // Park the current trip, start the new one from the default template, then
-    // open the 自訂行程 page so the user fills in its content right away. Any
+    // open the 行程管理 page so the user fills in its content right away. Any
     // stale editor draft belongs to the previous trip — drop it.
     saveTripData(tripData);
     createProfile(yaml);
@@ -641,6 +641,8 @@ async function handleSwitchProfile(id: string) {
     settingsDraft.yaml = null;
     showToast("已切換行程");
     await loadTripData();
+    // Switching happens from the 行程管理 page — land on the trip you asked for.
+    activeTab = "itinerary";
 }
 
 function handleDeleteProfile(id: string, name: string) {
@@ -688,7 +690,7 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
                 <p class="text-text-secondary text-sm">正在載入行程資料…</p>
             </div>
         {:else if activeTab === "tools"}
-            <!-- 工具 tab renders even on a YAML load error so 自訂行程 stays
+            <!-- 工具 tab renders even on a YAML load error so 行程管理 stays
                  reachable to fix the data; trip-dependent pages hide instead. -->
             <ToolsTab bind:tab={toolsTab} hasTrip={!!tripData} hasPhrases={langConfig.phrases.length > 0}>
                 {#snippet prep()}
@@ -733,6 +735,7 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
                             onAddExpense={addExpense}
                             onDeleteExpense={deleteExpense}
                             onReset={resetLedger}
+                            onExportCsv={exportLedgerCsv}
                         />
                     {/if}
                 {/snippet}
@@ -747,11 +750,15 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
                 {/snippet}
                 {#snippet settings()}
                     <SettingsPanel
+                        activeTripName={tripData?.trip.name ?? null}
+                        {profiles}
                         onReload={loadTripData}
                         onDone={() => (activeTab = "itinerary")}
+                        onSwitchProfile={handleSwitchProfile}
+                        onCreateProfile={handleCreateProfile}
+                        onDeleteProfile={handleDeleteProfile}
                         onExportYaml={exportTripYaml}
                         onExportUrl={exportTripUrl}
-                        onExportCsv={exportLedgerCsv}
                     />
                 {/snippet}
             </ToolsTab>
@@ -778,7 +785,6 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
                         days={tripData.days}
                         bind:currentDay
                         {clockNow}
-                        {profiles}
                         {prepDone}
                         {prepTotal}
                         expenses={tripData.expenses}
@@ -790,12 +796,7 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
                         onShareDay={shareDayReport}
                         onOpenPrepare={() => openTools("prep")}
                         onOpenLedger={() => openTools("ledger")}
-                        onOpenPhrases={() => openTools("phrases")}
-                        onSwitchProfile={handleSwitchProfile}
-                        onCreateProfile={handleCreateProfile}
-                        onDeleteProfile={handleDeleteProfile}
                         onShare={shareCurrentTrip}
-                        onOpenSettings={() => openTools("settings")}
                     />
                 {/if}
             {:else if activeTab === "ai"}

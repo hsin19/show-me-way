@@ -51,8 +51,9 @@ test("消費紀錄刪除後可復原並於重新載入後保留", async ({ page 
     await seedItinerary(page);
     await page.goto("/");
 
-    // 記帳是工具分頁的子頁 — 從總覽的工具入口深連結過去
-    await page.getByRole("button", { name: "匯率與記帳" }).click();
+    // 記帳是工具分頁的子頁
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    await page.getByRole("button", { name: "記帳", exact: true }).click();
     await expect(page.getByRole("heading", { name: "匯率與消費記帳" })).toBeVisible();
 
     await page.getByLabel("消費項目名稱").fill("測試消費");
@@ -72,6 +73,7 @@ test("消費紀錄刪除後可復原並於重新載入後保留", async ({ page 
     await expect(page.getByText("-NT$100")).toHaveCount(2);
 
     await page.reload();
-    await page.getByRole("button", { name: "匯率與記帳" }).click();
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    await page.getByRole("button", { name: "記帳", exact: true }).click();
     await expect(page.getByText("-NT$100")).toHaveCount(2);
 });

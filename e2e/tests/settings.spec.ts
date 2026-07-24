@@ -6,17 +6,18 @@ import {
     test,
 } from "./fixtures";
 
-// 自訂行程頁（SettingsPanel.svelte — 工具分頁內的頁面，非模態）：YAML 編輯與
+// 行程管理頁（SettingsPanel.svelte — 工具分頁內的頁面，非模態）：YAML 編輯與
 // 儲存、自動備份還原、無效 YAML 的行內錯誤、未儲存草稿跨分頁保留
 // （settings-draft.svelte.ts）。儲存／還原成功後會自動導回行程分頁。
 
 const EDITED_YAML = FIXTURE_YAML.replace("name: 測試行程", "name: 改版行程");
 
-// 從總覽的「自訂 YAML 行程」按鈕進入設定頁，並等 initEditor 把現有 YAML
+// 從工具分頁的「行程管理」chip 進入設定頁，並等 initEditor 把現有 YAML
 // 填入編輯器（太早 fill 會被 init 的內容覆寫）。
 async function openSettings(page: Page): Promise<void> {
-    await page.getByRole("button", { name: "自訂 YAML 行程" }).click();
-    await expect(page.getByRole("heading", { name: "自訂 YAML 行程設定" })).toBeVisible();
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    await page.getByRole("button", { name: "行程管理", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "行程管理" })).toBeVisible();
     await expect(page.getByLabel("行程資料 (YAML)")).toHaveValue(/trip:/);
 }
 
@@ -75,7 +76,7 @@ test("無效 YAML：顯示行內驗證錯誤且停留在設定頁", async ({ pag
     await page.getByRole("button", { name: "儲存並解析" }).click();
 
     await expect(page.getByText("YAML 缺少必要的結構")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "自訂 YAML 行程設定" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "行程管理" })).toBeVisible();
     // 無效內容沒有被存入 — 行程維持原樣
     await expect(page).toHaveTitle("測試行程");
 });
@@ -88,11 +89,11 @@ test("未儲存草稿：切換分頁後再回來仍保留編輯內容", async ({
     const editor = page.getByLabel("行程資料 (YAML)");
     await editor.fill("edited: true");
 
-    // 切去行程分頁再回工具分頁（子頁記憶為自訂行程）— 草稿仍在
+    // 切去行程分頁再回工具分頁（子頁記憶為行程管理）— 草稿仍在
     await page.locator("nav").getByRole("button", { name: "行程", exact: true }).click();
     await expect(page.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
 
     await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "自訂 YAML 行程設定" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "行程管理" })).toBeVisible();
     await expect(editor).toHaveValue("edited: true");
 });

@@ -6,7 +6,7 @@ import {
 } from "./fixtures";
 
 // Smoke suite for the built app (vite build + vite preview): boots the PWA,
-// walks the bottom tabs (行程/工具/AI — 準備/記帳/常用語/自訂行程 are sub-pages
+// walks the bottom tabs (行程/工具/AI — 準備/記帳/常用語/行程管理 are sub-pages
 // inside 工具) and the overview tool entries, and verifies that edits
 // round-trip through the YAML in localStorage (showmeway_user_yaml) across a
 // reload. All assertions use the app's real Traditional Chinese UI strings —
@@ -96,8 +96,9 @@ test("記帳：新增一筆消費並於重新載入後保留", async ({ page }) 
     await seedItinerary(page);
     await page.goto("/");
 
-    // 記帳是工具分頁的子頁 — 總覽的工具入口會直接深連結過去
-    await page.getByRole("button", { name: "匯率與記帳" }).click();
+    // 記帳是工具分頁的子頁
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    await page.getByRole("button", { name: "記帳", exact: true }).click();
     await expect(page.getByRole("heading", { name: "匯率與消費記帳" })).toBeVisible();
 
     await page.getByLabel("消費項目名稱").fill("測試消費");
@@ -109,16 +110,18 @@ test("記帳：新增一筆消費並於重新載入後保留", async ({ page }) 
     await expect(page.getByText("-NT$100")).toHaveCount(2);
 
     await page.reload();
-    await page.getByRole("button", { name: "匯率與記帳" }).click();
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    await page.getByRole("button", { name: "記帳", exact: true }).click();
     await expect(page.getByText("-NT$100")).toHaveCount(2);
 });
 
-test("總覽工具入口：深連結到常用語頁後可返回總覽", async ({ page }) => {
+test("工具分頁：常用語頁可開啟並返回行程", async ({ page }) => {
     await seedItinerary(page);
     await page.goto("/");
 
-    // fixture 未指定 trip.lang → 回退英文字卡組，入口仍會顯示
-    await page.getByRole("button", { name: "實用常用語" }).click();
+    // fixture 未指定 trip.lang → 回退英文字卡組，chip 仍會顯示
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    await page.getByRole("button", { name: "常用語", exact: true }).click();
     await expect(page.getByRole("heading", { name: "實用常用語" })).toBeVisible();
 
     await page.locator("nav").getByRole("button", { name: "行程", exact: true }).click();

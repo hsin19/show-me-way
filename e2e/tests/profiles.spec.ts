@@ -19,7 +19,11 @@ test("行程設定檔：建立、切換、刪除與取消刪除", async ({ page 
     const expander = page.getByRole("button", { name: /目前行程/ });
     const status = page.getByRole("status");
 
-    // (1) 建立：展開切換器 → 新增行程 → 自動導向自訂行程頁（頁面，非模態）
+    // 切換器移到工具分頁的行程管理頁 — 先導航過去
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    await page.getByRole("button", { name: "行程管理", exact: true }).click();
+
+    // (1) 建立：展開切換器 → 新增行程 → 自動導向行程管理頁（頁面，非模態）
     //     → 回行程分頁後顯示範本行程
     await expect(expander).toHaveAttribute("aria-expanded", "false");
     await expander.click();
@@ -27,25 +31,27 @@ test("行程設定檔：建立、切換、刪除與取消刪除", async ({ page 
     await page.getByRole("button", { name: "新增行程" }).click();
     await expect(status).toContainText("已建立新行程");
 
-    await expect(page.getByRole("heading", { name: "自訂 YAML 行程設定" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "行程管理" })).toBeVisible();
     await page.locator("nav").getByRole("button", { name: "行程", exact: true }).click();
 
     await expect(page).toHaveTitle("我的探索之旅 (範本)");
     await expect(page.getByRole("heading", { level: 2, name: "我的探索之旅 (範本)" })).toBeVisible();
 
-    // 原本的行程被停放成 profile，出現在切換器清單裡
+    // 原本的行程被停放成 profile，出現在切換器清單裡（工具分頁記住了行程管理子頁）
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await expect(expander).toHaveAttribute("aria-expanded", "false");
     await expander.click();
     const parkedFixtureRow = page.getByRole("button", { name: "測試行程 切換" });
     await expect(parkedFixtureRow).toBeVisible();
 
-    // (2) 切換：換回原本的行程
+    // (2) 切換：換回原本的行程 — 切換成功會自動導回行程分頁
     await parkedFixtureRow.click();
     await expect(status).toContainText("已切換");
     await expect(page.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
     await expect(page).toHaveTitle("測試行程");
 
-    // 範本行程改為停放狀態
+    // 範本行程改為停放狀態（回到行程管理頁檢查）
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await expect(expander).toHaveAttribute("aria-expanded", "false");
     await expander.click();
     const parkedTemplateRow = page.getByRole("button", { name: "我的探索之旅 (範本) 切換" });

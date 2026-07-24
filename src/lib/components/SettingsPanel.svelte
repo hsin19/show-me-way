@@ -1,10 +1,14 @@
 <script lang="ts">
+import ChevronDown from "@lucide/svelte/icons/chevron-down";
 import Copy from "@lucide/svelte/icons/copy";
 import Download from "@lucide/svelte/icons/download";
 import History from "@lucide/svelte/icons/history";
+import Layers from "@lucide/svelte/icons/layers";
 import Lightbulb from "@lucide/svelte/icons/lightbulb";
 import Link2 from "@lucide/svelte/icons/link-2";
+import Plus from "@lucide/svelte/icons/plus";
 import Settings from "@lucide/svelte/icons/settings";
+import Trash2 from "@lucide/svelte/icons/trash-2";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import { onMount } from "svelte";
 import {
@@ -12,6 +16,7 @@ import {
     fetchDefaultYamlText,
     getYamlBackup,
     listYamlBackups,
+    type ProfileInfo,
     serializeToYaml,
     USER_YAML_KEY,
     validateYaml,
@@ -32,16 +37,35 @@ import {
 } from "../utils";
 
 interface Props {
+    /** Active trip's name for the switcher header; null while the YAML fails to load. */
+    activeTripName: string | null;
+    /** Other saved trips (the active one is the YAML in USER_YAML_KEY); empty when none parked. */
+    profiles: ProfileInfo[];
     /** Reload trip data after a successful save / restore / reset (App's loadTripData). */
     onReload: () => Promise<void>;
     /** Navigate back to the itinerary after a successful save / restore / reset. */
     onDone: () => void;
+    onSwitchProfile: (id: string) => void;
+    onCreateProfile: () => void;
+    onDeleteProfile: (id: string, name: string) => void;
     onExportYaml: () => void;
     onExportUrl: () => void;
-    onExportCsv: () => void;
 }
 
-let { onReload, onDone, onExportYaml, onExportUrl, onExportCsv }: Props = $props();
+let {
+    activeTripName,
+    profiles,
+    onReload,
+    onDone,
+    onSwitchProfile,
+    onCreateProfile,
+    onDeleteProfile,
+    onExportYaml,
+    onExportUrl,
+}: Props = $props();
+
+// Collapsed by default — switching trips is a secondary action on this page.
+let showProfiles = $state(false);
 
 let yamlInput = $state("");
 let validationError = $state<string | null>(null);
@@ -181,9 +205,54 @@ function clearEditor() {
 
 <div class="mb-4">
     <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
-        <Settings size={22} class="text-accent" aria-hidden="true" />自訂 YAML 行程設定
+        <Settings size={22} class="text-accent" aria-hidden="true" />行程管理
     </h2>
-    <p class="text-xs text-text-secondary mt-0.5">直接編輯行程資料，儲存後立即套用</p>
+    <p class="text-xs text-text-secondary mt-0.5">切換行程、直接編輯行程資料，儲存後立即套用</p>
+</div>
+
+<!-- Trip profile switcher: profiles are parked YAML snapshots, so managing
+     them lives with the YAML editor (moved here from the day-0 overview). -->
+<div class="mb-2.5">
+    <button
+        onclick={() => (showProfiles = !showProfiles)}
+        aria-expanded={showProfiles}
+        class="w-full panel rounded-xl p-3.5 flex items-center gap-2.5 text-left hover:bg-white/5 transition cursor-pointer"
+    >
+        <Layers size={16} class="shrink-0 text-accent" aria-hidden="true" />
+        <span class="flex-1 min-w-0">
+            <span class="block text-[11px] font-bold text-text-muted">目前行程</span>
+            <span class="block text-sm font-bold text-text-primary truncate">{activeTripName ?? "（尚未載入）"}</span>
+        </span>
+        <ChevronDown size={16} class="shrink-0 text-text-muted transition-transform {showProfiles ? 'rotate-180' : ''}" aria-hidden="true" />
+    </button>
+    {#if showProfiles}
+        <div class="mt-2 space-y-1.5">
+            {#each profiles as profile (profile.id)}
+                <div class="flex items-center gap-1">
+                    <button
+                        onclick={() => onSwitchProfile(profile.id)}
+                        class="flex-1 min-w-0 min-h-[44px] flex items-center justify-between gap-2 px-3.5 rounded-xl bg-white/3 border border-card-border text-text-secondary hover:text-accent hover:bg-white/5 transition cursor-pointer"
+                    >
+                        <span class="truncate text-sm font-semibold">{profile.name}</span>
+                        <span class="shrink-0 text-[11px] font-bold">切換</span>
+                    </button>
+                    <button
+                        onclick={() => onDeleteProfile(profile.id, profile.name)}
+                        aria-label="刪除行程 {profile.name}"
+                        class="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-text-muted hover:text-danger transition cursor-pointer"
+                    >
+                        <Trash2 size={16} aria-hidden="true" />
+                    </button>
+                </div>
+            {/each}
+            <button
+                onclick={onCreateProfile}
+                class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-white/3 border border-dashed border-card-border text-text-secondary hover:text-accent hover:bg-white/5 transition cursor-pointer text-xs font-bold"
+            >
+                <Plus size={14} aria-hidden="true" /> 新增行程
+            </button>
+        </div>
+    {/if}
 </div>
 
 <div class="flex flex-col gap-2.5 text-xs">
@@ -276,32 +345,26 @@ function clearEditor() {
         {/if}
     </div>
 
-    <!-- File export: data leaves the device as files (backups above still live in the same localStorage) -->
+    <!-- File export: data leaves the device — the transfer link moves the trip
+         (incl. expenses) between your own devices, the YAML file is a backup
+         against localStorage loss. 分享給同行者 lives on the overview hero. -->
     <div class="text-[10px] text-text-muted leading-normal bg-black/20 p-3 rounded-lg border border-white/2">
         <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
             <Download size={12} class="shrink-0 text-accent" aria-hidden="true" />匯出資料
         </p>
-        <p class="mt-1.5">複製成跨裝置連結快速搬移，或下載成檔案保存，避免裝置遺失或清除瀏覽器資料時一併消失。</p>
+        <p class="mt-1.5">複製成跨裝置連結快速搬移（含記帳），或下載成檔案保存，避免裝置遺失或清除瀏覽器資料時一併消失。</p>
         <button
             onclick={onExportUrl}
             class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3 rounded-lg bg-accent/10 text-[11px] font-bold text-accent hover:bg-accent/15 transition cursor-pointer mt-1.5"
         >
             <Link2 size={12} aria-hidden="true" /> 複製跨裝置連結（含記帳）
         </button>
-        <div class="grid grid-cols-2 gap-2 mt-2">
-            <button
-                onclick={onExportYaml}
-                class="min-h-[44px] flex items-center justify-center gap-1 px-3 rounded-lg bg-white/3 border border-card-border text-[11px] font-bold text-text-secondary hover:text-accent hover:bg-white/5 transition cursor-pointer"
-            >
-                匯出行程 YAML
-            </button>
-            <button
-                onclick={onExportCsv}
-                class="min-h-[44px] flex items-center justify-center gap-1 px-3 rounded-lg bg-white/3 border border-card-border text-[11px] font-bold text-text-secondary hover:text-accent hover:bg-white/5 transition cursor-pointer"
-            >
-                匯出記帳 CSV
-            </button>
-        </div>
+        <button
+            onclick={onExportYaml}
+            class="w-full min-h-[44px] flex items-center justify-center gap-1 px-3 rounded-lg bg-white/3 border border-card-border text-[11px] font-bold text-text-secondary hover:text-accent hover:bg-white/5 transition cursor-pointer mt-2"
+        >
+            匯出行程 YAML
+        </button>
     </div>
 
     <div class="grid grid-cols-2 gap-2 mt-1">

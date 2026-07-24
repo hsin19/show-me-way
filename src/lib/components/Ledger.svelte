@@ -3,6 +3,7 @@ import ArrowLeftRight from "@lucide/svelte/icons/arrow-left-right";
 import Banknote from "@lucide/svelte/icons/banknote";
 import Calculator from "@lucide/svelte/icons/calculator";
 import CreditCard from "@lucide/svelte/icons/credit-card";
+import Download from "@lucide/svelte/icons/download";
 import Plus from "@lucide/svelte/icons/plus";
 import Trash2 from "@lucide/svelte/icons/trash-2";
 import Wallet from "@lucide/svelte/icons/wallet";
@@ -32,9 +33,11 @@ interface Props {
     onAddExpense: (name: string, amount: number, type: string) => void;
     onDeleteExpense: (id: string) => void;
     onReset: () => void;
+    /** Export the expense records as CSV (download handled by App). */
+    onExportCsv: () => void;
 }
 
-let { currency, wallets = [], expenses, onAddWallet, onAddExpense, onDeleteExpense, onReset }: Props = $props();
+let { currency, wallets = [], expenses, onAddWallet, onAddExpense, onDeleteExpense, onReset, onExportCsv }: Props = $props();
 
 // Resolve active currency code, defaulting directly to TWD if not specified
 const activeCurrency = $derived.by(() => {
@@ -433,7 +436,15 @@ function handleAddWallet() {
 
     <!-- History List -->
     <div>
-        <h4 class="text-xs text-text-secondary font-semibold border-b border-white/5 pb-2 mb-2">消費紀錄</h4>
+        <div class="flex justify-between items-center border-b border-white/5 pb-2 mb-2">
+            <h4 class="text-xs text-text-secondary font-semibold">消費紀錄</h4>
+            <button
+                onclick={onExportCsv}
+                class="min-h-[44px] -my-3 flex items-center gap-1 text-[11px] text-text-muted hover:text-accent font-semibold cursor-pointer"
+            >
+                <Download size={12} aria-hidden="true" /> 匯出 CSV
+            </button>
+        </div>
         <ul class="max-h-[160px] overflow-y-auto space-y-1 pr-1">
             {#each expenses as item (item._id)}
                 <li class="flex justify-between items-center text-xs py-2 border-b border-white/3 last:border-0">

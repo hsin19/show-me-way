@@ -17,6 +17,7 @@ itinerary.local.yaml
 # Playwright
 e2e/playwright-report
 e2e/test-results
+.playwright-mcp
 
 # Editor directories and files
 .vscode/*

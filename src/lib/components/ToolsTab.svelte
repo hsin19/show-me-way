@@ -7,7 +7,7 @@ type ToolTabId = "prep" | "ledger" | "phrases" | "settings";
 interface Props {
     /** Selected sub-tab; App owns it so overview cards / error CTA can deep-link. */
     tab: ToolTabId;
-    /** prep/ledger need a loaded trip; false (YAML load error) leaves only 自訂行程. */
+    /** prep/ledger need a loaded trip; false (YAML load error) leaves only 行程管理. */
     hasTrip: boolean;
     /** Hide the 常用語 chip when the trip language has no built-in phrase deck. */
     hasPhrases: boolean;
@@ -23,7 +23,7 @@ const LABELS: Record<ToolTabId, string> = {
     prep: "準備",
     ledger: "記帳",
     phrases: "常用語",
-    settings: "自訂行程",
+    settings: "行程管理",
 };
 
 let chips = $derived((["prep", "ledger", "phrases", "settings"] as const).filter(id => {

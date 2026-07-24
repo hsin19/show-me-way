@@ -47,7 +47,9 @@ test("分享連結匯入：接受後成為新行程，原行程保留可切回",
     // clearShareHash：匯入後網址不再帶 token，重新整理不會再跳提示
     expect(page.url()).not.toContain("#s=");
 
-    // 原行程被停放為設定檔（非破壞性匯入）：切換器裡看得到、可切回
+    // 原行程被停放為設定檔（非破壞性匯入）：切換器（行程管理頁）裡看得到、可切回
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    await page.getByRole("button", { name: "行程管理", exact: true }).click();
     await page.getByRole("button", { name: /目前行程/ }).click();
     await expect(page.getByRole("button", { name: "測試行程 切換" })).toBeVisible();
 });
@@ -81,8 +83,9 @@ test("分享行程按鈕：複製的連結可在新頁面匯入（round-trip）"
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
 
+    // 分享行程按鈕在總覽 hero 卡（與每日的分享今日行程對稱）。
     // headless Chromium 沒有 navigator.share → 走剪貼簿 fallback 並跳 toast
-    await page.getByRole("button", { name: "分享行程" }).click();
+    await page.getByRole("button", { name: "分享行程", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("分享連結已複製");
 
     const sharedUrl = await page.evaluate(() => navigator.clipboard.readText());

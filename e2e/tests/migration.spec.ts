@@ -58,9 +58,8 @@ test("舊版 localStorage 狀態折疊進 YAML，移除舊 key 且重新載入�
     await expect(page.getByRole("checkbox", { name: "測試打包項目" })).toBeChecked();
 
     // 舊帳本紀錄折疊進 expenses：紀錄列顯示名稱、金額與付款方式標籤
-    // （先回行程總覽，再從工具入口深連結到記帳頁）
-    await page.locator("nav").getByRole("button", { name: "行程", exact: true }).click();
-    await page.getByRole("button", { name: "匯率與記帳" }).click();
+    // （已在工具分頁 — 直接切到記帳子頁）
+    await page.getByRole("button", { name: "記帳", exact: true }).click();
     const expenseRow = page.locator("li").filter({ hasText: "舊消費" });
     await expect(expenseRow).toContainText("-NT$120");
     await expect(expenseRow).toContainText("現金支付");
@@ -80,8 +79,7 @@ test("舊版 localStorage 狀態折疊進 YAML，移除舊 key 且重新載入�
     await expect(page.getByRole("checkbox", { name: "測試待辦項目" })).toBeChecked();
     await expect(page.getByRole("checkbox", { name: "測試打包項目" })).toBeChecked();
 
-    await page.locator("nav").getByRole("button", { name: "行程", exact: true }).click();
-    await page.getByRole("button", { name: "匯率與記帳" }).click();
+    await page.getByRole("button", { name: "記帳", exact: true }).click();
     await expect(page.getByText("舊消費")).toHaveCount(1);
     await expect(expenseRow).toContainText("-NT$120");
 
