@@ -6,7 +6,7 @@ import {
 } from "./fixtures";
 
 // Smoke suite for the built app (vite build + vite preview): boots the PWA,
-// walks the bottom tabs (行程/工具/AI — 準備/記帳/常用語/行程管理 are sub-pages
+// walks the bottom tabs (行程/工具/AI — 準備/記帳/常用語/行程管理/App 設定 are sub-pages
 // inside 工具) and the overview tool entries, and verifies that edits
 // round-trip through the YAML in localStorage (showmeway_user_yaml) across a
 // reload. All assertions use the app's real Traditional Chinese UI strings —
@@ -126,6 +126,28 @@ test("工具分頁：常用語頁可開啟並返回行程", async ({ page }) => 
 
     await page.locator("nav").getByRole("button", { name: "行程", exact: true }).click();
     await expect(page.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
+});
+
+// The chip row overflows a narrow phone and will only get longer, so selecting a
+// chip has to scroll it into view — otherwise deep-linking (e.g. the overview's
+// phase card jumping to 記帳) lands on a page whose active chip is off screen.
+test("工具分頁：選中的 chip 會捲進視野（窄螢幕）", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedItinerary(page);
+    await page.goto("/");
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+
+    const lastChip = page.getByRole("button", { name: "App 設定", exact: true });
+    await lastChip.click();
+    await expect(page.getByRole("heading", { level: 3, name: "外觀" })).toBeVisible();
+
+    // Fully inside the scroller, not clipped at its trailing edge.
+    const fits = await lastChip.evaluate(chip => {
+        const row = chip.closest(".edge-fade")!;
+        const c = chip.getBoundingClientRect(), r = row.getBoundingClientRect();
+        return c.left >= r.left - 1 && c.right <= r.right + 1;
+    });
+    expect(fits).toBe(true);
 });
 
 test("無效的使用者 YAML：顯示錯誤畫面與設定入口", async ({ page }) => {

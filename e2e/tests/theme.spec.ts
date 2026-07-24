@@ -85,6 +85,43 @@ test("未設定偏好時預設為跟隨系統，且不寫入 localStorage", asyn
     expect(await page.evaluate(key => localStorage.getItem(key), THEME_KEY)).toBeNull();
 });
 
+test("設定頁：切換主題並在重新載入後保留", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await seedItinerary(page);
+    await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    await page.getByRole("button", { name: "App 設定", exact: true }).click();
+    await expect(page.getByRole("heading", { level: 3, name: "外觀" })).toBeVisible();
+
+    // 跟隨系統 is the default, so it starts selected even with nothing stored.
+    const group = page.getByRole("radiogroup", { name: "外觀主題" });
+    await expect(group.getByRole("radio", { name: "跟隨系統" })).toHaveAttribute("aria-checked", "true");
+
+    await group.getByRole("radio", { name: "淺色" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    expect(await accent(page)).toBe(LIGHT_ACCENT);
+
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+});
+
+test("設定頁：載入失敗時仍可到達（主題與行程資料無關）", async ({ page }) => {
+    await page.addInitScript(
+        ([key, value]) => window.localStorage.setItem(key, value),
+        [
+            "showmeway_user_yaml",
+            "這不是有效的 YAML: [",
+        ] as const,
+    );
+    await page.goto("/");
+
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    await page.getByRole("button", { name: "App 設定", exact: true }).click();
+    await expect(page.getByRole("heading", { level: 3, name: "外觀" })).toBeVisible();
+});
+
 // Three of these were below AA when the light palette was first written (accent
 // on its own chip fill, muted on the page, and 預訂), so this is a guard, not a
 // formality — every color here carries information rather than decoration.

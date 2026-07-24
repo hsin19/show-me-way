@@ -167,6 +167,30 @@ body {
     background: var(--color-line-emphasis);
 }
 
+/* Fades whichever edge of a horizontal scroller still has content past it, so a
+   half-visible child reads as "there is more" rather than as a clipped bug. The
+   owner sets --fade-start / --fade-end to 0px at each end of the scroll range,
+   which collapses that side's gradient stop and removes the fade — otherwise the
+   last chip would sit permanently dimmed once scrolled into view. */
+.edge-fade {
+    --fade-start: 0px;
+    --fade-end: 0px;
+    -webkit-mask-image: linear-gradient(
+        to right,
+        transparent 0,
+        #000 var(--fade-start),
+        #000 calc(100% - var(--fade-end)),
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to right,
+        transparent 0,
+        #000 var(--fade-start),
+        #000 calc(100% - var(--fade-end)),
+        transparent 100%
+    );
+}
+
 /* Hide scrollbar utility */
 .no-scrollbar::-webkit-scrollbar {
     display: none;

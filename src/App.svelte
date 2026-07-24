@@ -32,6 +32,7 @@ import {
     USER_YAML_KEY,
     validateYaml,
 } from "./lib/api";
+import AppSettings from "./lib/components/AppSettings.svelte";
 import ChatPanel from "./lib/components/ChatPanel.svelte";
 import Checklist from "./lib/components/Checklist.svelte";
 import EnlargedCardOverlay from "./lib/components/EnlargedCardOverlay.svelte";
@@ -125,7 +126,7 @@ const updateSW = registerSW({
 
 // 工具 tab sub-page selection; App owns it so the overview's phase card /
 // tool entries and the load-error CTA can deep-link to a specific page.
-let toolsTab = $state<"prep" | "ledger" | "phrases" | "settings">("prep");
+let toolsTab = $state<"prep" | "ledger" | "phrases" | "settings" | "prefs">("prep");
 
 function openTools(tab: typeof toolsTab) {
     toolsTab = tab;
@@ -760,6 +761,9 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
                         onExportYaml={exportTripYaml}
                         onExportUrl={exportTripUrl}
                     />
+                {/snippet}
+                {#snippet prefs()}
+                    <AppSettings />
                 {/snippet}
             </ToolsTab>
         {:else if loadError}
