@@ -27,7 +27,7 @@ const minimalYaml = [
     "days:",
     "  - day: 1",
     "    date: '2026-06-11'",
-    "    region: '市區'",
+    "    title: '市區'",
     "    pace: '輕鬆'",
     "    timeline: []",
 ].join("\n");

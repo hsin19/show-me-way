@@ -1,5 +1,6 @@
 <script lang="ts">
 import Plane from "@lucide/svelte/icons/plane";
+import { splitDayDate } from "../utils";
 
 // One chip in the itinerary strip's header row. The row itself — layout,
 // horizontal scrolling, the edge fade and pinning day 0 — belongs to TabPager;
@@ -8,7 +9,7 @@ import Plane from "@lucide/svelte/icons/plane";
 interface Props {
     /** Day number. 0 is the trip-overview chip (TabPager pins it). */
     day: number;
-    /** Formatted date, e.g. "01/01(四)". The weekday is dropped for the chip. */
+    /** This day's ISO date (YYYY-MM-DD). Empty for the overview chip. */
     date?: string;
     /** This chip's panel is the visible one. */
     active: boolean;
@@ -23,6 +24,12 @@ let { day, date = "", active, isToday = false, onSelect }: Props = $props();
 // differ, so keeping one copy is what stops the two chips drifting apart.
 const SHAPE = "h-full flex flex-col items-center justify-center p-2 rounded-xl border transition duration-200 cursor-pointer";
 let tone = $derived(active ? "bg-accent/15 border-transparent" : "bg-tint-1 border-card-border hover:bg-tint-2");
+
+// The weekday sits on the date line at the same size and weight — it is part of
+// the date, not an annotation of it. It stays off the DAY line because a bare
+// 一/二/三 next to the day number reads as a second digit. 88px is what the
+// widest pair ("04/04 六", 66.1px) needs inside p-2; remeasure before shrinking.
+let parts = $derived(splitDayDate(date));
 </script>
 
 {#if day === 0}
@@ -33,7 +40,7 @@ let tone = $derived(active ? "bg-accent/15 border-transparent" : "bg-tint-1 bord
 {:else}
     <button
         data-day
-        class="relative w-[76px] {SHAPE} {tone}"
+        class="relative w-[88px] {SHAPE} {tone}"
         aria-current={isToday ? "date" : undefined}
         onclick={() => onSelect(day)}
     >
@@ -44,10 +51,8 @@ let tone = $derived(active ? "bg-accent/15 border-transparent" : "bg-tint-1 bord
         <span class="text-[11px] font-medium {active ? 'text-accent' : 'text-text-muted'}">
             DAY {String(day).padStart(2, "0")}
         </span>
-        <!-- Date only; the "(四)" weekday from formatDayDate is too wide for a chip
-             and already appears in the panel heading. -->
-        <span class="text-[15px] font-bold mt-0.5 {active ? 'text-text-primary' : 'text-text-secondary'}">
-            {date.split("(")[0]}
+        <span class="text-[15px] font-bold mt-0.5 whitespace-nowrap {active ? 'text-text-primary' : 'text-text-secondary'}">
+            {parts.mmdd} {parts.weekday}
         </span>
     </button>
 {/if}

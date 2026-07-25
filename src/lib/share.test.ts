@@ -22,7 +22,7 @@ const SAMPLE_YAML = `trip:
   end: '2026-06-15'
 days:
   - day: 1
-    region: 新宿
+    title: 新宿
 `;
 
 describe("encodeShareToken / decodeShareToken", () => {

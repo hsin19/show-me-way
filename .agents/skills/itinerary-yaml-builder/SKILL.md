@@ -34,11 +34,11 @@ Top-level keys: `trip` (required), `days` (required), and optional `todo`, `pack
 - `wallets[]` — optional custom wallet/card names for the ledger (e.g. `Suica`, `WOWPASS`); omit to use the currency's defaults.
 - `hotels[]` — each requires `name`, `address` (local-language address for taxi drivers), `checkIn`, `checkOut` (both `YYYY-MM-DD`); optional `localName` (local-language hotel name, used as the map-search query), `mapLink` (direct map URL, preferred over searching `localName`) and `confirmation` (see timeline `confirmation` below — same shape).
 
-### days[] (required: day, date, region, pace, timeline)
+### days[] (required: day, date, title, pace, timeline)
 
 - `day` — integer, 1-based.
 - `date` — `YYYY-MM-DD`.
-- `region` — main area, e.g. `明洞 · 乙支路`.
+- `title` — day headline / main area, e.g. `明洞 · 乙支路` or `京都一日遊`.
 - `city` — optional; overrides `trip.city` for this day's weather lookup (multi-city trips), e.g. `Kyoto`. Prefer English names; a `, XX` country suffix disambiguates.
 - `pace` — pace description, e.g. `慢活、需要早起`.
 - `timeline[]` — each requires `time`, `title`, `type`, `desc`; optional `bullets`, `localName`, `mapLink`, `links`, `alternatives`, `status`, `confirmation`.
@@ -64,7 +64,7 @@ Top-level keys: `trip` (required), `days` (required), and optional `todo`, `pack
 - **Dates are plain `YYYY-MM-DD`** and are parsed in local time by the app — never add a time or `Z` to date fields. Only `trip.departure` carries a time + offset.
 - **`days[].date` must fall within `trip.start`..`trip.end`** and `day` numbers should be sequential.
 - **Never emit `_id`** on timeline events — it is a runtime-only field stripped on export.
-- **Language:** keep all user-facing copy (titles, desc, region, pace) in Traditional Chinese to match the app.
+- **Language:** keep all user-facing copy (titles, desc, pace) in Traditional Chinese to match the app.
 - **Event type defaults:** flights/tickets/reservations → `booked`; the day's headline attraction → `must-go`; routine moves/meals → `standard`; tentative or backup ideas → `option`.
 - **Be honest about gaps.** If the notes don't give a time or address, leave a clearly-marked placeholder (e.g. `desc: '（待確認地址）'`) rather than inventing specifics like exact addresses or flight numbers.
 

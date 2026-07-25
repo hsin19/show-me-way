@@ -22,6 +22,7 @@ import {
     mapSearch,
     parseEventStartMinutes,
     parseLocalDate,
+    splitDayDate,
     toLocalIsoDate,
 } from "./utils";
 
@@ -53,6 +54,26 @@ describe("parseLocalDate vs native UTC parsing", () => {
         expect(d.getDate()).toBe(11);
         expect(d.getHours()).toBe(0);
         expect(toLocalIsoDate(d)).toBe("2026-06-11");
+    });
+});
+
+describe("splitDayDate", () => {
+    it("splits into the date and the weekday", () => {
+        // 2026-06-11 is a Thursday
+        expect(splitDayDate("2026-06-11")).toEqual({ mmdd: "06/11", weekday: "四" });
+    });
+
+    it("maps Sunday (weekday 0) to 日", () => {
+        expect(splitDayDate("2026-06-14")).toEqual({ mmdd: "06/14", weekday: "日" });
+    });
+
+    it("keeps invalid input as the date with no weekday", () => {
+        expect(splitDayDate("not-a-date")).toEqual({ mmdd: "not-a-date", weekday: "" });
+    });
+
+    it("reads the LOCAL calendar day, so no UTC day shift", () => {
+        // Parsed as UTC midnight this is 2026-06-10 (Wednesday) west of UTC.
+        expect(splitDayDate("2026-06-11").weekday).toBe("四");
     });
 });
 
@@ -339,7 +360,7 @@ describe("buildDayReport", () => {
         const day = {
             day: 1,
             date: "2026-06-11",
-            region: "弘大・延南洞",
+            title: "弘大・延南洞",
             timeline: [
                 { time: "09:30", title: "早餐" },
                 { time: "整天", title: "自由活動" },
@@ -362,7 +383,7 @@ describe("buildDayReport", () => {
         const day = {
             day: 1,
             date: "2026-06-11",
-            region: "弘大",
+            title: "弘大",
             timeline: [
                 { time: "09:30", title: "早餐", status: "done" as const },
                 { time: "12:00", title: "拉麵店", status: "skipped" as const },
@@ -377,24 +398,24 @@ describe("buildDayReport", () => {
     });
 
     it("assigns the changeover night to the next hotel (checkout day excluded)", () => {
-        const day = { day: 4, date: "2026-06-14", region: "明洞", timeline: [{ time: "10:00", title: "換飯店" }] };
+        const day = { day: 4, date: "2026-06-14", title: "明洞", timeline: [{ time: "10:00", title: "換飯店" }] };
         expect(buildDayReport(day, hotels, "首爾自由行")).toContain("今晚住宿：明洞飯店");
     });
 
     it("reports 未安排 when no hotel covers the night (e.g. departure day)", () => {
-        const day = { day: 6, date: "2026-06-16", region: "回程", timeline: [{ time: "18:00", title: "回程班機" }] };
+        const day = { day: 6, date: "2026-06-16", title: "回程", timeline: [{ time: "18:00", title: "回程班機" }] };
         expect(buildDayReport(day, hotels, "首爾自由行")).toContain("今晚住宿：未安排");
     });
 
     it("handles an empty timeline and an empty hotel list", () => {
-        const day = { day: 2, date: "2026-06-12", region: "自由活動", timeline: [] };
+        const day = { day: 2, date: "2026-06-12", title: "自由活動", timeline: [] };
         const report = buildDayReport(day, [], "首爾自由行");
         expect(report).toContain("今晚住宿：未安排");
         expect(report).toContain("今日行程：\n（無安排）");
     });
 
     it("omits a blank time from the event line", () => {
-        const day = { day: 3, date: "2026-06-13", region: "弘大", timeline: [{ time: "", title: "睡到自然醒" }] };
+        const day = { day: 3, date: "2026-06-13", title: "弘大", timeline: [{ time: "", title: "睡到自然醒" }] };
         expect(buildDayReport(day, hotels, "首爾自由行")).toContain("・睡到自然醒");
     });
 });

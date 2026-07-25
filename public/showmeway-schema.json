@@ -174,7 +174,7 @@
       "description": "每日行程細節列表",
       "items": {
         "type": "object",
-        "required": ["day", "date", "region", "pace", "timeline"],
+        "required": ["day", "date", "title", "pace", "timeline"],
         "properties": {
           "day": {
             "type": "integer",
@@ -185,9 +185,15 @@
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "description": "當天日期 (YYYY-MM-DD)"
           },
+          "title": {
+            "type": "string",
+            "maxLength": 24,
+            "description": "當日行程大標題/主題，例如: 抵達 · 新宿、京都一日遊。建議 14 個全形字以內 (約 23 個半形字)：在 390px 寬的手機上，日程卡大標題超過就會折成兩行；總覽日期清單則會在 15 個全形字處截字。"
+          },
           "region": {
             "type": "string",
-            "description": "主要活動區域/景點，例如: 新宿、明洞"
+            "deprecated": true,
+            "description": "[已過時 / Deprecated] 舊版區域屬性，請改用 title"
           },
           "city": {
             "type": "string",
@@ -195,7 +201,8 @@
           },
           "pace": {
             "type": "string",
-            "description": "今日行程節奏描述，例如: 慢活、需要早起"
+            "maxLength": 30,
+            "description": "今日行程節奏描述，例如: 慢活、需要早起。建議 15 個全形字以內 (約 27 個半形字)：「今日節奏：」前綴會佔掉同一行的寬度，超過就會折行。"
           },
           "timeline": {
             "type": "array",

@@ -46,7 +46,7 @@ export interface TimelineEvent {
 export interface DayItinerary {
     day: number;
     date: string;
-    region: string;
+    title: string;
     /** Overrides `trip.city` for this day's weather lookup (multi-city trips). See `lib/weather.ts`. */
     city?: string;
     pace: string;
@@ -255,6 +255,13 @@ function normalizeTripData(raw: unknown): TripData {
         if (!day || typeof day !== "object" || Array.isArray(day)) {
             throw new Error(`days 第 ${i + 1} 項必須是物件 (不可為空白列表項)`);
         }
+        const dayObj = day as { title?: unknown; region?: unknown; city?: unknown; timeline?: unknown; };
+        const dayTitle = dayObj.title ?? dayObj.region;
+        if (dayTitle == null || typeof dayTitle !== "string") {
+            throw new Error(`days 第 ${i + 1} 項缺少 title 屬性 (或 title 必須是文字)`);
+        }
+        day.title = dayTitle;
+        delete dayObj.region;
         if (!Array.isArray(day.timeline)) {
             throw new Error(`days 第 ${i + 1} 項缺少 timeline 列表`);
         }
@@ -322,6 +329,7 @@ export function serializeToYaml(data: TripData): string {
     // fully JSON-serializable, so this safely yields a plain detached object.
     const clean = JSON.parse(JSON.stringify(data)) as TripData;
     for (const day of clean.days) {
+        delete (day as { region?: string; }).region;
         for (const ev of day.timeline) {
             delete ev._id;
         }

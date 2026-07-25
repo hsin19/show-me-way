@@ -29,7 +29,7 @@ function build() {
     const base = Date.UTC(year, month - 1, day);
     const dayOf = (offset: number) => new Date(base + offset * 86_400_000).toISOString().slice(0, 10);
     const days = [-3, -2, -1, 0, 1, 2, 3].map((off, i) =>
-        `  - day: ${i + 1}\n    date: '${dayOf(off)}'\n    region: 區域${i + 1}\n    pace: 悠閒\n`
+        `  - day: ${i + 1}\n    date: '${dayOf(off)}'\n    title: 區域${i + 1}\n    pace: 悠閒\n`
         + `    timeline:\n      - time: '00:30'\n        title: 第${i + 1}天事件\n        type: standard\n        desc: 說明\n`
     ).join("");
     return {
@@ -46,7 +46,7 @@ test("開啟時自動定位到今天：面板、今天標記與 chip 進入視�
     await page.goto("/");
 
     // Day 4 is today → lands on that panel, not the overview.
-    await expect(page.getByRole("heading", { name: /Day 4｜/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "區域4" })).toBeVisible();
 
     const state = await page.evaluate(() => {
         const marked = document.querySelector('button[data-day][aria-current="date"]');

@@ -53,7 +53,7 @@ trip:
 days:
   - day: 1
     date: '2026-10-01'
-    region: '經典商圈漫步'
+    title: '經典商圈漫步'
     pace: '輕鬆漫遊'
     timeline:
       - time: '08:00'

@@ -30,7 +30,7 @@ trip:
 days:
   - day: 1
     date: '2026-10-01'
-    region: 抵達 · 新宿
+    title: 抵達 · 新宿
     pace: 輕鬆漫遊，當天以休息與覓食為主
     timeline:
       - time: '08:00'
@@ -64,7 +64,7 @@ days:
             note: 雨天 / 太累的備案，免排隊
   - day: 2
     date: '2026-10-02'
-    region: 經典景點 · 澀谷
+    title: 經典景點 · 澀谷
     pace: 腳步略快，行程豐富
     timeline:
       - time: '09:30 - 11:00'
@@ -100,7 +100,7 @@ days:
             url: 'https://example.com/tax-free'
   - day: 3
     date: '2026-10-03'
-    region: 京都一日遊
+    title: 京都一日遊
     city: Kyoto
     pace: 早出晚歸，當天移動到京都
     timeline:
@@ -139,7 +139,7 @@ days:
           code: 'EX-778890'
   - day: 4
     date: '2026-10-04'
-    region: 採購 · 回程
+    title: 採購 · 回程
     pace: 收尾行程，不排太滿
     timeline:
       - time: '10:00 - 12:00'

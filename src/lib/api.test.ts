@@ -29,7 +29,7 @@ function tripYaml(hotelsYaml: string): string {
         "days:",
         "  - day: 1",
         "    date: '2026-06-11'",
-        "    region: '市區'",
+        "    title: '市區'",
         "    pace: '輕鬆'",
         "    timeline: []",
     ].join("\n");
@@ -121,7 +121,7 @@ function timelineYaml(body: string): string {
         "days:",
         "  - day: 1",
         "    date: '2026-06-11'",
-        "    region: '市區'",
+        "    title: '市區'",
         "    pace: '輕鬆'",
         `    timeline:${body}`,
     ].join("\n");
@@ -201,7 +201,7 @@ const validDaysBlock = [
     "days:",
     "  - day: 1",
     "    date: '2026-06-11'",
-    "    region: '市區'",
+    "    title: '市區'",
     "    pace: '輕鬆'",
     "    timeline: []",
 ].join("\n");
@@ -227,12 +227,31 @@ describe("validateYaml — 結構與其餘 zh-TW 驗證", () => {
             .toThrow("days 第 1 項必須是物件 (不可為空白列表項)");
     });
 
+    it("支援舊版 region 並自動遷移為 title，序列化時刪除 region", () => {
+        const legacyYaml = [
+            validTripBlock,
+            "days:",
+            "  - day: 1",
+            "    date: '2026-06-11'",
+            "    region: '舊版區域'",
+            "    pace: '輕鬆'",
+            "    timeline: []",
+        ].join("\n");
+        const parsed = validateYaml(legacyYaml);
+        expect(parsed.days[0].title).toBe("舊版區域");
+        expect((parsed.days[0] as unknown as { region?: string; }).region).toBeUndefined();
+
+        const serialized = serializeToYaml(parsed);
+        expect(serialized).toContain("title: 舊版區域");
+        expect(serialized).not.toContain("region:");
+    });
+
     it("拒絕缺少 timeline 列表的 day", () => {
         const dayWithoutTimeline = [
             "days:",
             "  - day: 1",
             "    date: '2026-06-11'",
-            "    region: '市區'",
+            "    title: '市區'",
             "    pace: '輕鬆'",
         ].join("\n");
         expect(() => validateYaml(`${validTripBlock}\n${dayWithoutTimeline}`))

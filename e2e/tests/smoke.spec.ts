@@ -40,11 +40,11 @@ test("日程切換：各天顯示對應事件後可返回總覽", async ({ page 
     await page.goto("/");
 
     await page.locator("button[data-day]").first().click();
-    await expect(page.getByRole("heading", { name: /Day 1｜/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "測試區域一" })).toBeVisible();
     await expect(page.getByText("測試事件一")).toBeVisible();
 
     await page.locator("button[data-day]").nth(1).click();
-    await expect(page.getByRole("heading", { name: /Day 2｜/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "測試區域二" })).toBeVisible();
     await expect(page.getByText("測試事件二")).toBeVisible();
 
     await page.getByRole("button", { name: "總覽" }).click();
@@ -137,7 +137,7 @@ test("日程列：總覽 chip 不隨日期捲動離開", async ({ page }) => {
     const days = Array.from({ length: 10 }, (_, i) => i + 1)
         .map(d =>
             `  - day: ${d}\n    date: '2099-01-${String(d).padStart(2, "0")}'\n`
-            + `    region: 區域${d}\n    pace: 悠閒\n    timeline:\n`
+            + `    title: 區域${d}\n    pace: 悠閒\n    timeline:\n`
             + `      - time: '09:00'\n        title: 第${d}天事件\n        type: standard\n        desc: 說明\n`
         )
         .join("");
@@ -149,7 +149,7 @@ test("日程列：總覽 chip 不隨日期捲動離開", async ({ page }) => {
     await page.goto("/");
 
     await page.locator("button[data-day]").last().click();
-    await expect(page.getByRole("heading", { name: /Day 10｜/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "區域10" })).toBeVisible();
 
     const overview = page.getByRole("button", { name: "總覽" });
     await expect(overview).toBeVisible();

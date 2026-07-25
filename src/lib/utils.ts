@@ -14,17 +14,28 @@ export function parseLocalDate(dateStr: string): Date {
 }
 
 /**
+ * Split an ISO date string (YYYY-MM-DD) into the two pieces the UI sizes
+ * separately — the day chips and the overview list set the date large and the
+ * weekday small, so they need the parts, not a joined string to pick apart
+ * again. Example: "2026-06-11" -> { mmdd: "06/11", weekday: "四" }.
+ * Invalid input keeps the raw string as `mmdd` with no weekday.
+ */
+export function splitDayDate(isoDateStr: string): { mmdd: string; weekday: string; } {
+    const date = parseLocalDate(isoDateStr);
+    if (isNaN(date.getTime())) return { mmdd: isoDateStr, weekday: "" };
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
+    return { mmdd: `${mm}/${dd}`, weekday: weekdays[date.getDay()] };
+}
+
+/**
  * Format an ISO date string (YYYY-MM-DD) into a localized Chinese display format: MM/DD(W)
  * Example: "2026-06-11" -> "06/11(四)"
  */
 export function formatDayDate(isoDateStr: string): string {
-    const date = parseLocalDate(isoDateStr);
-    if (isNaN(date.getTime())) return isoDateStr;
-    const mm = String(date.getMonth() + 1).padStart(2, "0");
-    const dd = String(date.getDate()).padStart(2, "0");
-    const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
-    const w = weekdays[date.getDay()];
-    return `${mm}/${dd}(${w})`;
+    const { mmdd, weekday } = splitDayDate(isoDateStr);
+    return weekday ? `${mmdd}(${weekday})` : mmdd;
 }
 
 /**
@@ -251,7 +262,7 @@ export function isCheckoutDay(hotel: { checkOut: string; }, date: string): boole
 
 /**
  * Compose the plain-text 報平安 report for one day: trip name / Day N / date /
- * region, tonight's hotel with its address, and a one-line-per-event timeline
+ * title, tonight's hotel with its address, and a one-line-per-event timeline
  * summary. Plain text so it pastes cleanly into LINE etc. Tonight's hotel uses
  * `isOvernightStay` — the checkout day belongs to the next stay (or to none).
  */
@@ -259,13 +270,13 @@ export function buildDayReport(
     dayData: {
         day: number;
         date: string;
-        region: string;
+        title: string;
         timeline: ReadonlyArray<{ time: string; title: string; status?: "done" | "skipped"; }>;
     },
     hotels: ReadonlyArray<{ name: string; address: string; checkIn: string; checkOut: string; }>,
     tripName: string,
 ): string {
-    const lines = [`【${tripName}】Day ${dayData.day}｜${formatDayDate(dayData.date)}｜${dayData.region}`];
+    const lines = [`【${tripName}】Day ${dayData.day}｜${formatDayDate(dayData.date)}｜${dayData.title}`];
     const hotel = hotels.find(h => isOvernightStay(h, dayData.date));
     if (hotel) {
         lines.push(`今晚住宿：${hotel.name}`, `地址：${hotel.address}`);

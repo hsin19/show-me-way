@@ -7,7 +7,6 @@ import type { EnlargedCard } from "../enlarge";
 import type { ExpenseItem } from "../ledger";
 import {
     findCurrentEventIndex,
-    formatDayDate,
     formatNextEventLabel,
     getCountdownText,
     getNextEventInfo,
@@ -79,8 +78,9 @@ let countdownText = $derived.by(() => {
 // Ordered panel keys for the pager: overview (0) then each day in order. The
 // same array drives the chip row, so chips and panels cannot fall out of step.
 let panelKeys = $derived([0, ...days.map(d => d.day)]);
-// Chip labels, looked up by day number (key 0 has none).
-let dayDates = $derived(new Map(days.map(d => [d.day, formatDayDate(d.date)])));
+// Each day's ISO date, looked up by day number (key 0 has none). The chip does
+// its own formatting — the pager's snippet only hands it the key.
+let dayDates = $derived(new Map(days.map(d => [d.day, d.date])));
 let currentDayData = $derived(days.find(d => d.day === currentDay) ?? null);
 
 // Vertical position within a freshly-rendered day panel (TabPager's

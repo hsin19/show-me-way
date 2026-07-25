@@ -22,7 +22,7 @@ export const FIXTURE_YAML = `trip:
 days:
   - day: 1
     date: '2099-01-01'
-    region: 測試區域一
+    title: 測試區域一
     pace: 輕鬆漫遊
     timeline:
       - time: '09:00'
@@ -31,7 +31,7 @@ days:
         desc: 第一天的測試事件
   - day: 2
     date: '2099-01-02'
-    region: 測試區域二
+    title: 測試區域二
     pace: 輕鬆漫遊
     timeline:
       - time: '10:00'

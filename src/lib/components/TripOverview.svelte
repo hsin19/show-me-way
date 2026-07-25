@@ -19,8 +19,8 @@ import {
 import { getLanguageConfig } from "../phrases";
 import {
     formatDateRange,
-    formatDayDate,
     isOvernightStay,
+    splitDayDate,
 } from "../utils";
 import type { DailyWeather } from "../weather";
 import HotelCards from "./HotelCards.svelte";
@@ -84,9 +84,20 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
 
 <!-- Trip hero card -->
 <div class="panel rounded-2xl p-6 mb-6">
-    <h2 class="text-2xl font-extrabold text-text-primary tracking-tight">
-        {trip.name}
-    </h2>
+    <div class="flex justify-between items-start gap-2">
+        <h2 class="text-2xl font-extrabold text-text-primary tracking-tight min-w-0 break-words">
+            {trip.name}
+        </h2>
+        <button
+            type="button"
+            onclick={onShare}
+            class="min-w-[44px] min-h-[44px] -mr-2 -mt-1 flex items-center justify-center rounded-xl text-accent hover:bg-accent/10 active:scale-95 transition cursor-pointer shrink-0"
+            aria-label="分享行程"
+            title="分享行程"
+        >
+            <Share2 size={18} aria-hidden="true" />
+        </button>
+    </div>
     <p class="text-xs text-text-secondary font-medium tracking-wide mt-1.5 flex items-center gap-1.5">
         <CalendarRange size={14} class="shrink-0" aria-hidden="true" />
         {formatDateRange(trip.start, trip.end)}・共 {days.length} 天
@@ -94,13 +105,6 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
     <div class="mt-4 inline-flex max-w-full items-center bg-accent/12 text-accent text-xs font-bold px-3.5 py-2 rounded-full">
         <span class="truncate">{countdownText}</span>
     </div>
-    <button
-        type="button"
-        onclick={onShare}
-        class="mt-4 w-full min-h-[44px] bg-accent text-accent-contrast font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition active:scale-[0.98] cursor-pointer"
-    >
-        <Share2 size={14} aria-hidden="true" /> 分享行程
-    </button>
 </div>
 
 <!-- Phase-aware helper card: exactly one of prep progress (before the trip),
@@ -151,16 +155,21 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
 <div class="space-y-2">
     {#each days as day (day.day)}
         {@const weather = weatherFor(day)}
+        {@const date = splitDayDate(day.date)}
         <button
             onclick={() => onSelectDay(day.day)}
             class="w-full panel rounded-xl p-3.5 flex items-center gap-3 text-left hover:bg-tint-2 transition cursor-pointer"
         >
-            <div class="shrink-0 w-[56px] flex flex-col items-center">
+            <!-- Same two lines as the day chip (DayChip.svelte), so the list and
+                 the strip read as one thing. -->
+            <div class="shrink-0 w-[68px] flex flex-col items-center">
                 <span class="text-[11px] font-bold text-accent">DAY {String(day.day).padStart(2, "0")}</span>
-                <span class="text-sm font-bold text-text-primary mt-0.5">{formatDayDate(day.date).split("(")[0]}</span>
+                <span class="text-sm font-bold text-text-primary mt-0.5 whitespace-nowrap">
+                    {date.mmdd} {date.weekday}
+                </span>
             </div>
             <div class="flex-1 min-w-0">
-                <p class="text-sm font-semibold text-text-primary truncate">{day.region}</p>
+                <p class="text-sm font-semibold text-text-primary truncate">{day.title}</p>
                 {#if weather}
                     <div class="mt-1">
                         <WeatherBadge {weather} />

@@ -18,7 +18,6 @@ import type { HotelInfo } from "../api";
 import type { EnlargedCard } from "../enlarge";
 import {
     classifyTimelineEvents,
-    formatDayDate,
     isCheckoutDay,
     isOvernightStay,
     mapDirections,
@@ -75,10 +74,19 @@ let expandedAlts = $state<Record<string, boolean>>({});
 <!-- Day Overview Card -->
 <div class="panel rounded-2xl p-5 mb-6">
     <div class="flex justify-between items-center mb-3">
-        <h3 class="text-xl font-extrabold tracking-tight">Day {dayData.day}｜{formatDayDate(dayData.date)}</h3>
-        <span class="text-xs bg-tint-2 text-text-secondary px-2.5 py-1 rounded-full font-semibold">
-            {dayData.region}
-        </span>
+        <!-- min-w-0 + break-words: a title with no break opportunity (a URL, a
+             long latin run) would otherwise refuse to shrink and make the day
+             panel scroll sideways, which also fights TabPager's swipe paging. -->
+        <h3 class="text-xl font-extrabold tracking-tight min-w-0 break-words">{dayData.title}</h3>
+        <button
+            type="button"
+            onclick={onShareDay}
+            class="min-w-[44px] min-h-[44px] -mr-2 flex items-center justify-center rounded-xl text-accent hover:bg-accent/10 active:scale-95 transition cursor-pointer"
+            aria-label="分享今日行程"
+            title="分享今日行程"
+        >
+            <Share2 size={18} aria-hidden="true" />
+        </button>
     </div>
     <p class="text-sm text-text-secondary leading-relaxed flex items-start gap-1.5">
         <Zap size={15} class="text-accent shrink-0 mt-0.5" aria-hidden="true" />
@@ -89,13 +97,6 @@ let expandedAlts = $state<Record<string, boolean>>({});
             <WeatherBadge {weather} />
         </div>
     {/if}
-    <button
-        type="button"
-        onclick={onShareDay}
-        class="mt-4 w-full min-h-[44px] bg-accent text-accent-contrast font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition active:scale-[0.98] cursor-pointer"
-    >
-        <Share2 size={14} aria-hidden="true" /> 分享今日行程
-    </button>
 </div>
 
 <!-- Map link + directions + "show enlarged" button for a place. A direct
