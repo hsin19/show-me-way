@@ -40,77 +40,28 @@ let chips = $derived((["prep", "ledger", "phrases", "settings", "prefs"] as cons
 // If the selected sub-tab becomes unavailable (e.g. the YAML failed to load),
 // fall back instead of rendering nothing.
 let activeTabId = $derived(chips.includes(tab) ? tab : (hasTrip ? "prep" : "settings"));
-
-let scroller = $state<HTMLDivElement>();
-
-// Drive the .edge-fade mask: fade only the side that still has content past it.
-let atStart = $state(true);
-let atEnd = $state(true);
-
-function updateFades() {
-    if (!scroller) return;
-    // 1px slack: fractional scroll offsets never land exactly on the bounds.
-    const max = scroller.scrollWidth - scroller.clientWidth;
-    atStart = scroller.scrollLeft <= 1;
-    atEnd = scroller.scrollLeft >= max - 1;
-}
-
-// Recheck when the chip set changes (a YAML load error drops 準備/記帳/常用語).
-$effect(() => {
-    void chips;
-    updateFades();
-});
-
-// Keep the selected chip in view. The row already overflows a 390px phone with
-// five chips and will only get longer, so chip padding is NOT the lever —
-// without this, deep-linking (the overview's phase card jumps straight to
-// 記帳/準備) could select a chip that is scrolled off screen. Same approach as
-// DaySwitcher: scoped scrollTo rather than scrollIntoView, which adjusts every
-// scrollable ancestor and lets WebKit cancel the pager's snap.
-$effect(() => {
-    if (!scroller) return;
-    const chip = scroller.querySelector<HTMLElement>(`[data-tool-chip="${activeTabId}"]`);
-    if (!chip) return;
-    const chipRect = chip.getBoundingClientRect();
-    const rowRect = scroller.getBoundingClientRect();
-    const left = scroller.scrollLeft + (chipRect.left - rowRect.left) - (rowRect.width - chipRect.width) / 2;
-    scroller.scrollTo({
-        left: Math.max(0, left),
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-    });
-});
 </script>
 
-<!-- 工具 tab: sub-pages behind sticky chips. Paging (swipe / wheel / slide
+<!-- 工具 tab: sub-pages behind the shared chip header. Paging (swipe / wheel / slide
      transition) is the shared TabPager — same interaction model as the
      itinerary strip. -->
 <TabPager keys={chips} bind:current={tab}>
-    {#snippet header(select)}
-        <div
-            bind:this={scroller}
-            onscroll={updateFades}
-            class="overflow-x-auto no-scrollbar pb-3 edge-fade"
-            style:--fade-start={atStart ? "0px" : "24px"}
-            style:--fade-end={atEnd ? "0px" : "24px"}
+    <!-- `active` from TabPager is `key === current`, but `tab` can point at a page
+         that is no longer available; activeTabId is the corrected value, so the
+         highlight follows it rather than the passed flag. -->
+    {#snippet chip(id, select)}
+        <button
+            aria-pressed={activeTabId === id}
+            onclick={() => select(id)}
+            class="
+                min-h-[44px] px-4 rounded-xl border text-xs font-bold transition duration-200 cursor-pointer
+                {activeTabId === id
+                ? 'bg-accent/15 border-transparent text-accent'
+                : 'bg-tint-1 border-card-border text-text-secondary hover:bg-tint-2'}
+            "
         >
-            <div class="flex gap-2">
-                {#each chips as id (id)}
-                    <button
-                        data-tool-chip={id}
-                        aria-pressed={activeTabId === id}
-                        onclick={() => select(id)}
-                        class="
-                            flex-none min-h-[44px] px-4 rounded-xl border text-xs font-bold transition duration-200 cursor-pointer
-                            {activeTabId === id
-                            ? 'bg-accent/15 border-transparent text-accent'
-                            : 'bg-tint-1 border-card-border text-text-secondary hover:bg-tint-2'}
-                        "
-                    >
-                        {LABELS[id]}
-                    </button>
-                {/each}
-            </div>
-        </div>
+            {LABELS[id]}
+        </button>
     {/snippet}
     {#snippet panel()}
         {#if activeTabId === "prep"}

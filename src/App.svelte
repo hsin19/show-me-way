@@ -42,7 +42,6 @@ import PhraseDeck from "./lib/components/PhraseDeck.svelte";
 import SettingsPanel from "./lib/components/SettingsPanel.svelte";
 import Toast from "./lib/components/Toast.svelte";
 import ToolsTab from "./lib/components/ToolsTab.svelte";
-import UpdatePrompt from "./lib/components/UpdatePrompt.svelte";
 import type { EnlargedCard } from "./lib/enlarge";
 import { parseLegacyExpenses } from "./lib/ledger";
 import { getLanguageConfig } from "./lib/phrases";
@@ -89,8 +88,9 @@ $effect(() => {
 });
 
 // PWA update flow: registerType "prompt" keeps the new service worker waiting
-// until the user accepts, so an in-use page is never reloaded under them.
-let needRefresh = $state(false);
+// until the user accepts, so an in-use page is never reloaded under them. The
+// prompt is a persistent toast rather than its own banner — it stacks with
+// everything else instead of needing its own layer and offsets.
 let swRegistration: ServiceWorkerRegistration | undefined;
 // Shared between the hourly interval and the visibilitychange path — a single
 // timestamp, or a foreground check would be repeated by the next interval tick.
@@ -110,7 +110,16 @@ function checkForSwUpdate() {
 
 const updateSW = registerSW({
     onNeedRefresh() {
-        needRefresh = true;
+        showToast({
+            message: "已有新版本",
+            actionLabel: "立即更新",
+            onAction: () => void updateSW(true),
+            kind: "update",
+            persist: true,
+            // Fires once per newly waiting service worker, so a second deploy
+            // during one long session would stack a second immortal notice.
+            dedupeKey: "sw-update",
+        });
     },
     onOfflineReady() {
         showToast("已可離線使用");
@@ -837,11 +846,10 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
         </div>
     </nav>
 
-    <!-- Global toast (reads the toast service directly), PWA update banner, and
-         the fullscreen enlarged-card overlay — each self-contained. -->
+    <!-- Global toast stack (reads the toast service directly; the PWA update
+         notice is one of its entries) and the fullscreen enlarged-card overlay —
+         each self-contained. -->
     <Toast />
-
-    <UpdatePrompt show={needRefresh} onUpdate={() => void updateSW(true)} onDismiss={() => (needRefresh = false)} />
 
     <EnlargedCardOverlay card={enlargedCard} onClose={() => (enlargedCard = null)} />
 </div>

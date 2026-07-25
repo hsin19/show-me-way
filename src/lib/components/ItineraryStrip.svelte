@@ -14,7 +14,7 @@ import {
     toLocalIsoDate,
 } from "../utils";
 import type { DailyWeather } from "../weather";
-import DaySwitcher from "./DaySwitcher.svelte";
+import DayChip from "./DayChip.svelte";
 import TabPager from "./TabPager.svelte";
 import Timeline from "./Timeline.svelte";
 import TripOverview from "./TripOverview.svelte";
@@ -66,7 +66,7 @@ let {
 // Gap kept above the current event card when a day panel auto-scrolls to it.
 const EVENT_SCROLL_GAP = 8;
 
-// "Today" derivations (consumed by the DaySwitcher marker and the overview capsule).
+// "Today" derivations (consumed by DayChip's 今天 marker and the overview capsule).
 let todayIso = $derived(toLocalIsoDate(clockNow));
 let todayData = $derived(days.find(d => d.date === todayIso) ?? null);
 let todayDay = $derived(todayData?.day ?? null);
@@ -76,8 +76,11 @@ let countdownText = $derived.by(() => {
     return getCountdownText(trip, clockNow);
 });
 
-// Ordered panel keys for the pager: overview (0) then each day in order.
+// Ordered panel keys for the pager: overview (0) then each day in order. The
+// same array drives the chip row, so chips and panels cannot fall out of step.
 let panelKeys = $derived([0, ...days.map(d => d.day)]);
+// Chip labels, looked up by day number (key 0 has none).
+let dayDates = $derived(new Map(days.map(d => [d.day, formatDayDate(d.date)])));
 let currentDayData = $derived(days.find(d => d.day === currentDay) ?? null);
 
 // Vertical position within a freshly-rendered day panel (TabPager's
@@ -103,12 +106,13 @@ function positionPanel(day: number, panel: HTMLElement) {
 }
 </script>
 
-<!-- Day paging (swipe / wheel / slide transition) is the shared TabPager; this
-     component supplies the day data, the switcher chips, and the
-     scroll-to-current-event behaviour. -->
-<TabPager keys={panelKeys} bind:current={currentDay} onPanelReady={positionPanel}>
-    {#snippet header(select)}
-        <DaySwitcher days={days.map(d => ({ day: d.day, date: formatDayDate(d.date) }))} {currentDay} onSelect={select} {todayDay} />
+<!-- Day paging (swipe / wheel / slide transition) and the chip row (scrolling,
+     edge fade, pinning) are the shared TabPager; this component supplies the day
+     data and the scroll-to-current-event behaviour. pinnedCount={1} keeps the
+     overview chip — panelKeys[0] — reachable however far the days scroll. -->
+<TabPager keys={panelKeys} bind:current={currentDay} pinnedCount={1} onPanelReady={positionPanel}>
+    {#snippet chip(day, select, active)}
+        <DayChip {day} date={dayDates.get(day) ?? ""} {active} isToday={todayDay === day} onSelect={select} />
     {/snippet}
     {#snippet panel(day, select)}
         {#if day === 0}

@@ -128,6 +128,47 @@ test("工具分頁：常用語頁可開啟並返回行程", async ({ page }) => 
     await expect(page.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
 });
 
+// TabPager renders the 總覽 chip OUTSIDE the scroller (pinnedCount=1), so it
+// cannot scroll away however long the trip is. Asserted structurally rather than
+// by offset: the point is that it is not part of the scrolling content.
+test("日程列：總覽 chip 不隨日期捲動離開", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    // Ten days so the strip overflows well past the sticky range.
+    const days = Array.from({ length: 10 }, (_, i) => i + 1)
+        .map(d =>
+            `  - day: ${d}\n    date: '2099-01-${String(d).padStart(2, "0")}'\n`
+            + `    region: 區域${d}\n    pace: 悠閒\n    timeline:\n`
+            + `      - time: '09:00'\n        title: 第${d}天事件\n        type: standard\n        desc: 說明\n`
+        )
+        .join("");
+    await seedItinerary(
+        page,
+        `trip:\n  name: 長行程\n  start: '2099-01-01'\n  end: '2099-01-10'\n`
+            + `  departure: '2099-01-01T08:00:00+08:00'\n  hotels: []\ndays:\n${days}`,
+    );
+    await page.goto("/");
+
+    await page.locator("button[data-day]").last().click();
+    await expect(page.getByRole("heading", { name: /Day 10｜/ })).toBeVisible();
+
+    const overview = page.getByRole("button", { name: "總覽" });
+    await expect(overview).toBeVisible();
+
+    const pinned = await page.evaluate(() => {
+        const scroller = document.querySelector("[data-pager-scroller]") as HTMLElement;
+        const chip = [...document.querySelectorAll("button")].find(b => b.textContent?.trim() === "總覽")!;
+        return {
+            scrolled: scroller.scrollLeft > 0,
+            insideScroller: scroller.contains(chip),
+            // Still left of the scrolling region, i.e. leading the row.
+            leadsRow: chip.getBoundingClientRect().right <= scroller.getBoundingClientRect().left + 1,
+        };
+    });
+    expect(pinned.scrolled).toBe(true);
+    expect(pinned.insideScroller).toBe(false);
+    expect(pinned.leadsRow).toBe(true);
+});
+
 // The chip row overflows a narrow phone and will only get longer, so selecting a
 // chip has to scroll it into view — otherwise deep-linking (e.g. the overview's
 // phase card jumping to 記帳) lands on a page whose active chip is off screen.
@@ -143,7 +184,7 @@ test("工具分頁：選中的 chip 會捲進視野（窄螢幕）", async ({ pa
 
     // Fully inside the scroller, not clipped at its trailing edge.
     const fits = await lastChip.evaluate(chip => {
-        const row = chip.closest(".edge-fade")!;
+        const row = chip.closest("[data-pager-scroller]")!;
         const c = chip.getBoundingClientRect(), r = row.getBoundingClientRect();
         return c.left >= r.left - 1 && c.right <= r.right + 1;
     });

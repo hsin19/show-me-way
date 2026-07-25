@@ -322,3 +322,13 @@ export function insertAtClamped<T>(arr: T[], index: number, item: T): T[] {
     next.splice(Math.min(Math.max(index, 0), next.length), 0, item);
     return next;
 }
+
+/**
+ * Does the user prefer reduced motion? app.css's `prefers-reduced-motion` rule
+ * only reaches CSS animations/transitions, so Svelte's JS transitions and
+ * programmatic smooth scrolling have to ask here. Read at the point of use, not
+ * cached at component init, so flipping the OS setting mid-session takes effect.
+ */
+export function prefersReducedMotion(): boolean {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}

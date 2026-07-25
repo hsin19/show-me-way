@@ -25,8 +25,9 @@ export default defineConfig({
         serviceWorkers: "block",
         // 日期邏輯以本地時間解析（CLAUDE.md）；固定時區讓 CI（UTC)與本機一致。
         timezoneId: "Asia/Taipei",
-        // DaySwitcher 的選中晶片會 smooth-scroll（尊重 prefers-reduced-motion）；
-        // 關閉動畫讓點擊後的定位立即完成。
+        // TabPager 會把選中的 chip smooth-scroll 進視野（尊重 prefers-reduced-motion）；
+        // 關閉動畫讓定位立即完成——smoke/today 兩支測試對 scrollLeft 與 chip 位置的
+        // 斷言就是靠這個才不會 race，別移除。
         contextOptions: { reducedMotion: "reduce" },
     },
     projects: [
