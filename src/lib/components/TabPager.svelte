@@ -1,6 +1,7 @@
 <script lang="ts" generics="T extends string | number">
 import type { Snippet } from "svelte";
 import { fly } from "svelte/transition";
+import { edgeFade } from "../edge-fade";
 import { prefersReducedMotion } from "../utils";
 
 interface Props {
@@ -115,25 +116,8 @@ $effect(() => {
 });
 
 // --- Chip row: horizontal scroll, edge fade, keep the current chip in view ---
+// The fade itself is the shared `edgeFade` attachment (src/lib/edge-fade.ts).
 let scroller = $state<HTMLDivElement>();
-
-// Fade only the side that still has content past it (.edge-fade in app.css) —
-// a permanently dimmed end chip would read as broken rather than as scrollable.
-let atStart = $state(true);
-let atEnd = $state(true);
-
-function updateFades() {
-    if (!scroller) return;
-    // 1px slack: fractional scroll offsets never land exactly on the bounds.
-    atStart = scroller.scrollLeft <= 1;
-    atEnd = scroller.scrollLeft >= scroller.scrollWidth - scroller.clientWidth - 1;
-}
-
-// Recheck when the chip set changes (e.g. 工具 drops pages without a trip).
-$effect(() => {
-    void keys;
-    updateFades();
-});
 
 // Keep the current chip in view. Without this, deep-linking (the overview's
 // phase card jumps straight to 記帳) can select a chip that is scrolled off
@@ -204,10 +188,8 @@ $effect(() => {
             <div
                 bind:this={scroller}
                 data-pager-scroller
-                onscroll={updateFades}
                 class="flex-1 min-w-0 py-1.5 overflow-x-auto no-scrollbar edge-fade"
-                style:--fade-start={atStart ? "0px" : "24px"}
-                style:--fade-end={atEnd ? "0px" : "24px"}
+                {@attach edgeFade}
             >
                 <div class="flex gap-2">
                     {#each scrollKeys as key (key)}

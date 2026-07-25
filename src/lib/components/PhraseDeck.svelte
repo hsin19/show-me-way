@@ -1,5 +1,6 @@
 <script lang="ts">
 import Copy from "@lucide/svelte/icons/copy";
+import { edgeFade } from "../edge-fade";
 import type {
     PhraseCategory,
     PhraseInfo,
@@ -36,8 +37,16 @@ let filteredPhrases = $derived(
 
 <!-- Survival phrase deck (tap a card to copy); hosted in the 常用語 ToolSheet. -->
 {#if availableCats.length > 0}
-    <!-- Horizontally scrollable — opt out of the TabPager swipe gesture. -->
-    <div class="overflow-x-auto no-scrollbar mb-3" data-swipe-ignore>
+    <!-- Same treatment as TabPager's chip header, so the two rows behave alike:
+         the shared edgeFade attachment, and py-1.5 inside the scrollport for the
+         focus ring (a horizontal scrollport clips vertically too — see
+         TabPager.svelte). The negative top margin plus the halved bottom one keep
+         that padding from moving anything. Opt out of the TabPager swipe gesture. -->
+    <div
+        class="-mt-1.5 py-1.5 mb-1.5 overflow-x-auto no-scrollbar edge-fade"
+        data-swipe-ignore
+        {@attach edgeFade}
+    >
         <div class="flex gap-2">
             {#each filterChips as cat (cat)}
                 <button

@@ -11,6 +11,7 @@ import {
     type TripData,
     validateYaml,
 } from "../api";
+import { edgeFade } from "../edge-fade";
 import {
     buildItineraryContext,
     type ChatMessage,
@@ -124,9 +125,15 @@ function changeKey() {
     showToast("已清除 API 金鑰");
 }
 
-async function send(e: SubmitEvent) {
-    e.preventDefault();
-    const text = input.trim();
+const QUICK_PROMPTS = [
+    { label: "在地美食推薦", icon: "🍽️", text: "推薦這趟行程當地的必吃美食與口袋名單" },
+    { label: "檢查行程節奏", icon: "⏱️", text: "幫我檢查各天景點的時間安排是否過於緊湊" },
+    { label: "整理住宿資訊", icon: "🏨", text: "整理這次旅程的所有飯店住宿點與退房時間" },
+    { label: "雨天備案景點", icon: "🌧️", text: "提供幾項適合當作雨天備案的室內景點建議" },
+];
+
+async function triggerSend(promptText: string) {
+    const text = promptText.trim();
     if (!text || isSending || !apiKey) return;
 
     const history = messages;
@@ -164,6 +171,11 @@ async function send(e: SubmitEvent) {
         isSending = false;
         await scrollToBottom();
     }
+}
+
+async function send(e: SubmitEvent) {
+    e.preventDefault();
+    await triggerSend(input);
 }
 
 async function scrollToBottom() {
@@ -331,25 +343,56 @@ function applyEdit(message: UiMessage) {
         </div>
 
         <!-- Input -->
-        <div class="shrink-0 px-5 pb-4 pt-2 border-t border-line">
-            <form onsubmit={send} class="max-w-3xl mx-auto w-full flex items-center gap-2">
-                <input
-                    bind:value={input}
-                    aria-label="輸入問題"
-                    autocomplete="off"
-                    placeholder="詢問或用說的編輯行程…"
-                    disabled={isSending}
-                    class="flex-1 min-w-0 bg-well-deep border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent transition disabled:opacity-50"
-                />
-                <button
-                    type="submit"
-                    aria-label="送出"
-                    disabled={!input.trim() || isSending}
-                    class="flex-shrink-0 bg-accent text-accent-contrast rounded-xl p-2.5 transition active:scale-[0.96] cursor-pointer disabled:opacity-40"
+        <!-- No border-t: the quick prompt chips now lead this block, and a rule
+             running straight across them read as a stray line rather than as the
+             edge of the composer. -->
+        <div class="shrink-0 px-5 pb-4 pt-2">
+            <div class="max-w-3xl mx-auto w-full">
+                <!-- Quick prompt chips bar. Same scrolling chip row as TabPager's
+                     header and PhraseDeck's filter: the shared edgeFade attachment,
+                     plus room inside the scrollport for the focus ring (a
+                     horizontal scrollport clips vertically too — see
+                     TabPager.svelte). pb-2 already provides it at the bottom; the
+                     top needs pt-1.5, pulled back by -mt-1.5 so nothing moves. -->
+                <div
+                    class="-mt-1.5 pt-1.5 pb-2 overflow-x-auto no-scrollbar edge-fade"
+                    data-swipe-ignore
+                    {@attach edgeFade}
                 >
-                    <Send size={18} class="stroke-[2.5]" aria-hidden="true" />
-                </button>
-            </form>
+                    <div class="flex gap-2">
+                        {#each QUICK_PROMPTS as p (p.label)}
+                            <button
+                                type="button"
+                                disabled={isSending}
+                                onclick={() => triggerSend(p.text)}
+                                class="flex-none min-h-[36px] px-3 py-1.5 rounded-xl bg-tint-1 border border-card-border text-xs font-bold text-text-secondary hover:text-accent hover:bg-tint-2 transition duration-200 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                            >
+                                <span>{p.icon}</span>
+                                <span>{p.label}</span>
+                            </button>
+                        {/each}
+                    </div>
+                </div>
+
+                <form onsubmit={send} class="flex items-center gap-2">
+                    <input
+                        bind:value={input}
+                        aria-label="輸入問題"
+                        autocomplete="off"
+                        placeholder="詢問或用說的編輯行程…"
+                        disabled={isSending}
+                        class="flex-1 min-w-0 bg-well-deep border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent transition disabled:opacity-50"
+                    />
+                    <button
+                        type="submit"
+                        aria-label="送出"
+                        disabled={!input.trim() || isSending}
+                        class="flex-shrink-0 bg-accent text-accent-contrast rounded-xl p-2.5 transition active:scale-[0.96] cursor-pointer disabled:opacity-40"
+                    >
+                        <Send size={18} class="stroke-[2.5]" aria-hidden="true" />
+                    </button>
+                </form>
+            </div>
         </div>
     {/if}
 </div>

@@ -175,20 +175,22 @@ body {
 .edge-fade {
     --fade-start: 0px;
     --fade-end: 0px;
-    -webkit-mask-image: linear-gradient(
+    /* Concave ramp: at the halfway point the content is already down to 25%, not
+       50%, so the fade reads as a deliberate soft edge instead of a faint smudge.
+       Written once and referenced twice — older WebKit still needs the prefix.
+       #000 here is mask coverage, not a colour, so it is exempt from the
+       design-token rule. */
+    --edge-fade-mask: linear-gradient(
         to right,
         transparent 0,
+        rgb(0 0 0 / 0.25) calc(var(--fade-start) * 0.5),
         #000 var(--fade-start),
         #000 calc(100% - var(--fade-end)),
+        rgb(0 0 0 / 0.25) calc(100% - var(--fade-end) * 0.5),
         transparent 100%
     );
-    mask-image: linear-gradient(
-        to right,
-        transparent 0,
-        #000 var(--fade-start),
-        #000 calc(100% - var(--fade-end)),
-        transparent 100%
-    );
+    -webkit-mask-image: var(--edge-fade-mask);
+    mask-image: var(--edge-fade-mask);
 }
 
 /* Hide scrollbar utility */
