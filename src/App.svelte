@@ -273,10 +273,8 @@ async function maybeImportSharedItinerary() {
         const yaml = await decodeShareToken(token);
         const parsed = validateYaml(yaml); // throws on invalid structure/syntax
         const hasExisting = !!localStorage.getItem(USER_YAML_KEY);
-        const message = hasExisting
-            ? "偵測到分享的行程，要匯入為新行程嗎？（目前行程會保留，可隨時切回）"
-            : "偵測到分享的行程，要匯入嗎？";
-        if (confirm(message)) {
+        const message = "偵測到分享的行程，要匯入為新行程嗎？（目前行程會保留，可隨時切回）";
+        if (!hasExisting || confirm(message)) {
             // Park the current trip and switch to the imported one. Canonicalize
             // first (strip runtime ids, re-add schema line). loadTripData runs
             // right after in onMount, so the imported trip becomes active.
@@ -655,8 +653,7 @@ async function handleSwitchProfile(id: string) {
     activeTab = "itinerary";
 }
 
-function handleDeleteProfile(id: string, name: string) {
-    if (!confirm(`要刪除行程「${name}」嗎？此動作無法復原。`)) return;
+function handleDeleteProfile(id: string) {
     deleteProfile(id);
     profiles = listProfiles();
     showToast("已刪除行程");

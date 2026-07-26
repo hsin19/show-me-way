@@ -35,6 +35,7 @@ import {
     formatDayDate,
     toLocalIsoDate,
 } from "../utils";
+import ConfirmBar from "./ConfirmBar.svelte";
 
 interface Props {
     /** Active trip's name for the switcher header; null while the YAML fails to load. */
@@ -71,7 +72,7 @@ let yamlInput = $state("");
 let validationError = $state<string | null>(null);
 let yamlBackups = $state<YamlBackup[]>([]);
 // Snapshot of the persisted YAML, used to detect unsaved edits (restore/reset guards).
-let yamlSnapshot = "";
+let yamlSnapshot = $state("");
 
 // Populate the editor + backup list on mount. The panel is a page, not a
 // modal — an in-session draft (settingsDraft) survives tab navigation and
@@ -130,16 +131,15 @@ function formatBackupTime(savedAt: string): string {
     return `${formatDayDate(toLocalIsoDate(date))} ${hh}:${mm}`;
 }
 
+let confirmingBackupSavedAt = $state<string | null>(null);
+let confirmingDeleteProfileId = $state<string | null>(null);
+
 // Restore an auto-backup. Validation runs before anything else so a failed
 // restore never touches the backup ring; the snapshot of the current YAML is
 // taken right before the overwrite. The backup content is read out first, or
 // a full ring could evict the very entry being restored.
-async function restore(savedAt: string) {
-    // Unsaved editor edits never reach USER_YAML_KEY, so restoring would
-    // discard them — same guard as before the panel became a page.
-    if (yamlInput !== yamlSnapshot && !confirm("尚有未儲存的變更，還原備份將捨棄這些變更，確定繼續嗎？")) {
-        return;
-    }
+async function executeRestore(savedAt: string) {
+    confirmingBackupSavedAt = null;
     const yaml = getYamlBackup(savedAt);
     if (!yaml) {
         showToast("找不到此備份");
@@ -159,7 +159,6 @@ async function restore(savedAt: string) {
         showToast("此備份內容無效，已載入編輯器，請修正後再儲存");
         return;
     }
-    if (!confirm("要以此備份覆蓋目前的行程嗎？")) return;
     backupCurrentYaml();
     localStorage.setItem(USER_YAML_KEY, yaml);
     settingsDraft.yaml = null;
@@ -169,22 +168,18 @@ async function restore(savedAt: string) {
     onDone();
 }
 
+let confirmingReset = $state(false);
+
 // Reset to the project default itinerary.
-async function reset() {
-    // Unsaved editor edits never reach USER_YAML_KEY (and may hold an invalid
-    // backup loaded for repair) — same guard as restore.
-    if (yamlInput !== yamlSnapshot && !confirm("尚有未儲存的變更，回復預設將捨棄這些變更，確定繼續嗎？")) {
-        return;
-    }
-    if (confirm("要清除自訂 YAML，並恢復為專案預設的行程嗎？")) {
-        backupCurrentYaml();
-        localStorage.removeItem(USER_YAML_KEY);
-        settingsDraft.yaml = null;
-        validationError = null;
-        showToast("已恢復為預設行程…");
-        await onReload();
-        onDone();
-    }
+async function handleReset() {
+    confirmingReset = false;
+    backupCurrentYaml();
+    localStorage.removeItem(USER_YAML_KEY);
+    settingsDraft.yaml = null;
+    validationError = null;
+    showToast("已恢復為預設行程…");
+    await onReload();
+    onDone();
 }
 
 function selectAll() {
@@ -200,6 +195,13 @@ function clearEditor() {
     yamlInput = "";
     settingsDraft.yaml = "";
     showToast("已清空編輯器內容");
+}
+
+function discardDraft() {
+    yamlInput = yamlSnapshot;
+    settingsDraft.yaml = null;
+    validationError = null;
+    showToast("已還原為目前儲存的行程內容");
 }
 </script>
 
@@ -228,22 +230,34 @@ function clearEditor() {
     {#if showProfiles}
         <div class="mt-2 space-y-1.5">
             {#each profiles as profile (profile.id)}
-                <div class="flex items-center gap-1">
-                    <button
-                        onclick={() => onSwitchProfile(profile.id)}
-                        class="flex-1 min-w-0 min-h-[44px] flex items-center justify-between gap-2 px-3.5 rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer"
-                    >
-                        <span class="truncate text-sm font-semibold">{profile.name}</span>
-                        <span class="shrink-0 text-[11px] font-bold">切換</span>
-                    </button>
-                    <button
-                        onclick={() => onDeleteProfile(profile.id, profile.name)}
-                        aria-label="刪除行程 {profile.name}"
-                        class="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-text-muted hover:text-danger transition cursor-pointer"
-                    >
-                        <Trash2 size={16} aria-hidden="true" />
-                    </button>
-                </div>
+                {#if confirmingDeleteProfileId === profile.id}
+                    <ConfirmBar
+                        message="要刪除行程「{profile.name}」嗎？此動作無法復原。"
+                        confirmLabel="確定刪除"
+                        onconfirm={() => {
+                            confirmingDeleteProfileId = null;
+                            onDeleteProfile(profile.id, profile.name);
+                        }}
+                        oncancel={() => (confirmingDeleteProfileId = null)}
+                    />
+                {:else}
+                    <div class="flex items-center gap-1">
+                        <button
+                            onclick={() => onSwitchProfile(profile.id)}
+                            class="flex-1 min-w-0 min-h-[44px] flex items-center justify-between gap-2 px-3.5 rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer"
+                        >
+                            <span class="truncate text-sm font-semibold">{profile.name}</span>
+                            <span class="shrink-0 text-[11px] font-bold">切換</span>
+                        </button>
+                        <button
+                            onclick={() => (confirmingDeleteProfileId = profile.id)}
+                            aria-label="刪除行程 {profile.name}"
+                            class="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-text-muted hover:text-danger transition cursor-pointer"
+                        >
+                            <Trash2 size={16} aria-hidden="true" />
+                        </button>
+                    </div>
+                {/if}
             {/each}
             <button
                 onclick={onCreateProfile}
@@ -305,6 +319,22 @@ function clearEditor() {
         </div>
     {/if}
 
+    <div class="grid grid-cols-2 gap-2 mt-0.5">
+        <button
+            onclick={discardDraft}
+            disabled={yamlInput === yamlSnapshot}
+            class="bg-tint-1 border border-card-border text-text-secondary font-bold py-3 px-4 rounded-xl text-xs hover:bg-tint-2 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+            放棄變更
+        </button>
+        <button
+            onclick={save}
+            class="bg-accent text-accent-contrast font-bold py-3 px-4 rounded-xl text-xs transition active:scale-[0.98] cursor-pointer"
+        >
+            儲存並解析
+        </button>
+    </div>
+
     <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint space-y-1">
         <p class="flex items-center gap-1">
             <Lightbulb size={12} class="shrink-0 text-accent" aria-hidden="true" />行程僅存於本機、不會上傳。
@@ -332,13 +362,24 @@ function clearEditor() {
             <ul class="mt-1.5 space-y-1.5">
                 {#each yamlBackups as backup (backup.savedAt)}
                     <li>
-                        <button
-                            onclick={() => restore(backup.savedAt)}
-                            class="w-full min-h-[44px] flex items-center justify-between gap-2 px-3 rounded-lg bg-tint-1 border border-card-border text-[11px] text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer"
-                        >
-                            <span class="font-mono">{formatBackupTime(backup.savedAt)}</span>
-                            <span class="text-[10px] font-bold">還原</span>
-                        </button>
+                        {#if confirmingBackupSavedAt === backup.savedAt}
+                            <ConfirmBar
+                                message={yamlInput !== yamlSnapshot
+                                ? "尚有未儲存的變更，還原備份將捨棄這些變更。確定以此備份覆蓋目前的行程嗎？"
+                                : "要以此備份覆蓋目前的行程嗎？"}
+                                confirmLabel="確定還原"
+                                onconfirm={() => executeRestore(backup.savedAt)}
+                                oncancel={() => (confirmingBackupSavedAt = null)}
+                            />
+                        {:else}
+                            <button
+                                onclick={() => (confirmingBackupSavedAt = backup.savedAt)}
+                                class="w-full min-h-[44px] flex items-center justify-between gap-2 px-3 rounded-lg bg-tint-1 border border-card-border text-[11px] text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer"
+                            >
+                                <span class="font-mono">{formatBackupTime(backup.savedAt)}</span>
+                                <span class="text-[10px] font-bold">還原</span>
+                            </button>
+                        {/if}
                     </li>
                 {/each}
             </ul>
@@ -369,18 +410,22 @@ function clearEditor() {
         </div>
     </div>
 
-    <div class="grid grid-cols-2 gap-2 mt-1">
+    {#if confirmingReset}
+        <ConfirmBar
+            message={yamlInput !== yamlSnapshot
+            ? "尚有未儲存的變更，回復預設將捨棄這些變更。確定清除自訂 YAML 並恢復為預設行程嗎？"
+            : "將清除自訂 YAML，並恢復為專案預設的行程。確定回復？"}
+            confirmLabel="確定回復"
+            onconfirm={handleReset}
+            oncancel={() => (confirmingReset = false)}
+        />
+    {:else}
         <button
-            onclick={reset}
-            class="bg-tint-1 border border-card-border text-text-secondary font-bold py-3 px-4 rounded-xl text-xs hover:bg-tint-2 transition cursor-pointer"
+            type="button"
+            onclick={() => (confirmingReset = true)}
+            class="w-full min-h-[44px] bg-tint-1 border border-card-border text-text-muted text-xs font-bold py-2.5 px-4 rounded-xl hover:text-danger hover:border-danger/40 hover:bg-danger/10 transition cursor-pointer"
         >
             回復預設行程
         </button>
-        <button
-            onclick={save}
-            class="bg-accent text-accent-contrast font-bold py-3 px-4 rounded-xl text-xs transition active:scale-[0.98] cursor-pointer"
-        >
-            儲存並解析
-        </button>
-    </div>
+    {/if}
 </div>

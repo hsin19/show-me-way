@@ -24,6 +24,7 @@ import {
     twdToForeign,
 } from "../ledger";
 import { showToast } from "../toast.svelte";
+import ConfirmBar from "./ConfirmBar.svelte";
 
 interface Props {
     currency?: string;
@@ -211,11 +212,12 @@ function addExpense() {
     showToast("記帳成功");
 }
 
-function resetBudget() {
-    if (confirm("確定要清除所有記帳紀錄與加值金額嗎？")) {
-        onReset();
-        showToast("已全部重置");
-    }
+let confirmingReset = $state(false);
+
+function handleResetBudget() {
+    confirmingReset = false;
+    onReset();
+    showToast("已全部重置");
 }
 
 function handleAddWallet() {
@@ -334,13 +336,27 @@ function handleAddWallet() {
         <h3 class="text-base font-bold text-text-primary flex items-center gap-2">
             <Wallet size={18} class="text-accent" aria-hidden="true" />記帳與餘額管理
         </h3>
-        <button
-            onclick={resetBudget}
-            class="min-w-[44px] min-h-[44px] -my-2.5 -mr-2.5 flex items-center justify-center text-xs text-text-muted hover:text-danger font-semibold cursor-pointer"
-        >
-            重設
-        </button>
+        {#if !confirmingReset}
+            <button
+                type="button"
+                onclick={() => (confirmingReset = true)}
+                class="min-w-[44px] min-h-[44px] -my-2.5 -mr-2.5 flex items-center justify-center text-xs text-text-muted hover:text-danger font-semibold cursor-pointer"
+            >
+                重設
+            </button>
+        {/if}
     </div>
+
+    {#if confirmingReset}
+        <div class="mb-4">
+            <ConfirmBar
+                message="確定要清除所有記帳紀錄與加值金額嗎？"
+                confirmLabel="確定清除"
+                onconfirm={handleResetBudget}
+                oncancel={() => (confirmingReset = false)}
+            />
+        </div>
+    {/if}
 
     <!-- Stats Dashboard -->
     <div class="grid grid-cols-3 gap-2 mb-2">

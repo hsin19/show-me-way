@@ -54,6 +54,21 @@ test("分享連結匯入：接受後成為新行程，原行程保留可切回",
     await expect(page.getByRole("button", { name: "測試行程 切換" })).toBeVisible();
 });
 
+test("分享連結匯入：無原行程時直接匯入無彈窗", async ({ page }) => {
+    const token = await encodeShareToken(SHARED_YAML);
+
+    let dialogTriggered = false;
+    page.on("dialog", () => {
+        dialogTriggered = true;
+    });
+
+    await page.goto(`/#s=${token}`);
+
+    await expect(page.getByRole("status")).toContainText("已匯入");
+    expect(dialogTriggered).toBe(false);
+    await expect(page.getByRole("heading", { level: 2, name: "分享行程" })).toBeVisible();
+});
+
 test("分享連結匯入：取消後維持原行程，網址 token 仍被清除", async ({ page }) => {
     await seedItinerary(page);
     const token = await encodeShareToken(SHARED_YAML);

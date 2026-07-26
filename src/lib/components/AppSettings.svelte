@@ -8,7 +8,6 @@ import Moon from "@lucide/svelte/icons/moon";
 import Palette from "@lucide/svelte/icons/palette";
 import Settings from "@lucide/svelte/icons/settings";
 import Sun from "@lucide/svelte/icons/sun";
-import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import {
     clearApiCache,
     clearAppLocalStorage,
@@ -161,37 +160,6 @@ function handleFullReset() {
     </div>
 {/snippet}
 
-{#snippet confirmBar(message: string, confirmLabel: string, onconfirm: () => void)}
-    <div class="rounded-xl border border-danger/40 bg-danger/10 p-2.5">
-        <p class="flex items-start gap-1.5 text-[11px] font-medium text-danger leading-normal">
-            <TriangleAlert size={14} class="shrink-0 mt-px" aria-hidden="true" />
-            {message}
-        </p>
-        <div class="mt-2 flex gap-2">
-            <button
-                type="button"
-                onclick={onconfirm}
-                class="
-                    flex-1 min-h-[44px] rounded-lg bg-danger text-accent-contrast text-xs font-bold
-                    cursor-pointer hover:opacity-90 transition duration-200
-                "
-            >
-                {confirmLabel}
-            </button>
-            <button
-                type="button"
-                onclick={() => (confirming = null)}
-                class="
-                    flex-1 min-h-[44px] rounded-lg bg-tint-2 text-text-secondary text-xs font-bold
-                    cursor-pointer hover:bg-tint-3 transition duration-200
-                "
-            >
-                取消
-            </button>
-        </div>
-    </div>
-{/snippet}
-
 <section class="panel rounded-xl p-3.5 mt-3">
     <div class="flex items-center justify-between mb-2.5">
         <h3 class="text-sm font-bold text-text-primary flex items-center gap-1.5">
@@ -221,21 +189,23 @@ function handleFullReset() {
 
     {#if confirming === "backups"}
         <div class="mt-2">
-            {@render confirmBar(
-                "備份是覆蓋行程前唯一的還原點，清除後無法復原。確定清除？",
-                "確定清除",
-                handleClearBackups,
-            )}
+            <ConfirmBar
+                message="備份是覆蓋行程前唯一的還原點，清除後無法復原。確定清除？"
+                confirmLabel="確定清除"
+                onconfirm={handleClearBackups}
+                oncancel={() => (confirming = null)}
+            />
         </div>
     {/if}
 
     <div class="mt-2">
         {#if confirming === "reset"}
-            {@render confirmBar(
-                "將清除本 App 的行程、備份與所有設定，且無法復原。確定重置？",
-                "確定重置",
-                handleFullReset,
-            )}
+            <ConfirmBar
+                message="將清除本 App 的行程、備份與所有設定，且無法復原。確定重置？"
+                confirmLabel="確定重置"
+                onconfirm={handleFullReset}
+                oncancel={() => (confirming = null)}
+            />
         {:else}
             <button
                 type="button"

@@ -58,19 +58,16 @@ test("行程設定檔：建立、切換、刪除與取消刪除", async ({ page 
     const deleteButton = page.getByRole("button", { name: "刪除行程 我的探索之旅 (範本)" });
     await expect(parkedTemplateRow).toBeVisible();
 
-    // (3) 取消刪除：confirm 按取消後列仍在，localStorage 也未動
-    // （Playwright 預設就會 dismiss，仍顯式註冊以表達意圖）
-    page.once("dialog", dialog => void dialog.dismiss());
+    // (3) 取消刪除：點擊刪除後出現行內確認 Bar，按取消後列仍在，localStorage 也未動
     await deleteButton.click();
+    await expect(page.getByText("要刪除行程「我的探索之旅 (範本)」嗎？此動作無法復原。")).toBeVisible();
+    await page.getByRole("button", { name: "取消" }).click();
     await expect(parkedTemplateRow).toBeVisible();
     expect(await page.evaluate(() => window.localStorage.getItem("showmeway_profiles") ?? "")).toContain("我的探索之旅");
 
-    // (4) 確認刪除：confirm 訊息逐字比對（fullwidth 標點），接受後列消失
-    page.once("dialog", dialog => {
-        expect(dialog.message()).toBe("要刪除行程「我的探索之旅 (範本)」嗎？此動作無法復原。");
-        void dialog.accept();
-    });
+    // (4) 確認刪除：點擊確定刪除後列消失
     await deleteButton.click();
+    await page.getByRole("button", { name: "確定刪除" }).click();
     await expect(status).toContainText("已刪除");
     await expect(parkedTemplateRow).toHaveCount(0);
     await expect(deleteButton).toHaveCount(0);

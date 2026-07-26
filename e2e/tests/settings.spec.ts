@@ -52,14 +52,10 @@ test("備份還原：儲存後產生備份，還原回前一版行程", async ({
     const restoreRow = page.getByRole("button", { name: "還原" });
     await expect(restoreRow).toHaveCount(1);
 
-    // 原生 confirm()：Playwright 預設 dismiss，觸發前先註冊 accept
-    let confirmMessage = "";
-    page.once("dialog", d => {
-        confirmMessage = d.message();
-        void d.accept();
-    });
+    // 點擊「還原」按鈕展開 ConfirmBar 行內確認，再點擊「確定還原」
     await restoreRow.click();
-    expect(confirmMessage).toBe("要以此備份覆蓋目前的行程嗎？");
+    await expect(page.getByText("要以此備份覆蓋目前的行程嗎？")).toBeVisible();
+    await page.getByRole("button", { name: "確定還原" }).click();
 
     await expect(page.getByRole("status")).toContainText("已還原");
     // 還原成功後同樣導回行程分頁
