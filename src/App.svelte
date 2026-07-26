@@ -45,6 +45,7 @@ import ToolsTab from "./lib/components/ToolsTab.svelte";
 import type { EnlargedCard } from "./lib/enlarge";
 import { parseLegacyExpenses } from "./lib/ledger";
 import { getLanguageConfig } from "./lib/phrases";
+import { initPwaInstallPrompt } from "./lib/pwa-install.svelte";
 import { settingsDraft } from "./lib/settings-draft.svelte";
 import {
     buildShareUrl,
@@ -255,6 +256,8 @@ let staleWeatherHours = $derived.by(() => {
 });
 
 onMount(async () => {
+    initPwaInstallPrompt(() => openTools("prefs"));
+
     // 0. If opened via a share link, offer to import it before loading.
     await maybeImportSharedItinerary();
 

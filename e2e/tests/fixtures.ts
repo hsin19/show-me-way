@@ -45,12 +45,22 @@ todo:
 // Every request leaving the app's own origin is aborted, so a test can never
 // depend on (or leak to) Open-Meteo, jsDelivr, or Gemini. Same-origin asset
 // and YAML requests pass through untouched.
+//
+// The install offer is pre-declined for the same reason: `pwa-install.svelte.ts`
+// raises it on a 3.5s timer in EVERY browser, so any test that outlives that
+// timer would get a toast over the bottom of the viewport — and its 安裝 / ✕
+// buttons are `pointer-events-auto`, so they swallow taps aimed at the nav.
+// Written unconditionally (unlike the itinerary seed): nothing in the app ever
+// reads this key back expecting its own value.
 export const test = base.extend({
     context: async ({ context }, use) => {
         await context.route(
             url => url.origin !== BASE_ORIGIN,
             route => route.abort(),
         );
+        await context.addInitScript(key => {
+            window.localStorage.setItem(key, String(Date.now()));
+        }, "showmeway_pwa_install_dismissed");
         await use(context);
     },
 });

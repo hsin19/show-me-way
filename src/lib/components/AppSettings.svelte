@@ -1,6 +1,7 @@
 <script lang="ts">
 import Check from "@lucide/svelte/icons/check";
 import CloudOff from "@lucide/svelte/icons/cloud-off";
+import Download from "@lucide/svelte/icons/download";
 import ExternalLink from "@lucide/svelte/icons/external-link";
 import HardDrive from "@lucide/svelte/icons/hard-drive";
 import History from "@lucide/svelte/icons/history";
@@ -9,7 +10,9 @@ import Monitor from "@lucide/svelte/icons/monitor";
 import Moon from "@lucide/svelte/icons/moon";
 import Palette from "@lucide/svelte/icons/palette";
 import Settings from "@lucide/svelte/icons/settings";
+import Share from "@lucide/svelte/icons/share";
 import Sparkles from "@lucide/svelte/icons/sparkles";
+import SquarePlus from "@lucide/svelte/icons/square-plus";
 import Sun from "@lucide/svelte/icons/sun";
 import Trash2 from "@lucide/svelte/icons/trash-2";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
@@ -22,6 +25,12 @@ import {
     saveGeminiModelFilter,
 } from "../gemini";
 import { createModelPicker } from "../gemini-models.svelte";
+import {
+    canPromptPwaInstall,
+    isIosDevice,
+    isStandaloneMode,
+    promptPwaInstall,
+} from "../pwa-install.svelte";
 import {
     clearApiCache,
     clearAppLocalStorage,
@@ -405,6 +414,62 @@ function handleFullReset() {
         {/if}
     </div>
 </section>
+
+{#if !isStandaloneMode()}
+    <section class="panel rounded-xl p-3.5 mt-3">
+        <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-bold text-text-primary flex items-center gap-1.5">
+                <Download size={16} class="text-accent" aria-hidden="true" />安裝 App 至主畫面
+            </h3>
+        </div>
+
+        {#if isIosDevice()}
+            <p class="text-xs text-text-muted mb-2.5">
+                在 iOS Safari 上，只需 2 個步驟即可將 App 加到 iPhone / iPad 主畫面：
+            </p>
+            <div class="space-y-2 text-xs bg-tint-1/60 p-3 rounded-xl border border-line-faint">
+                <div class="flex items-center gap-2 text-text-primary">
+                    <span class="w-5 h-5 rounded-full bg-accent/15 text-accent font-bold flex items-center justify-center text-[11px] shrink-0">1</span>
+                    <span>點擊瀏覽器底部的 <strong>「分享」</strong> 按鈕</span>
+                    <Share size={15} class="text-accent inline shrink-0" aria-hidden="true" />
+                </div>
+                <div class="flex items-center gap-2 text-text-primary">
+                    <span class="w-5 h-5 rounded-full bg-accent/15 text-accent font-bold flex items-center justify-center text-[11px] shrink-0">2</span>
+                    <span>向下捲動並選取 <strong>「加入主畫面」</strong></span>
+                    <SquarePlus size={15} class="text-accent inline shrink-0" aria-hidden="true" />
+                </div>
+            </div>
+        {:else if canPromptPwaInstall()}
+            <p class="text-xs text-text-muted mb-3">
+                取得全螢幕與流暢的離線行程體驗，點擊下方按鈕即可快速安裝。
+            </p>
+            <button
+                type="button"
+                onclick={() => void promptPwaInstall()}
+                class="
+                    w-full py-2.5 px-4 rounded-xl bg-accent text-accent-contrast
+                    text-xs font-bold transition duration-200 cursor-pointer
+                    flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98]
+                "
+            >
+                <Download size={16} aria-hidden="true" />
+                立即安裝 App
+            </button>
+        {:else}
+            <p class="text-xs text-text-muted mb-2">
+                請透過瀏覽器快速安裝：
+            </p>
+            <div class="text-xs bg-tint-1/60 p-3 rounded-xl border border-line-faint text-text-primary space-y-1.5">
+                <div>
+                    點擊瀏覽器上方 <strong>網址列右側</strong> 的「安裝圖示」（電腦版 Chrome / Edge 或部分手機瀏覽器）。
+                </div>
+                <div class="text-text-muted text-[11px]">
+                    若未顯示圖示，亦可點擊選單 (⋮) ➔ 選取 <strong>「安裝應用程式」</strong> 或 <strong>「新增至主畫面」</strong>。
+                </div>
+            </div>
+        {/if}
+    </section>
+{/if}
 
 <section class="panel rounded-xl p-3.5 mt-3">
     <div class="flex items-center justify-between mb-2">

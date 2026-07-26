@@ -1,5 +1,6 @@
 <script lang="ts">
 import CheckCircle from "@lucide/svelte/icons/check-circle";
+import Download from "@lucide/svelte/icons/download";
 import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 import X from "@lucide/svelte/icons/x";
 import { flip } from "svelte/animate";
@@ -11,7 +12,7 @@ import {
 } from "../toast.svelte";
 import { prefersReducedMotion } from "../utils";
 
-const ICONS = { success: CheckCircle, update: RefreshCw };
+const ICONS = { success: CheckCircle, update: RefreshCw, download: Download };
 
 // Enter / reorder / leave duration. Svelte's fly and flip are JS transitions, so
 // app.css's prefers-reduced-motion rule (which only reaches CSS
@@ -56,7 +57,7 @@ const moveMs = () => (prefersReducedMotion() ? 0 : MOVE_MS);
                 <button
                     onclick={() => runToastAction(item.id)}
                     class="
-                        pointer-events-auto min-w-[44px] min-h-[44px] -my-3.5 {item.persist
+                        pointer-events-auto min-w-[44px] min-h-[44px] -my-3.5 {item.persist || item.showDismiss
                         ? ''
                         : '-mr-4'} pl-2 pr-3.5 flex items-center justify-center font-black underline underline-offset-2 cursor-pointer
                     "
@@ -64,8 +65,8 @@ const moveMs = () => (prefersReducedMotion() ? 0 : MOVE_MS);
                     {item.action.label}
                 </button>
             {/if}
-            {#if item.persist}
-                <!-- A toast that never expires needs a way out. -->
+            {#if item.persist || item.showDismiss}
+                <!-- A toast that never expires or explicitly requests a close button needs a way out. -->
                 <button
                     onclick={() => dismissToast(item.id)}
                     aria-label="關閉通知"

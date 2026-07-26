@@ -10,7 +10,7 @@
 // in `showToast` — so an undo can be crowded out by three later notices.)
 
 /** Picks the leading glyph. `update` is the PWA new-version notice. */
-export type ToastKind = "success" | "update";
+export type ToastKind = "success" | "update" | "download";
 
 // A plain message, or a message plus a single action (the undo variant, which
 // stays up longer so the button can actually be reached).
@@ -24,6 +24,18 @@ export type ToastInput = string | {
      * notice uses this: it is the one message that must not vanish unseen.
      */
     persist?: boolean;
+    /** Override default expiry duration in ms. */
+    durationMs?: number;
+    /** Show explicit ✕ close button even if persist is false. */
+    showDismiss?: boolean;
+    /**
+     * Fired when the toast leaves the screen *without* its action being taken:
+     * the ✕, the expiry timer, or being evicted by the cap. NOT fired when the
+     * action button is pressed, and not when a same-`dedupeKey` toast replaces
+     * this one — neither of those is the user passing on the offer. The install
+     * prompt hangs its 7-day cool-off on exactly that distinction.
+     */
+    onDismiss?: () => void;
     /**
      * At most one toast per key: showing another with the same key replaces it.
      * The update notice needs this — `onNeedRefresh` fires once per newly waiting
@@ -43,6 +55,7 @@ export interface ToastItem {
     action: { label: string; onAction: () => void; } | null;
     /** No expiry — the renderer gives it a dismiss button instead. */
     persist: boolean;
+    showDismiss: boolean;
 }
 
 /**
@@ -56,6 +69,7 @@ interface StoredToast extends ToastItem {
     /** Pending expiry; `null` = persistent. */
     timer: number | null;
     dedupeKey: string | null;
+    onDismiss?: () => void;
 }
 
 const PLAIN_MS = 2500;
@@ -76,12 +90,24 @@ export const toast = {
     },
 };
 
-/** Remove one toast, cancelling its pending expiry. Safe on an unknown id. */
-export function dismissToast(id: number): void {
+/**
+ * Take one toast off screen and cancel its pending expiry, without telling the
+ * owner it was dismissed. The paths that are *not* the user declining — running
+ * the action, and being replaced by a same-key toast — go through here.
+ */
+function removeToast(id: number): void {
     const found = items.find(item => item.id === id);
     if (!found) return;
     if (found.timer !== null) clearTimeout(found.timer);
     items = items.filter(item => item.id !== id);
+}
+
+/** Remove one toast and fire its `onDismiss`. Safe on an unknown id. */
+export function dismissToast(id: number): void {
+    const found = items.find(item => item.id === id);
+    if (!found) return;
+    removeToast(id);
+    found.onDismiss?.();
 }
 
 /** Show a toast: a plain message, or an undo variant with a longer window. */
@@ -89,16 +115,34 @@ export function showToast(input: ToastInput): void {
     const opts = typeof input === "string" ? { message: input } : input;
     const action = opts.actionLabel && opts.onAction ? { label: opts.actionLabel, onAction: opts.onAction } : null;
     const persist = opts.persist ?? false;
+    const showDismiss = opts.showDismiss ?? false;
     const dedupeKey = opts.dedupeKey ?? null;
+    const duration = opts.durationMs ?? (action ? ACTION_MS : PLAIN_MS);
     // Replace rather than skip: the newest wording wins, and the caller does not
     // have to track whether its previous toast is still up (it may have been ✕'d).
+    // `removeToast`, not `dismissToast` — the notice is being restated, not
+    // declined, and firing `onDismiss` here would let a self-replacing toast
+    // report a dismissal the user never made.
     if (dedupeKey !== null) {
         const previous = items.find(item => item.dedupeKey === dedupeKey);
-        if (previous) dismissToast(previous.id);
+        if (previous) removeToast(previous.id);
     }
     const id = ++seq;
-    const timer = persist ? null : window.setTimeout(() => dismissToast(id), action ? ACTION_MS : PLAIN_MS);
-    items = [...items, { id, message: opts.message, kind: opts.kind ?? "success", action, persist, dedupeKey, timer }];
+    const timer = persist ? null : window.setTimeout(() => dismissToast(id), duration);
+    items = [
+        ...items,
+        {
+            id,
+            message: opts.message,
+            kind: opts.kind ?? "success",
+            action,
+            persist,
+            showDismiss,
+            dedupeKey,
+            timer,
+            onDismiss: opts.onDismiss,
+        },
+    ];
     // Only expiring toasts count toward the cap — a persistent notice must not be
     // evicted by a burst of confirmations it was never competing with. One added
     // toast can only ever put the stack one over, so one eviction is enough.
@@ -106,10 +150,13 @@ export function showToast(input: ToastInput): void {
     if (expiring.length > MAX_VISIBLE) dismissToast(expiring[0].id);
 }
 
-/** Invoke one toast's action (if any) and dismiss just that toast. */
+/**
+ * Invoke one toast's action (if any) and take just that toast off screen.
+ * Deliberately not a dismissal: the user engaged, so `onDismiss` must not fire.
+ */
 export function runToastAction(id: number): void {
     const onAction = items.find(item => item.id === id)?.action?.onAction;
-    dismissToast(id);
+    removeToast(id);
     onAction?.();
 }
 

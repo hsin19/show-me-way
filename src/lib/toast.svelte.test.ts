@@ -189,6 +189,71 @@ describe("toast stack", () => {
         expect(toast.items[0].persist).toBe(false);
     });
 
+    it("supports custom durationMs, showDismiss, and onDismiss callback", () => {
+        const onDismiss = vi.fn();
+        showToast({
+            kind: "download",
+            message: "下載專用",
+            durationMs: 10000,
+            showDismiss: true,
+            onDismiss,
+        });
+
+        expect(toast.items[0].kind).toBe("download");
+        expect(toast.items[0].showDismiss).toBe(true);
+
+        vi.advanceTimersByTime(9999);
+        expect(messages()).toEqual(["下載專用"]);
+        expect(onDismiss).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(1);
+        expect(messages()).toEqual([]);
+        expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
+    // `onDismiss` means "the user let this one go", so the three paths below have
+    // to stay apart. The install prompt reads it as a 7-day cool-off: firing it on
+    // a replacement once started that cool-off 3.5s into a toast nobody had
+    // touched, and firing it on the action would start one on an accepted offer.
+    it("fires onDismiss when the user closes the toast with ✕", () => {
+        const onDismiss = vi.fn();
+        showToast({ message: "關掉我", showDismiss: true, onDismiss });
+
+        dismissToast(toast.items[0].id);
+        expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not fire onDismiss when the action runs", () => {
+        const onDismiss = vi.fn();
+        const onAction = vi.fn();
+        showToast({ message: "接受我", actionLabel: "好", onAction, onDismiss });
+
+        runToastAction(toast.items[0].id);
+        expect(onAction).toHaveBeenCalledTimes(1);
+        expect(onDismiss).not.toHaveBeenCalled();
+    });
+
+    it("does not fire onDismiss when a same-dedupeKey toast replaces it", () => {
+        const onDismiss = vi.fn();
+        showToast({ message: "第一版", dedupeKey: "same", durationMs: 10_000, onDismiss });
+        showToast({ message: "第二版", dedupeKey: "same", durationMs: 10_000 });
+
+        expect(messages()).toEqual(["第二版"]);
+        expect(onDismiss).not.toHaveBeenCalled();
+    });
+
+    it("fires onDismiss when the cap evicts the toast", () => {
+        const onDismiss = vi.fn();
+        showToast({ message: "最舊", onDismiss });
+        showToast("二");
+        showToast("三");
+        expect(onDismiss).not.toHaveBeenCalled();
+
+        showToast("四");
+        expect(messages()).toEqual(["二", "三", "四"]);
+        expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
     it("runToastAction on an unknown id is a no-op", () => {
         showToast("還在畫面上");
         expect(() => runToastAction(9999)).not.toThrow();
