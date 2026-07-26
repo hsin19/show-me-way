@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://hsin19.github.io/show-me-way/showmeway-schema.json
 trip:
-  name: 我的探索之旅 (範本)
+  name: 下面一way-我的探索之旅
   start: '2026-10-01'
   end: '2026-10-04'
   departure: '2026-10-01T08:00:00+08:00'
@@ -17,6 +17,7 @@ trip:
       checkIn: '2026-10-01'
       checkOut: '2026-10-03'
       localName: 新宿セレクトホテル
+      phone: '+81-3-1234-5678'
       mapLink: 'https://maps.app.goo.gl/example-hotel'
       confirmation:
         code: 'BK-20261001'
@@ -155,6 +156,7 @@ days:
           name: 'WANG XIAO MING'
 todo:
   - text: 確認護照效期距回國日仍大於 6 個月
+    checked: true
   - text: 辦妥簽證 / 免簽電子許可（如 Visit Japan Web、K-ETA、ESTA）
   - text: 線上辦理登機手續並選位
   - text: 再次確認去回程航班時間與行李額度
@@ -170,6 +172,7 @@ todo:
   - text: 查當地天氣與公休 / 節慶，微調行程
 packing:
   - text: 護照、登機證、身分證
+    checked: true
   - text: 錢包、當地現金、信用卡 / 金融卡
   - text: 手機、充電線、行動電源
   - text: 萬用轉接頭 / 變壓器
@@ -183,3 +186,20 @@ packing:
   - text: 證件影本與大頭照備份
   - text: 環保袋 / 購物袋（裝戰利品）
   - text: 行李秤（回程怕超重）
+expenses:
+  - name: 'Suica 儲值'
+    amount: 5000
+    type: 'Deposit-Suica'
+    date: '2026-10-01'
+  - name: '日幣現金預提'
+    amount: 10000
+    type: 'Deposit-Cash'
+    date: '2026-10-01'
+  - name: '一蘭拉麵 晚餐'
+    amount: 1980
+    type: 'Suica'
+    date: '2026-10-01'
+  - name: 'teamLab 展覽門票'
+    amount: 3800
+    type: 'Cash'
+    date: '2026-10-02'

@@ -798,9 +798,13 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
                         {prepDone}
                         {prepTotal}
                         expenses={tripData.expenses}
+                        {profiles}
                         {showWeatherAttribution}
                         {staleWeatherHours}
                         weatherForDay={weatherForDay}
+                        onSwitchProfile={handleSwitchProfile}
+                        onCreateProfile={handleCreateProfile}
+                        onDeleteProfile={handleDeleteProfile}
                         onEnlarge={card => (enlargedCard = card)}
                         onSetEventStatus={setEventStatus}
                         onShareDay={shareDayReport}

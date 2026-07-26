@@ -54,7 +54,7 @@ test("備份還原：儲存後產生備份，還原回前一版行程", async ({
 
     // 點擊「還原」按鈕展開 ConfirmBar 行內確認，再點擊「確定還原」
     await restoreRow.click();
-    await expect(page.getByText("要以此備份覆蓋目前的行程嗎？")).toBeVisible();
+    await expect(page.getByText(/確定要還原.*的備份嗎？/)).toBeVisible();
     await page.getByRole("button", { name: "確定還原" }).click();
 
     await expect(page.getByRole("status")).toContainText("已還原");

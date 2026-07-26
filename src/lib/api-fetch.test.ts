@@ -173,7 +173,7 @@ describe("fetchItinerary — localStorage 優先於網路", () => {
 describe("預設範本 public/itinerary.yaml", () => {
     it("通過 validateYaml 且 trip.name 為範本名稱", () => {
         const data = validateYaml(defaultTemplateYaml);
-        expect(data.trip.name).toBe("我的探索之旅 (範本)");
+        expect(data.trip.name).toBe("下面一way-我的探索之旅");
         expect(data.days.length).toBeGreaterThan(0);
     });
 });

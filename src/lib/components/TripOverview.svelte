@@ -1,13 +1,16 @@
 <script lang="ts">
 import BedDouble from "@lucide/svelte/icons/bed-double";
 import CalendarRange from "@lucide/svelte/icons/calendar-range";
+import ChevronDown from "@lucide/svelte/icons/chevron-down";
 import ChevronRight from "@lucide/svelte/icons/chevron-right";
+import FolderKanban from "@lucide/svelte/icons/folder-kanban";
 import ListChecks from "@lucide/svelte/icons/list-checks";
 import Maximize2 from "@lucide/svelte/icons/maximize-2";
 import Share2 from "@lucide/svelte/icons/share-2";
 import Wallet from "@lucide/svelte/icons/wallet";
 import type {
     DayItinerary,
+    ProfileInfo,
     TripData,
 } from "../api";
 import type { EnlargedCard } from "../enlarge";
@@ -24,6 +27,7 @@ import {
 } from "../utils";
 import type { DailyWeather } from "../weather";
 import HotelCards from "./HotelCards.svelte";
+import ProfileManager from "./ProfileManager.svelte";
 import WeatherBadge from "./WeatherBadge.svelte";
 
 interface Props {
@@ -38,6 +42,8 @@ interface Props {
     prepTotal: number;
     /** Expense records, for the post-trip spend summary card. */
     expenses: ExpenseItem[];
+    /** Parked profiles list for quick profile switching from overview hero. */
+    profiles?: ProfileInfo[];
     /** This day's forecast; null hides the badge (same contract as Timeline). */
     weatherFor: (day: DayItinerary) => DailyWeather | null;
     onSelectDay: (day: number) => void;
@@ -48,6 +54,10 @@ interface Props {
     onOpenLedger: () => void;
     /** Share the whole trip (expenses stripped) — the hero-card counterpart of 分享今日行程. */
     onShare: () => void;
+    /** Profile switcher callbacks from App.svelte. */
+    onSwitchProfile?: (id: string) => void;
+    onCreateProfile?: () => void;
+    onDeleteProfile?: (id: string) => void;
 }
 
 let {
@@ -58,13 +68,23 @@ let {
     prepDone,
     prepTotal,
     expenses,
+    profiles = [],
     weatherFor,
     onSelectDay,
     onEnlarge,
     onOpenPrepare,
     onOpenLedger,
     onShare,
+    onSwitchProfile,
+    onCreateProfile,
+    onDeleteProfile,
 }: Props = $props();
+
+let isSwitcherOpen = $state(false);
+
+function toggleSwitcher() {
+    isSwitcherOpen = !isSwitcherOpen;
+}
 
 // Trip phase drives which single helper card shows under the hero: prep
 // progress before the trip, tonight's hotel during it, spend summary after.
@@ -102,9 +122,42 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
         <CalendarRange size={14} class="shrink-0" aria-hidden="true" />
         {formatDateRange(trip.start, trip.end)}・共 {days.length} 天
     </p>
-    <div class="mt-4 inline-flex max-w-full items-center bg-accent/12 text-accent text-xs font-bold px-3.5 py-2 rounded-full">
-        <span class="truncate">{countdownText}</span>
+
+    <!-- Bottom utility row: Status Badge on Left + Profile Switcher Button on Right -->
+    <div class="mt-4 flex items-center justify-between gap-2 flex-wrap">
+        <div class="inline-flex max-w-full items-center bg-accent/12 text-accent text-xs font-bold px-3.5 py-2 rounded-full">
+            <span class="truncate">{countdownText}</span>
+        </div>
+
+        {#if onSwitchProfile && onCreateProfile}
+            <button
+                type="button"
+                onclick={toggleSwitcher}
+                class="inline-flex items-center gap-1.5 bg-tint-1 border border-card-border hover:border-accent/40 text-text-primary hover:text-accent text-xs font-bold px-3.5 py-2 rounded-full transition cursor-pointer active:scale-95 shrink-0"
+                aria-expanded={isSwitcherOpen}
+                aria-label="切換行程選單"
+            >
+                <FolderKanban size={13} class="shrink-0 text-accent" aria-hidden="true" />
+                <span>切換行程</span>
+                <ChevronDown size={13} class="shrink-0 transition-transform duration-200 {isSwitcherOpen ? 'rotate-180 text-accent' : 'text-text-muted'}" aria-hidden="true" />
+            </button>
+        {/if}
     </div>
+
+    <!-- Inline Profile Switcher Drawer (reusing shared ProfileManager component) -->
+    {#if isSwitcherOpen && onSwitchProfile && onCreateProfile}
+        <div class="mt-4 pt-3.5 border-t border-line-faint">
+            <ProfileManager
+                activeTripName={trip.name}
+                {profiles}
+                expanded={true}
+                onToggleExpand={toggleSwitcher}
+                {onSwitchProfile}
+                {onCreateProfile}
+                onDeleteProfile={(id => onDeleteProfile?.(id))}
+            />
+        </div>
+    {/if}
 </div>
 
 <!-- Phase-aware helper card: exactly one of prep progress (before the trip),

@@ -32,7 +32,7 @@ test("無使用者資料時回退載入預設範本", async ({ page }) => {
     await stubMissingLocalItinerary(page);
     await page.goto("/");
 
-    await expect(page).toHaveTitle("我的探索之旅 (範本)");
+    await expect(page).toHaveTitle("下面一way-我的探索之旅");
 });
 
 test("日程切換：各天顯示對應事件後可返回總覽", async ({ page }) => {

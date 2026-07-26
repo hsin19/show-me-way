@@ -1,14 +1,10 @@
 <script lang="ts">
-import ChevronDown from "@lucide/svelte/icons/chevron-down";
 import Copy from "@lucide/svelte/icons/copy";
 import Download from "@lucide/svelte/icons/download";
 import History from "@lucide/svelte/icons/history";
-import Layers from "@lucide/svelte/icons/layers";
 import Lightbulb from "@lucide/svelte/icons/lightbulb";
 import Link2 from "@lucide/svelte/icons/link-2";
-import Plus from "@lucide/svelte/icons/plus";
 import Sliders from "@lucide/svelte/icons/sliders";
-import Trash2 from "@lucide/svelte/icons/trash-2";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import { onMount } from "svelte";
 import {
@@ -18,6 +14,7 @@ import {
     listYamlBackups,
     type ProfileInfo,
     serializeToYaml,
+    tripNameFromYaml,
     USER_YAML_KEY,
     validateYaml,
     type YamlBackup,
@@ -36,6 +33,7 @@ import {
     toLocalIsoDate,
 } from "../utils";
 import ConfirmBar from "./ConfirmBar.svelte";
+import ProfileManager from "./ProfileManager.svelte";
 
 interface Props {
     /** Active trip's name for the switcher header; null while the YAML fails to load. */
@@ -64,9 +62,6 @@ let {
     onExportYaml,
     onExportUrl,
 }: Props = $props();
-
-// Collapsed by default — switching trips is a secondary action on this page.
-let showProfiles = $state(false);
 
 let yamlInput = $state("");
 let validationError = $state<string | null>(null);
@@ -132,7 +127,6 @@ function formatBackupTime(savedAt: string): string {
 }
 
 let confirmingBackupSavedAt = $state<string | null>(null);
-let confirmingDeleteProfileId = $state<string | null>(null);
 
 // Restore an auto-backup. Validation runs before anything else so a failed
 // restore never touches the backup ring; the snapshot of the current YAML is
@@ -212,61 +206,14 @@ function discardDraft() {
     <p class="text-xs text-text-secondary mt-0.5">切換行程、直接編輯行程資料，儲存後立即套用</p>
 </div>
 
-<!-- Trip profile switcher: profiles are parked YAML snapshots, so managing
-     them lives with the YAML editor (moved here from the day-0 overview). -->
 <div class="mb-2.5">
-    <button
-        onclick={() => (showProfiles = !showProfiles)}
-        aria-expanded={showProfiles}
-        class="w-full panel rounded-xl p-3.5 flex items-center gap-2.5 text-left hover:bg-tint-2 transition cursor-pointer"
-    >
-        <Layers size={16} class="shrink-0 text-accent" aria-hidden="true" />
-        <span class="flex-1 min-w-0">
-            <span class="block text-[11px] font-bold text-text-muted">目前行程</span>
-            <span class="block text-sm font-bold text-text-primary truncate">{activeTripName ?? "（尚未載入）"}</span>
-        </span>
-        <ChevronDown size={16} class="shrink-0 text-text-muted transition-transform {showProfiles ? 'rotate-180' : ''}" aria-hidden="true" />
-    </button>
-    {#if showProfiles}
-        <div class="mt-2 space-y-1.5">
-            {#each profiles as profile (profile.id)}
-                {#if confirmingDeleteProfileId === profile.id}
-                    <ConfirmBar
-                        message="要刪除行程「{profile.name}」嗎？此動作無法復原。"
-                        confirmLabel="確定刪除"
-                        onconfirm={() => {
-                            confirmingDeleteProfileId = null;
-                            onDeleteProfile(profile.id, profile.name);
-                        }}
-                        oncancel={() => (confirmingDeleteProfileId = null)}
-                    />
-                {:else}
-                    <div class="flex items-center gap-1">
-                        <button
-                            onclick={() => onSwitchProfile(profile.id)}
-                            class="flex-1 min-w-0 min-h-[44px] flex items-center justify-between gap-2 px-3.5 rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer"
-                        >
-                            <span class="truncate text-sm font-semibold">{profile.name}</span>
-                            <span class="shrink-0 text-[11px] font-bold">切換</span>
-                        </button>
-                        <button
-                            onclick={() => (confirmingDeleteProfileId = profile.id)}
-                            aria-label="刪除行程 {profile.name}"
-                            class="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-text-muted hover:text-danger transition cursor-pointer"
-                        >
-                            <Trash2 size={16} aria-hidden="true" />
-                        </button>
-                    </div>
-                {/if}
-            {/each}
-            <button
-                onclick={onCreateProfile}
-                class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-tint-1 border border-dashed border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-xs font-bold"
-            >
-                <Plus size={14} aria-hidden="true" /> 新增行程
-            </button>
-        </div>
-    {/if}
+    <ProfileManager
+        activeTripName={activeTripName ?? "（尚未載入）"}
+        {profiles}
+        {onSwitchProfile}
+        {onCreateProfile}
+        {onDeleteProfile}
+    />
 </div>
 
 <div class="flex flex-col gap-2.5 text-xs">
@@ -361,12 +308,13 @@ function discardDraft() {
         {:else}
             <ul class="mt-1.5 space-y-1.5">
                 {#each yamlBackups as backup (backup.savedAt)}
+                    {@const tripName = tripNameFromYaml(backup.yaml)}
                     <li>
                         {#if confirmingBackupSavedAt === backup.savedAt}
                             <ConfirmBar
                                 message={yamlInput !== yamlSnapshot
-                                ? "尚有未儲存的變更，還原備份將捨棄這些變更。確定以此備份覆蓋目前的行程嗎？"
-                                : "要以此備份覆蓋目前的行程嗎？"}
+                                ? `尚有未儲存的變更，還原備份將捨棄這些變更。確定還原「${tripName}」的備份嗎？`
+                                : `確定要還原「${tripName}」的備份嗎？`}
                                 confirmLabel="確定還原"
                                 onconfirm={() => executeRestore(backup.savedAt)}
                                 oncancel={() => (confirmingBackupSavedAt = null)}
@@ -376,8 +324,11 @@ function discardDraft() {
                                 onclick={() => (confirmingBackupSavedAt = backup.savedAt)}
                                 class="w-full min-h-[44px] flex items-center justify-between gap-2 px-3 rounded-lg bg-tint-1 border border-card-border text-[11px] text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer"
                             >
-                                <span class="font-mono">{formatBackupTime(backup.savedAt)}</span>
-                                <span class="text-[10px] font-bold">還原</span>
+                                <span class="flex items-center gap-2 min-w-0">
+                                    <span class="font-mono text-text-muted shrink-0">{formatBackupTime(backup.savedAt)}</span>
+                                    <span class="font-semibold text-text-primary truncate">{tripName}</span>
+                                </span>
+                                <span class="text-[10px] font-bold shrink-0">還原</span>
                             </button>
                         {/if}
                     </li>
@@ -397,9 +348,9 @@ function discardDraft() {
         <div class="grid grid-cols-2 gap-2 mt-2">
             <button
                 onclick={onExportUrl}
-                class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-2 rounded-lg bg-accent/10 text-[11px] font-bold text-accent hover:bg-accent/15 transition cursor-pointer text-center"
+                class="w-full min-h-[44px] flex items-center justify-center gap-1 px-1.5 rounded-lg bg-accent/10 text-[11px] font-bold text-accent hover:bg-accent/15 transition cursor-pointer text-center"
             >
-                <Link2 size={12} class="shrink-0" aria-hidden="true" /> 複製跨裝置連結（含記帳）
+                <Link2 size={12} class="shrink-0" aria-hidden="true" /> 複製跨裝置連結
             </button>
             <button
                 onclick={onExportYaml}

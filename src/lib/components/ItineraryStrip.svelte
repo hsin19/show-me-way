@@ -1,6 +1,7 @@
 <script lang="ts">
 import type {
     DayItinerary,
+    ProfileInfo,
     TripData,
 } from "../api";
 import type { EnlargedCard } from "../enlarge";
@@ -30,6 +31,8 @@ interface Props {
     prepTotal: number;
     /** Expense records (overview post-trip spend summary card). */
     expenses: ExpenseItem[];
+    /** Parked profiles list for quick profile switching from overview hero. */
+    profiles?: ProfileInfo[];
     showWeatherAttribution: boolean;
     staleWeatherHours: number | null;
     weatherForDay: (day: DayItinerary) => DailyWeather | null;
@@ -41,6 +44,10 @@ interface Props {
     onOpenLedger: () => void;
     /** Share the whole trip from the overview hero card. */
     onShare: () => void;
+    /** Profile switcher callbacks from App.svelte. */
+    onSwitchProfile?: (id: string) => void;
+    onCreateProfile?: () => void;
+    onDeleteProfile?: (id: string) => void;
 }
 
 let {
@@ -51,6 +58,7 @@ let {
     prepDone,
     prepTotal,
     expenses,
+    profiles = [],
     showWeatherAttribution,
     staleWeatherHours,
     weatherForDay,
@@ -60,6 +68,9 @@ let {
     onOpenPrepare,
     onOpenLedger,
     onShare,
+    onSwitchProfile,
+    onCreateProfile,
+    onDeleteProfile,
 }: Props = $props();
 
 // Gap kept above the current event card when a day panel auto-scrolls to it.
@@ -124,12 +135,16 @@ function positionPanel(day: number, panel: HTMLElement) {
                 {prepDone}
                 {prepTotal}
                 {expenses}
+                {profiles}
                 weatherFor={weatherForDay}
                 onSelectDay={select}
                 {onEnlarge}
                 {onOpenPrepare}
                 {onOpenLedger}
                 {onShare}
+                {onSwitchProfile}
+                {onCreateProfile}
+                {onDeleteProfile}
             />
         {:else if currentDayData}
             <Timeline

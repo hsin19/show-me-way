@@ -34,8 +34,8 @@ test("行程設定檔：建立、切換、刪除與取消刪除", async ({ page 
     await expect(page.getByRole("heading", { name: "行程管理" })).toBeVisible();
     await page.locator("nav").getByRole("button", { name: "行程", exact: true }).click();
 
-    await expect(page).toHaveTitle("我的探索之旅 (範本)");
-    await expect(page.getByRole("heading", { level: 2, name: "我的探索之旅 (範本)" })).toBeVisible();
+    await expect(page).toHaveTitle("下面一way-我的探索之旅");
+    await expect(page.getByRole("heading", { level: 2, name: "下面一way-我的探索之旅" })).toBeVisible();
 
     // 原本的行程被停放成 profile，出現在切換器清單裡（工具分頁記住了行程管理子頁）
     await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
@@ -54,13 +54,13 @@ test("行程設定檔：建立、切換、刪除與取消刪除", async ({ page 
     await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await expect(expander).toHaveAttribute("aria-expanded", "false");
     await expander.click();
-    const parkedTemplateRow = page.getByRole("button", { name: "我的探索之旅 (範本) 切換" });
-    const deleteButton = page.getByRole("button", { name: "刪除行程 我的探索之旅 (範本)" });
+    const parkedTemplateRow = page.getByRole("button", { name: "下面一way-我的探索之旅 切換" });
+    const deleteButton = page.getByRole("button", { name: "刪除行程 下面一way-我的探索之旅" });
     await expect(parkedTemplateRow).toBeVisible();
 
     // (3) 取消刪除：點擊刪除後出現行內確認 Bar，按取消後列仍在，localStorage 也未動
     await deleteButton.click();
-    await expect(page.getByText("要刪除行程「我的探索之旅 (範本)」嗎？此動作無法復原。")).toBeVisible();
+    await expect(page.getByText("要刪除行程「下面一way-我的探索之旅」嗎？此動作無法復原。")).toBeVisible();
     await page.getByRole("button", { name: "取消" }).click();
     await expect(parkedTemplateRow).toBeVisible();
     expect(await page.evaluate(() => window.localStorage.getItem("showmeway_profiles") ?? "")).toContain("我的探索之旅");
