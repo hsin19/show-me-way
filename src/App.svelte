@@ -814,7 +814,11 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
                     />
                 {/if}
             {:else if activeTab === "ai"}
-                <ChatPanel {tripData} onApplyEdit={applyAiEdit} />
+                <ChatPanel
+                    {tripData}
+                    onApplyEdit={applyAiEdit}
+                    onOpenAppSettings={() => openTools("prefs")}
+                />
             {/if}
         {/if}
     </main>

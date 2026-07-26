@@ -9,11 +9,13 @@ import {
 import type { TripData } from "./api";
 import {
     clearGeminiApiKey,
+    clearGeminiModelsMemory,
     GEMINI_API_KEY_STORAGE,
     GEMINI_MODEL_STORAGE,
     listGeminiModels,
     loadGeminiApiKey,
     loadGeminiModel,
+    pickDefaultModel,
     saveGeminiApiKey,
     saveGeminiModel,
     sendChatMessage,
@@ -73,6 +75,10 @@ describe("Gemini model storage", () => {
 });
 
 describe("listGeminiModels", () => {
+    beforeEach(() => {
+        clearGeminiModelsMemory();
+    });
+
     function modelsPayload() {
         return {
             models: [
@@ -106,6 +112,49 @@ describe("listGeminiModels", () => {
         vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(payload) })));
         const models = await listGeminiModels("key");
         expect(models.map(m => m.id)).toEqual(["gemini-3.5-flash"]);
+    });
+
+    it("keeps Gemma models like gemma-4-31b-it in default mode while filtering snapshot numbers and previews", async () => {
+        const payload = {
+            models: [
+                { name: "models/gemma-4-31b-it", displayName: "Gemma 4 31B IT", supportedGenerationMethods: ["generateContent"] },
+                { name: "models/gemini-3.5-flash", displayName: "Gemini 3.5 Flash", supportedGenerationMethods: ["generateContent"] },
+                { name: "models/gemini-2.0-flash-001", displayName: "Flash 001", supportedGenerationMethods: ["generateContent"] },
+            ],
+        };
+        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(payload) })));
+        const models = await listGeminiModels("key");
+        expect(models.map(m => m.id)).toEqual(["gemma-4-31b-it", "gemini-3.5-flash"]);
+    });
+
+    it("keeps a mid-name parameter count like gemma-3-270m-it — only a trailing -001 is a snapshot", async () => {
+        const payload = {
+            models: [
+                { name: "models/gemma-3-270m-it", displayName: "Gemma 3 270M IT", supportedGenerationMethods: ["generateContent"] },
+                { name: "models/gemini-embedding-001", displayName: "Embedding 001", supportedGenerationMethods: ["generateContent"] },
+            ],
+        };
+        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(payload) })));
+        const models = await listGeminiModels("key");
+        expect(models.map(m => m.id)).toEqual(["gemma-3-270m-it"]);
+    });
+
+    it("returns all generateContent models when filterMode is 'all'", async () => {
+        const payload = {
+            models: [
+                { name: "models/gemini-3.5-flash", displayName: "Gemini 3.5 Flash", supportedGenerationMethods: ["generateContent"] },
+                { name: "models/gemini-2.0-flash-001", displayName: "Flash 001", supportedGenerationMethods: ["generateContent"] },
+                { name: "models/gemini-3.1-pro-preview", displayName: "Pro Preview", supportedGenerationMethods: ["generateContent"] },
+                { name: "models/embedding-001", displayName: "Embedding", supportedGenerationMethods: ["embedContent"] },
+            ],
+        };
+        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(payload) })));
+        const models = await listGeminiModels("key", "all");
+        expect(models.map(m => m.id)).toEqual([
+            "gemini-3.5-flash",
+            "gemini-3.1-pro-preview",
+            "gemini-2.0-flash-001",
+        ]);
     });
 
     it("sorts models descending alphabetically by name", async () => {
@@ -178,6 +227,37 @@ describe("listGeminiModels", () => {
             ),
         );
         await expect(listGeminiModels("key")).rejects.toThrow("Gemini 服務發生錯誤（503），請稍後再試。\n詳細資訊：gemini-3.5-flash is currently experiencing high demand");
+    });
+
+    it("caches the models promise in memory per API key and reuses it on subsequent calls", async () => {
+        const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(modelsPayload()) }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const models1 = await listGeminiModels("cached-key");
+        const models2 = await listGeminiModels("cached-key");
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(models1).toEqual(models2);
+    });
+});
+
+describe("pickDefaultModel", () => {
+    function model(id: string) {
+        return { id, displayName: id };
+    }
+
+    it("returns null for an empty list", () => {
+        expect(pickDefaultModel([])).toBeNull();
+    });
+
+    it("prefers the first gemini model over a gemma that sorts ahead of it", () => {
+        // Descending id sort puts every gemma-* before every gemini-*.
+        const list = [model("gemma-4-31b-it"), model("gemini-3.5-pro"), model("gemini-3.5-flash")];
+        expect(pickDefaultModel(list)).toBe("gemini-3.5-pro");
+    });
+
+    it("falls back to the first entry when the key has no gemini models at all", () => {
+        expect(pickDefaultModel([model("gemma-4-31b-it"), model("gemma-4-9b-it")])).toBe("gemma-4-31b-it");
     });
 });
 

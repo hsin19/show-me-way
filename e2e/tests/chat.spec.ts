@@ -39,14 +39,19 @@ test("AI 聊天：儲存金鑰、AI 建議修改行程、套用後保留至重�
     await seedItinerary(page);
     await page.goto("/");
 
-    // 首次進入 AI 分頁：顯示金鑰表單
+    // 首次進入 AI 分頁：顯示未設定金鑰卡片，點擊前往 App 設定
     await page.locator("nav").getByRole("button", { name: "AI", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "AI 行程小幫手" })).toBeVisible();
-    await expect(page.getByText("請輸入你的 Google Gemini API 金鑰。金鑰只會儲存在這台裝置上，不會上傳。")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "尚未設定 AI 金鑰" })).toBeVisible();
+    await page.getByRole("button", { name: "前往 App 設定" }).click();
 
+    // 在 App 設定頁面填寫並儲存金鑰
+    await expect(page.getByRole("heading", { name: "AI 助手設定 (Gemini API)" })).toBeVisible();
     await page.getByLabel("Gemini API 金鑰").fill("test-key");
-    await page.getByRole("button", { name: "儲存並開始" }).click();
+    await page.getByRole("button", { name: "儲存" }).click();
     await expect(page.getByRole("status")).toContainText("已儲存");
+
+    // 切回 AI 分頁
+    await page.locator("nav").getByRole("button", { name: "AI", exact: true }).click();
 
     // 模型清單 mock 生效：下拉選單載入可用模型
     await expect(page.getByLabel("選擇 AI 模型")).toContainText("Gemini 2.5 Flash");
@@ -65,6 +70,7 @@ test("AI 聊天：儲存金鑰、AI 建議修改行程、套用後保留至重�
 
     // 套用結果出現在工具分頁的準備頁，且已寫入 showmeway_user_yaml（重新載入後保留）
     await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    await page.getByRole("button", { name: "準備", exact: true }).click();
     await expect(page.getByRole("checkbox", { name: "換日幣" })).toBeVisible();
 
     await page.reload();
@@ -73,10 +79,19 @@ test("AI 聊天：儲存金鑰、AI 建議修改行程、套用後保留至重�
 });
 
 test("AI 聊天：Gemini 無法連線時顯示錯誤並保留提問", async ({ page }) => {
-    // 金鑰已存在 → 直接進入聊天畫面；模型清單抓取失敗會靜默回退預設模型
+    // 金鑰已存在且模型清單抓得到 → 直接進入聊天畫面，只有送出會失敗。
+    // 模型清單必須 mock：抓不到會被當成金鑰不可用而擋掉整個分頁（見下一個測試）。
     await page.addInitScript(() => {
         window.localStorage.setItem("showmeway_gemini_api_key", "test-key");
     });
+    await page.route(url => url.href.startsWith(MODELS_URL_PREFIX), route =>
+        route.fulfill({
+            json: {
+                models: [
+                    { name: "models/gemini-2.5-flash", displayName: "Gemini 2.5 Flash", supportedGenerationMethods: ["generateContent"] },
+                ],
+            },
+        }));
     await page.route(INTERACTIONS_URL, route => route.abort());
     await seedItinerary(page);
     await page.goto("/");
@@ -88,4 +103,46 @@ test("AI 聊天：Gemini 無法連線時顯示錯誤並保留提問", async ({ p
     await expect(page.getByText("無法連線到 Gemini")).toBeVisible();
     // 提問保留在對話中，方便重試
     await expect(page.getByText("第二天去哪？")).toBeVisible();
+});
+
+test("AI 聊天：金鑰被拒時擋住整個分頁，不讓使用者送出注定失敗的提問", async ({ page }) => {
+    await page.addInitScript(() => {
+        window.localStorage.setItem("showmeway_gemini_api_key", "bad-key");
+    });
+    // 模型清單就是唯一的金鑰驗證管道，Gemini 沒有獨立的 verify endpoint。
+    await page.route(url => url.href.startsWith(MODELS_URL_PREFIX), route =>
+        route.fulfill({
+            status: 400,
+            json: { error: { code: 400, message: "API key not valid. Please pass a valid API key.", status: "INVALID_ARGUMENT" } },
+        }));
+    await seedItinerary(page);
+    await page.goto("/");
+
+    await page.locator("nav").getByRole("button", { name: "AI", exact: true }).click();
+
+    // 阻斷式錯誤狀態：翻譯後的訊息 + 原始詳細資訊都要看得到
+    await expect(page.getByRole("heading", { name: "AI 金鑰無法使用" })).toBeVisible();
+    await expect(page.getByRole("alert")).toContainText("API 金鑰無效或權限不足，請確認金鑰是否正確。");
+    await expect(page.getByRole("alert")).toContainText("API key not valid.");
+
+    // 聊天介面完全不出現，沒有可以誤送的輸入框
+    await expect(page.getByLabel("輸入問題")).toHaveCount(0);
+    await expect(page.getByLabel("選擇 AI 模型")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "前往 App 設定" })).toBeVisible();
+
+    // 重試會重打一次 models（listGeminiModels 失敗時會丟掉記憶體快取）
+    let calls = 0;
+    await page.route(url => url.href.startsWith(MODELS_URL_PREFIX), route => {
+        calls++;
+        return route.fulfill({
+            json: {
+                models: [
+                    { name: "models/gemini-2.5-flash", displayName: "Gemini 2.5 Flash", supportedGenerationMethods: ["generateContent"] },
+                ],
+            },
+        });
+    });
+    await page.getByRole("button", { name: "重試" }).click();
+    await expect(page.getByLabel("選擇 AI 模型")).toContainText("Gemini 2.5 Flash");
+    expect(calls).toBe(1);
 });

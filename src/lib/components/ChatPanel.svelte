@@ -2,7 +2,9 @@
 import Check from "@lucide/svelte/icons/check";
 import KeyRound from "@lucide/svelte/icons/key-round";
 import Loader2 from "@lucide/svelte/icons/loader-2";
+import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 import Send from "@lucide/svelte/icons/send";
+import Settings from "@lucide/svelte/icons/settings";
 import Sparkles from "@lucide/svelte/icons/sparkles";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import WandSparkles from "@lucide/svelte/icons/wand-sparkles";
@@ -15,25 +17,21 @@ import { edgeFade } from "../edge-fade";
 import {
     buildItineraryContext,
     type ChatMessage,
-    clearGeminiApiKey,
-    type GeminiModel,
-    listGeminiModels,
     loadGeminiApiKey,
-    loadGeminiModel,
-    saveGeminiApiKey,
-    saveGeminiModel,
     sendChatMessage,
 } from "../gemini";
-import { showToast } from "../toast.svelte";
+import { createModelPicker } from "../gemini-models.svelte";
 import DiffView from "./DiffView.svelte";
 
 interface Props {
     tripData: TripData;
     /** Apply a full itinerary YAML the chat proposed; returns whether it took. */
     onApplyEdit: (yaml: string) => boolean;
+    /** Navigate to App Settings page. */
+    onOpenAppSettings?: () => void;
 }
 
-let { tripData, onApplyEdit }: Props = $props();
+let { tripData, onApplyEdit, onOpenAppSettings }: Props = $props();
 
 // A chat message plus the UI-only edit state for conversational edits. `content`
 // is the text replayed to Gemini as history (the prose / edit summary, never the
@@ -58,72 +56,13 @@ let errorText = $state<string | null>(null);
 // The key persists in localStorage; this mirrors it so the view reacts to
 // save / clear without a reload.
 let apiKey = $state<string | null>(loadGeminiApiKey());
-let keyInput = $state("");
 
-// Model selection: the chosen id persists; the list is fetched per key (so it
-// always reflects what that key can actually use, never a hardcoded list).
-let model = $state(loadGeminiModel() ?? "");
-let models = $state<GeminiModel[]>([]);
-let modelsLoading = $state(false);
+// Model selection, fetched per key so it always reflects what that key can
+// actually use. The App 設定 picker runs on the same helper — see
+// `gemini-models.svelte.ts` for why this is not inlined here.
+const modelPicker = createModelPicker(() => apiKey);
 
 let scrollEl = $state<HTMLDivElement>();
-
-// Fetch the available models whenever a key is present (initial mount or after
-// saving one). Failure falls back to the default — chat still works.
-$effect(() => {
-    const key = apiKey;
-    if (!key) {
-        models = [];
-        return;
-    }
-    modelsLoading = true;
-    let cancelled = false;
-    listGeminiModels(key)
-        .then(list => {
-            if (cancelled) return;
-            models = list;
-            // Default to the first model (dynamically sorted to be the newest stable
-            // Flash model) if the user has no stored preference, or if the stored preference is missing.
-            const hasStoredPreference = loadGeminiModel() !== null;
-            if (list.length > 0) {
-                if (!hasStoredPreference || !list.some(m => m.id === model)) {
-                    model = list[0].id;
-                    saveGeminiModel(model);
-                }
-            }
-        })
-        .catch((err: unknown) => {
-            if (cancelled) return;
-            console.error("Failed to list Gemini models", err);
-        })
-        .finally(() => {
-            if (!cancelled) modelsLoading = false;
-        });
-    return () => {
-        cancelled = true;
-    };
-});
-
-function persistModel() {
-    saveGeminiModel(model);
-}
-
-function saveKey(e: SubmitEvent) {
-    e.preventDefault();
-    const key = keyInput.trim();
-    if (!key) return;
-    saveGeminiApiKey(key);
-    apiKey = key;
-    keyInput = "";
-    showToast("已儲存 API 金鑰");
-}
-
-function changeKey() {
-    clearGeminiApiKey();
-    apiKey = null;
-    models = [];
-    showToast("已清除 API 金鑰");
-}
 
 const QUICK_PROMPTS = [
     { label: "在地美食推薦", icon: "🍽️", text: "推薦這趟行程當地的必吃美食與口袋名單" },
@@ -148,8 +87,7 @@ async function triggerSend(promptText: string) {
     const baseYaml = buildItineraryContext(tripData);
 
     try {
-        const activeModel = model || (models.length > 0 ? models[0].id : "gemini-3.5-flash");
-        const turn = await sendChatMessage(apiKey, activeModel, history, text, baseYaml);
+        const turn = await sendChatMessage(apiKey, modelPicker.activeModel, history, text, baseYaml);
         // The edit tool's handler: validate the proposed YAML here, then surface
         // it behind a confirm step. Invalid edits show an inline note instead.
         const next: UiMessage = { role: "model", content: turn.text || turn.edit?.summary || "" };
@@ -193,46 +131,75 @@ function applyEdit(message: UiMessage) {
 
 <div class="h-full flex flex-col">
     {#if !apiKey}
-        <!-- First-use: prompt for the user's own Gemini key. -->
-        <div class="flex-1 overflow-y-auto overscroll-contain">
-            <div class="max-w-md mx-auto w-full p-5 pt-[calc(20px+var(--safe-top))]">
-                <div class="mb-4">
-                    <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
-                        <Sparkles size={22} class="text-accent" aria-hidden="true" />AI 行程小幫手
-                    </h2>
-                    <p class="text-xs text-text-secondary mt-0.5">用自然語言查詢或編輯你的行程</p>
+        <!-- No key set: direct user to App Settings -->
+        <div class="flex-1 overflow-y-auto overscroll-contain flex items-center justify-center p-5">
+            <div class="max-w-md w-full panel rounded-2xl p-6 text-center space-y-4">
+                <div class="w-12 h-12 rounded-full bg-accent/15 text-accent flex items-center justify-center mx-auto">
+                    <KeyRound size={24} aria-hidden="true" />
                 </div>
-                <form onsubmit={saveKey} class="panel rounded-2xl p-5 space-y-4">
-                    <div class="flex items-start gap-2 text-text-secondary">
-                        <KeyRound size={18} class="text-accent shrink-0 mt-0.5" aria-hidden="true" />
-                        <p class="text-sm leading-relaxed">
-                            請輸入你的 Google Gemini API 金鑰。金鑰只會儲存在這台裝置上，不會上傳。
-                        </p>
-                    </div>
-                    <input
-                        bind:value={keyInput}
-                        type="password"
-                        autocomplete="off"
-                        aria-label="Gemini API 金鑰"
-                        placeholder="貼上 API 金鑰…"
-                        class="w-full bg-well-deep border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent transition"
-                    />
+                <div class="space-y-1">
+                    <h2 class="text-lg font-extrabold text-text-primary tracking-tight">
+                        尚未設定 AI 金鑰
+                    </h2>
+                    <p class="text-xs text-text-secondary leading-relaxed">
+                        使用 AI 行程小幫手查詢或編輯行程前，請先至 App 設定填寫你的 Google Gemini API 金鑰。
+                    </p>
+                </div>
+                {#if onOpenAppSettings}
                     <button
-                        type="submit"
-                        disabled={!keyInput.trim()}
-                        class="w-full bg-accent text-accent-contrast font-bold py-3 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer disabled:opacity-40"
+                        type="button"
+                        onclick={onOpenAppSettings}
+                        class="w-full bg-accent text-accent-contrast font-bold py-3 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
                     >
-                        儲存並開始
+                        <Settings size={16} aria-hidden="true" />
+                        前往 App 設定
                     </button>
-                    <a
-                        href="https://aistudio.google.com/app/apikey"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="block text-center text-xs text-accent hover:underline"
+                {/if}
+            </div>
+        </div>
+    {:else if modelPicker.error}
+        <!-- The models call is the only key check there is, and it hits the same
+             host as the chat itself — if it failed, sending cannot work either.
+             So this replaces the whole tab rather than sitting above a composer
+             that would only fail again. 重試 is here because the cause may be a
+             network blip, which would otherwise dead-end on a settings page that
+             has nothing wrong to fix. -->
+        <div role="alert" class="flex-1 overflow-y-auto overscroll-contain flex items-center justify-center p-5">
+            <div class="max-w-md w-full panel rounded-2xl p-6 text-center space-y-4">
+                <div class="w-12 h-12 rounded-full bg-danger/15 text-danger flex items-center justify-center mx-auto">
+                    <TriangleAlert size={24} aria-hidden="true" />
+                </div>
+                <div class="space-y-1">
+                    <h2 class="text-lg font-extrabold text-text-primary tracking-tight">
+                        AI 金鑰無法使用
+                    </h2>
+                    <p class="text-xs text-text-secondary leading-relaxed whitespace-pre-line">{modelPicker.error}</p>
+                </div>
+                <div class="space-y-2">
+                    {#if onOpenAppSettings}
+                        <button
+                            type="button"
+                            onclick={onOpenAppSettings}
+                            class="w-full bg-accent text-accent-contrast font-bold py-3 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                        >
+                            <Settings size={16} aria-hidden="true" />
+                            前往 App 設定
+                        </button>
+                    {/if}
+                    <button
+                        type="button"
+                        onclick={() => modelPicker.retry()}
+                        disabled={modelPicker.loading}
+                        class="w-full bg-tint-1 border border-card-border text-text-secondary hover:bg-tint-2 font-bold py-2.5 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer disabled:opacity-40 flex items-center justify-center gap-2"
                     >
-                        前往 Google AI Studio 取得免費金鑰
-                    </a>
-                </form>
+                        {#if modelPicker.loading}
+                            <Loader2 size={16} class="animate-spin" aria-hidden="true" />
+                        {:else}
+                            <RefreshCw size={16} aria-hidden="true" />
+                        {/if}
+                        重試
+                    </button>
+                </div>
             </div>
         </div>
     {:else}
@@ -243,26 +210,29 @@ function applyEdit(message: UiMessage) {
             </h2>
             <div class="flex items-center gap-2 shrink-0">
                 <select
-                    bind:value={model}
-                    onchange={persistModel}
-                    disabled={modelsLoading}
+                    bind:value={modelPicker.selected}
+                    disabled={modelPicker.loading}
                     aria-label="選擇 AI 模型"
                     class="max-w-[9rem] bg-well-deep border border-card-border rounded-lg px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent transition cursor-pointer disabled:opacity-50"
                 >
-                    {#if models.length === 0}
-                        <option value={model}>{modelsLoading ? "載入模型中…" : (model || "自動選擇")}</option>
+                    {#if modelPicker.list.length === 0}
+                        <option value={modelPicker.selected}>{modelPicker.selected || (modelPicker.loading ? "載入模型中…" : "自動選擇")}</option>
                     {:else}
-                        {#each models as m (m.id)}
+                        {#each modelPicker.list as m (m.id)}
                             <option value={m.id}>{m.displayName}</option>
                         {/each}
                     {/if}
                 </select>
-                <button
-                    onclick={changeKey}
-                    class="text-xs text-text-muted hover:text-danger transition cursor-pointer shrink-0"
-                >
-                    更換金鑰
-                </button>
+                {#if onOpenAppSettings}
+                    <button
+                        onclick={onOpenAppSettings}
+                        aria-label="前往 App 設定管理 AI 金鑰"
+                        title="前往 App 設定管理 AI 金鑰"
+                        class="text-text-muted hover:text-accent transition cursor-pointer flex items-center justify-center p-1 rounded-lg shrink-0"
+                    >
+                        <Settings size={18} aria-hidden="true" />
+                    </button>
+                {/if}
             </div>
         </div>
 
@@ -336,7 +306,7 @@ function applyEdit(message: UiMessage) {
                 {#if errorText}
                     <div class="flex items-start gap-1.5 text-xs text-danger bg-danger/10 border border-danger/20 p-2.5 rounded-lg">
                         <TriangleAlert size={14} class="shrink-0 mt-px" aria-hidden="true" />
-                        <span>{errorText}</span>
+                        <span class="whitespace-pre-line">{errorText}</span>
                     </div>
                 {/if}
             </div>

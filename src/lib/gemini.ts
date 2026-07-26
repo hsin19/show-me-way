@@ -5,6 +5,9 @@ import {
 
 export const GEMINI_API_KEY_STORAGE = "showmeway_gemini_api_key";
 export const GEMINI_MODEL_STORAGE = "showmeway_gemini_model";
+export const GEMINI_MODEL_FILTER_STORAGE = "showmeway_gemini_model_filter";
+
+export type GeminiModelFilterMode = "default" | "all";
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
@@ -19,6 +22,15 @@ function authHeaders(apiKey: string): Record<string, string> {
 export interface ChatMessage {
     role: "user" | "model";
     content: string;
+}
+
+// In-memory cache for models list per API key (session-only, not written to localStorage).
+let cachedModelsKey: string | null = null;
+let cachedModelsPromise: Promise<GeminiModel[]> | null = null;
+
+export function clearGeminiModelsMemory(): void {
+    cachedModelsKey = null;
+    cachedModelsPromise = null;
 }
 
 // Key access mirrors exchange.ts: any storage failure (quota, private mode,
@@ -36,6 +48,7 @@ export function loadGeminiApiKey(): string | null {
 export function saveGeminiApiKey(key: string): void {
     try {
         localStorage.setItem(GEMINI_API_KEY_STORAGE, key.trim());
+        clearGeminiModelsMemory();
     } catch (e) {
         console.warn("Failed to save Gemini API key", e);
     }
@@ -44,6 +57,7 @@ export function saveGeminiApiKey(key: string): void {
 export function clearGeminiApiKey(): void {
     try {
         localStorage.removeItem(GEMINI_API_KEY_STORAGE);
+        clearGeminiModelsMemory();
     } catch (e) {
         console.warn("Failed to clear Gemini API key", e);
     }
@@ -65,6 +79,25 @@ export function saveGeminiModel(model: string): void {
         localStorage.setItem(GEMINI_MODEL_STORAGE, model.trim());
     } catch (e) {
         console.warn("Failed to save Gemini model", e);
+    }
+}
+
+export function loadGeminiModelFilter(): GeminiModelFilterMode {
+    try {
+        const filter = localStorage.getItem(GEMINI_MODEL_FILTER_STORAGE);
+        return filter === "all" ? "all" : "default";
+    } catch (e) {
+        console.warn("Failed to read Gemini model filter", e);
+        return "default";
+    }
+}
+
+export function saveGeminiModelFilter(mode: GeminiModelFilterMode): void {
+    try {
+        localStorage.setItem(GEMINI_MODEL_FILTER_STORAGE, mode);
+        clearGeminiModelsMemory();
+    } catch (e) {
+        console.warn("Failed to save Gemini model filter", e);
     }
 }
 
@@ -216,22 +249,26 @@ interface RawModel {
     supportedGenerationMethods?: string[];
 }
 
-// Match clean versioned names: models/gemini-1.5-flash, models/gemini-3.5-pro, models/gemini-2.0-flash-lite etc.
-// Excludes banana, tts, image, computer-use, preview, exp, latest, and specific snapshot numbers like -001.
-const CLEAN_MODEL_REGEX = /^models\/gemini-\d+(?:\.\d+)?-[a-z]+(?:-lite)?$/;
+// In default mode, exclude noisy/experimental suffixes, snapshot numbers, and non-text variants.
+// Keeps clean Gemini (Flash / Pro / Lite) and Gemma models, while filtering out preview, latest, exp, -001, tts, image, etc.
+// The snapshot rule is anchored: a pinned build is always a trailing `-001`, whereas
+// an unanchored `-\d{3}` would also swallow parameter counts like `gemma-3-270m-it`.
+const UNWANTED_MODEL_REGEX = /(?:preview|latest|exp|tts|image|banana|computer-use|lyria|robotics|-\d{3}$)/i;
 
-function parseModels(payload: unknown): GeminiModel[] {
+function parseModels(payload: unknown, filterMode: GeminiModelFilterMode = "default"): GeminiModel[] {
     if (typeof payload !== "object" || payload === null) return [];
     const models = (payload as { models?: unknown; }).models;
     if (!Array.isArray(models)) return [];
     return models
         .map(m => m as RawModel)
-        .filter(m =>
-            typeof m.name === "string"
-            && CLEAN_MODEL_REGEX.test(m.name)
-            && Array.isArray(m.supportedGenerationMethods)
-            && m.supportedGenerationMethods.includes("generateContent")
-        )
+        .filter(m => {
+            if (typeof m.name !== "string") return false;
+            if (!Array.isArray(m.supportedGenerationMethods) || !m.supportedGenerationMethods.includes("generateContent")) {
+                return false;
+            }
+            if (filterMode === "all") return true;
+            return !UNWANTED_MODEL_REGEX.test(m.name);
+        })
         .map(m => ({
             id: m.name!.replace(/^models\//, ""),
             displayName: m.displayName?.trim() || m.name!.replace(/^models\//, ""),
@@ -241,34 +278,66 @@ function parseModels(payload: unknown): GeminiModel[] {
 /**
  * List the chat-capable models available to this key. Doubles as key
  * validation — a bad key fails here before the user ever sends a message.
+ * Results are cached in memory for the duration of the session per API key
+ * and filter mode so switching tabs/components does not re-fetch the models API.
  * Rejects on failure (like sendChatMessage) so the UI can fall back to the
  * default model and report the cause.
  */
-export async function listGeminiModels(apiKey: string): Promise<GeminiModel[]> {
-    const collected: GeminiModel[] = [];
-    let pageToken: string | undefined;
+export function listGeminiModels(apiKey: string, filterMode?: GeminiModelFilterMode): Promise<GeminiModel[]> {
+    const mode = filterMode ?? loadGeminiModelFilter();
+    const cacheKey = `${apiKey}:${mode}`;
 
-    do {
-        const url = new URL(`${GEMINI_API_BASE}/models`);
-        url.searchParams.set("pageSize", "200");
-        if (pageToken) url.searchParams.set("pageToken", pageToken);
+    if (cachedModelsKey === cacheKey && cachedModelsPromise) {
+        return cachedModelsPromise;
+    }
 
-        let res: Response;
-        try {
-            res = await fetch(url.toString(), { headers: authHeaders(apiKey) });
-        } catch (e) {
-            console.error("Gemini model list request failed", e);
-            throw new Error("無法連線到 Gemini，請檢查網路連線。", { cause: e });
+    cachedModelsKey = cacheKey;
+    cachedModelsPromise = (async () => {
+        const collected: GeminiModel[] = [];
+        let pageToken: string | undefined;
+
+        do {
+            const url = new URL(`${GEMINI_API_BASE}/models`);
+            url.searchParams.set("pageSize", "200");
+            if (pageToken) url.searchParams.set("pageToken", pageToken);
+
+            let res: Response;
+            try {
+                res = await fetch(url.toString(), { headers: authHeaders(apiKey) });
+            } catch (e) {
+                console.error("Gemini model list request failed", e);
+                throw new Error("無法連線到 Gemini，請檢查網路連線。", { cause: e });
+            }
+            if (!res.ok) {
+                await handleErrorResponse(res);
+            }
+            const payload: unknown = await res.json();
+            collected.push(...parseModels(payload, mode));
+            pageToken = (payload as { nextPageToken?: string; }).nextPageToken;
+        } while (pageToken);
+
+        return [...collected].sort((a, b) => b.id.localeCompare(a.id));
+    })().catch(err => {
+        if (cachedModelsKey === cacheKey) {
+            clearGeminiModelsMemory();
         }
-        if (!res.ok) {
-            await handleErrorResponse(res);
-        }
-        const payload: unknown = await res.json();
-        collected.push(...parseModels(payload));
-        pageToken = (payload as { nextPageToken?: string; }).nextPageToken;
-    } while (pageToken);
+        throw err;
+    });
 
-    return [...collected].sort((a, b) => b.id.localeCompare(a.id));
+    return cachedModelsPromise;
+}
+
+/**
+ * The model to auto-select when the user has no usable stored preference.
+ * Never just `list[0]`: the list is sorted descending by id, which puts every
+ * `gemma-*` ahead of every `gemini-*` and compares size suffixes as strings
+ * (`-9b` beats `-31b`), so the head of the list is an arbitrary pick rather
+ * than a sensible default. Prefer the first Gemini and fall back to whatever
+ * the key can actually use.
+ */
+export function pickDefaultModel(models: GeminiModel[]): string | null {
+    if (models.length === 0) return null;
+    return (models.find(m => m.id.startsWith("gemini-")) ?? models[0]).id;
 }
 
 // Map our in-memory history to Interactions input steps. Stateless replay:

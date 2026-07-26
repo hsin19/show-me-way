@@ -1,5 +1,7 @@
 <script lang="ts">
+import Check from "@lucide/svelte/icons/check";
 import CloudOff from "@lucide/svelte/icons/cloud-off";
+import ExternalLink from "@lucide/svelte/icons/external-link";
 import HardDrive from "@lucide/svelte/icons/hard-drive";
 import History from "@lucide/svelte/icons/history";
 import Info from "@lucide/svelte/icons/info";
@@ -7,7 +9,19 @@ import Monitor from "@lucide/svelte/icons/monitor";
 import Moon from "@lucide/svelte/icons/moon";
 import Palette from "@lucide/svelte/icons/palette";
 import Settings from "@lucide/svelte/icons/settings";
+import Sparkles from "@lucide/svelte/icons/sparkles";
 import Sun from "@lucide/svelte/icons/sun";
+import Trash2 from "@lucide/svelte/icons/trash-2";
+import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+import {
+    clearGeminiApiKey,
+    type GeminiModelFilterMode,
+    loadGeminiApiKey,
+    loadGeminiModelFilter,
+    saveGeminiApiKey,
+    saveGeminiModelFilter,
+} from "../gemini";
+import { createModelPicker } from "../gemini-models.svelte";
 import {
     clearApiCache,
     clearAppLocalStorage,
@@ -39,11 +53,42 @@ const THEMES: { id: ThemePref; label: string; icon: typeof Sun; hint: string; }[
 
 let activeHint = $derived(THEMES.find(t => t.id === theme.pref)?.hint ?? "");
 
+// Gemini API Key & Model management
+let apiKey = $state<string | null>(loadGeminiApiKey());
+let keyInput = $state(loadGeminiApiKey() ?? "");
+let filterMode = $state<GeminiModelFilterMode>(loadGeminiModelFilter());
+// Same helper ChatPanel's header select runs on, so the two cannot disagree
+// about which model is default. Refetches when the filter scope changes.
+const modelPicker = createModelPicker(() => apiKey, () => filterMode);
+
+function handleSaveKey(e: SubmitEvent) {
+    e.preventDefault();
+    const key = keyInput.trim();
+    if (!key) return;
+    saveGeminiApiKey(key);
+    apiKey = key;
+    showToast("已儲存 API 金鑰");
+}
+
+function handleClearKey() {
+    clearGeminiApiKey();
+    apiKey = null;
+    keyInput = "";
+    modelPicker.reset();
+    confirming = null;
+    showToast("已清除 API 金鑰");
+}
+
+function handleFilterModeChange(newMode: GeminiModelFilterMode) {
+    filterMode = newMode;
+    saveGeminiModelFilter(newMode);
+}
+
 // Read once per mount: TabPager renders only the current panel, so revisiting
 // this page remounts it and re-reads storage.
 let storageSummary = $state(getStorageSummary());
-// One at a time — opening either confirmation closes the other.
-let confirming = $state<"backups" | "reset" | null>(null);
+// One at a time — opening any confirmation closes the others.
+let confirming = $state<"backups" | "reset" | "apiKey" | null>(null);
 
 function refreshSummary() {
     storageSummary = getStorageSummary();
@@ -121,6 +166,145 @@ function handleFullReset() {
                     : "淺色"
                 }）</span>{/if}
     </p>
+</section>
+
+<section class="panel rounded-xl p-3.5 mt-3">
+    <div class="flex items-center justify-between mb-2.5">
+        <h3 class="text-sm font-bold text-text-primary flex items-center gap-1.5">
+            <Sparkles size={16} class="text-accent" aria-hidden="true" />AI 助手設定 (Gemini API)
+        </h3>
+        <!-- The badge reports what the models call said about the key, not merely
+             that one is stored — a green tick on a rejected key would be a lie. -->
+        {#if apiKey && modelPicker.error}
+            <span class="text-[11px] font-semibold text-danger bg-danger/10 px-2 py-0.5 rounded-full border border-danger/20 flex items-center gap-1">
+                <TriangleAlert size={12} aria-hidden="true" />金鑰無法使用
+            </span>
+        {:else if apiKey && !modelPicker.loading}
+            <span class="text-[11px] font-semibold text-positive bg-positive/10 px-2 py-0.5 rounded-full border border-positive/20 flex items-center gap-1">
+                <Check size={12} aria-hidden="true" />金鑰可用
+            </span>
+        {/if}
+    </div>
+
+    <form onsubmit={handleSaveKey} class="space-y-3">
+        <div>
+            <label for="gemini-api-key-input" class="block text-xs font-semibold text-text-secondary mb-1">
+                Google Gemini API 金鑰
+            </label>
+            <div class="flex gap-2">
+                <input
+                    id="gemini-api-key-input"
+                    bind:value={keyInput}
+                    type="password"
+                    autocomplete="off"
+                    aria-label="Gemini API 金鑰"
+                    placeholder="貼上 API 金鑰…"
+                    class="flex-1 min-w-0 bg-well-deep border border-card-border rounded-xl px-3 py-2 text-xs text-text-primary outline-none focus:border-accent transition"
+                />
+                <button
+                    type="submit"
+                    disabled={!keyInput.trim() || keyInput.trim() === apiKey}
+                    class="bg-accent text-accent-contrast font-bold px-3 py-2 rounded-xl text-xs transition active:scale-[0.98] cursor-pointer disabled:opacity-40 shrink-0"
+                >
+                    儲存
+                </button>
+                {#if apiKey}
+                    <button
+                        type="button"
+                        onclick={() => (confirming = "apiKey")}
+                        aria-label="清除 API 金鑰"
+                        title="清除 API 金鑰"
+                        class="bg-tint-1 border border-card-border hover:bg-danger/10 hover:border-danger/40 text-text-secondary hover:text-danger font-bold p-2 rounded-xl transition active:scale-[0.98] cursor-pointer flex items-center justify-center shrink-0"
+                    >
+                        <Trash2 size={16} aria-hidden="true" />
+                    </button>
+                {/if}
+            </div>
+        </div>
+
+        {#if confirming === "apiKey"}
+            <div>
+                <ConfirmBar
+                    message="清除 API 金鑰後，AI 行程小幫手將無法使用，直到重新填寫金鑰。確定清除？"
+                    confirmLabel="確定清除"
+                    onconfirm={handleClearKey}
+                    oncancel={() => (confirming = null)}
+                />
+            </div>
+        {/if}
+
+        {#if modelPicker.error}
+            <div role="alert" class="flex items-start gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2">
+                <TriangleAlert size={14} class="text-danger shrink-0 mt-0.5" aria-hidden="true" />
+                <p class="text-[11px] text-text-secondary leading-relaxed whitespace-pre-line">{modelPicker.error}</p>
+            </div>
+        {/if}
+
+        {#if apiKey}
+            <div>
+                <span class="block text-xs font-semibold text-text-secondary mb-1">
+                    模型篩選範圍
+                </span>
+                <div class="flex gap-2 mb-3">
+                    <button
+                        type="button"
+                        onclick={() => handleFilterModeChange("default")}
+                        class="flex-1 py-1.5 px-3 rounded-xl border text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 {filterMode === 'default' ? 'bg-accent/15 border-accent/40 text-accent' : 'bg-tint-1 border-card-border text-text-secondary hover:bg-tint-2'}"
+                    >
+                        {#if filterMode === "default"}
+                            <Check size={14} aria-hidden="true" />
+                        {/if}
+                        預設 (推薦)
+                    </button>
+                    <button
+                        type="button"
+                        onclick={() => handleFilterModeChange("all")}
+                        class="flex-1 py-1.5 px-3 rounded-xl border text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 {filterMode === 'all' ? 'bg-accent/15 border-accent/40 text-accent' : 'bg-tint-1 border-card-border text-text-secondary hover:bg-tint-2'}"
+                    >
+                        {#if filterMode === "all"}
+                            <Check size={14} aria-hidden="true" />
+                        {/if}
+                        全部 (不篩選)
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <label for="gemini-model-select" class="block text-xs font-semibold text-text-secondary mb-1">
+                    AI 模型選擇
+                </label>
+                <select
+                    id="gemini-model-select"
+                    bind:value={modelPicker.selected}
+                    disabled={modelPicker.loading}
+                    aria-label="選擇 AI 模型"
+                    class="w-full bg-well-deep border border-card-border rounded-xl px-3 py-2 text-xs text-text-primary outline-none focus:border-accent transition cursor-pointer disabled:opacity-50"
+                >
+                    {#if modelPicker.list.length === 0}
+                        <option value={modelPicker.selected}>{modelPicker.selected || (modelPicker.loading ? "載入模型中…" : "自動選擇")}</option>
+                    {:else}
+                        {#each modelPicker.list as m (m.id)}
+                            <option value={m.id}>{m.displayName}</option>
+                        {/each}
+                    {/if}
+                </select>
+            </div>
+        {/if}
+
+        <div class="text-[11px] text-text-muted leading-relaxed pt-1 flex items-center gap-2">
+            <span>金鑰僅存於本機</span>
+            <span>·</span>
+            <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-1 text-accent hover:underline font-medium"
+            >
+                <span>取得免費金鑰</span>
+                <ExternalLink size={11} aria-hidden="true" />
+            </a>
+        </div>
+    </form>
 </section>
 
 <!-- Storage tile: name, what it holds, how much of it there is, and one action.
