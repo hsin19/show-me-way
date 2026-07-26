@@ -9,6 +9,7 @@ import {
     buildDayReport,
     classifyTimelineEvents,
     findCurrentEventIndex,
+    formatBytes,
     formatDateRange,
     formatDayDate,
     formatNextEventLabel,
@@ -520,5 +521,26 @@ describe("insertAtClamped", () => {
 
     it("inserts into an empty array", () => {
         expect(insertAtClamped([], 2, "only")).toEqual(["only"]);
+    });
+});
+
+describe("formatBytes", () => {
+    it("formats zero and negative bytes as 0 B", () => {
+        expect(formatBytes(0)).toBe("0 B");
+        expect(formatBytes(-100)).toBe("0 B");
+    });
+
+    it("formats bytes under 1 KB", () => {
+        expect(formatBytes(512)).toBe("512 B");
+    });
+
+    it("formats KB", () => {
+        expect(formatBytes(1024)).toBe("1.0 KB");
+        expect(formatBytes(1536)).toBe("1.5 KB");
+    });
+
+    it("formats MB", () => {
+        expect(formatBytes(1048576)).toBe("1.0 MB");
+        expect(formatBytes(5242880)).toBe("5.0 MB");
     });
 });

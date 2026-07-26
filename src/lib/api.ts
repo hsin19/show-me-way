@@ -391,6 +391,24 @@ export function listYamlBackups(): YamlBackup[] {
     }
 }
 
+/**
+ * localStorage keys the backup ring currently occupies (one, or none), so the
+ * storage panel in App 設定 can size it without naming the key itself.
+ */
+export function yamlBackupKeys(): string[] {
+    return localStorage.getItem(YAML_BACKUPS_KEY) === null ? [] : [YAML_BACKUPS_KEY];
+}
+
+/**
+ * Drop every auto-snapshot. Irreversible and unlike the caches nothing refetches
+ * it, so callers must confirm first. Reports whether anything was there to go.
+ */
+export function clearYamlBackups(): boolean {
+    const existed = yamlBackupKeys().length > 0;
+    localStorage.removeItem(YAML_BACKUPS_KEY);
+    return existed;
+}
+
 /** YAML content of one backup, looked up by its `savedAt` timestamp. */
 export function getYamlBackup(savedAt: string): string | null {
     return listYamlBackups().find(b => b.savedAt === savedAt)?.yaml ?? null;

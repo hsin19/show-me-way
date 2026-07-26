@@ -1,6 +1,14 @@
 // Pure Ledger calculations (no localStorage, no Svelte state) so Vitest can
 // cover them without plugins. Ledger.svelte wraps these in $derived.
 
+/**
+ * Prefix of the manual exchange-rate override Ledger.svelte writes, one key per
+ * currency (`exchange_rate_JPY`). Predates the `showmeway_` prefix convention,
+ * so `storage-admin.ts` has to know it by name — declared here, with the rest of
+ * the Ledger's contract, rather than restated there.
+ */
+export const MANUAL_RATE_KEY_PREFIX = "exchange_rate_";
+
 export interface ExpenseItem {
     name: string;
     amount: number;

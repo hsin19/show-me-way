@@ -1,14 +1,38 @@
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
+import { execSync } from "node:child_process";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 const basePath = process.env.BASE_PATH?.replace(/^\/+|\/+$/g, "");
 const base = basePath ? `/${basePath}/` : "/";
 
+// CI passes the commit via VITE_GIT_SHA (github.sha); local builds fall back to
+// the short SHA. __BUILD_TIME__ stays a raw UTC ISO string — the frontend formats
+// it in the viewer's local timezone.
+function resolveGitSha(): string {
+    const fromEnv = process.env.VITE_GIT_SHA;
+    if (fromEnv) return fromEnv.slice(0, 7);
+    try {
+        // stderr silenced: outside a git checkout this throws anyway, and the
+        // raw "fatal: not a git repository" would just be noise in the log.
+        return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+            .toString()
+            .trim();
+    } catch {
+        return "dev";
+    }
+}
+const appVersion = resolveGitSha();
+const buildTime = new Date().toISOString();
+
 // https://vite.dev/config/
 export default defineConfig({
     base,
+    define: {
+        __APP_VERSION__: JSON.stringify(appVersion),
+        __BUILD_TIME__: JSON.stringify(buildTime),
+    },
     // A fixed, app-specific port keeps this app's localStorage on its own origin
     // (storage is keyed by host:port), so dev data never collides with another
     // Vite app on the default 5173. strictPort fails loudly instead of silently

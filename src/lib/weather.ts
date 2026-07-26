@@ -4,9 +4,11 @@
 // serve stale data first, refresh in the background, never surface errors.
 
 import {
+    cachedKeysWithPrefix,
     clearStorageCacheMemory,
     isFresh,
     readCachedJson,
+    removeCachedKeys,
     writeCachedJson,
 } from "./storage-cache";
 
@@ -23,6 +25,8 @@ export interface DailyWeather {
 export type DailyWeatherByDate = Record<string, DailyWeather>;
 
 const GEOCODE_CACHE_KEY = "showmeway_geocode_v1";
+/** Pre-v1 geocode entries ({lat, lon}, no TTL). Only ever removed, never read. */
+const LEGACY_GEOCODE_CACHE_KEY = "showmeway_geocode";
 const FORECAST_CACHE_KEY = "showmeway_weather";
 // Source models refresh every ~3-6 hours, so refetching sooner buys nothing.
 const FORECAST_TTL = 1000 * 60 * 60 * 3;
@@ -38,6 +42,35 @@ export function resetWeatherCacheForTests(): void {
     GEOCODE_MISSES.clear();
     inFlightForecasts.clear();
     clearStorageCacheMemory();
+}
+
+/**
+ * localStorage keys this module currently occupies, so the storage panel in
+ * App 設定 can size them. The key shapes stay private here; callers only ever
+ * see the keys that happen to exist right now.
+ */
+export function weatherCacheKeys(): string[] {
+    // Deduped: the legacy prefix is also a prefix of the v1 keys, so every v1
+    // entry matches twice and the caller would double-count it.
+    return [
+        ...new Set([
+            ...cachedKeysWithPrefix(`${GEOCODE_CACHE_KEY}_`),
+            ...cachedKeysWithPrefix(`${LEGACY_GEOCODE_CACHE_KEY}_`),
+            ...cachedKeysWithPrefix(`${FORECAST_CACHE_KEY}_`),
+        ]),
+    ];
+}
+
+/**
+ * Drop every cached geocode lookup and forecast, and return how many keys went.
+ * Safe at any time: the next `loadDailyWeather` just refetches. The in-memory
+ * negative-lookup cache goes too, so a city that failed to geocode is retried.
+ */
+export function clearWeatherCache(): number {
+    const keys = weatherCacheKeys();
+    removeCachedKeys(keys);
+    GEOCODE_MISSES.clear();
+    return keys.length;
 }
 
 interface GeoPoint {
@@ -96,7 +129,7 @@ function parseCityQuery(city: string): { name: string; countryCode: string | nul
 async function geocodeCity(city: string): Promise<GeoPoint | null> {
     const key = `${GEOCODE_CACHE_KEY}_${cityKey(city)}`;
     // Pre-v1 entries ({lat, lon}, no TTL) are unreadable now — clear, don't migrate.
-    localStorage.removeItem(`showmeway_geocode_${cityKey(city)}`);
+    localStorage.removeItem(`${LEGACY_GEOCODE_CACHE_KEY}_${cityKey(city)}`);
     const cached = readCachedJson(key, isValidGeocodeEntry);
     const now = Date.now();
     if (cached && isFresh(cached.cachedAt, GEOCODE_TTL, now)) {

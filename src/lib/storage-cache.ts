@@ -58,6 +58,31 @@ export function writeCachedJson(key: string, value: unknown): void {
 }
 
 /**
+ * Keys currently in localStorage under `prefix`, as a snapshot — so a caller can
+ * remove them while walking the result. Cache owners enumerate their own entries
+ * through this instead of each hand-rolling the index loop.
+ */
+export function cachedKeysWithPrefix(prefix: string): string[] {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith(prefix)) keys.push(key);
+    }
+    return keys;
+}
+
+/**
+ * Remove cached entries, mem-mirror included — dropping only the localStorage
+ * side would leave the mirror serving what storage no longer has.
+ */
+export function removeCachedKeys(keys: readonly string[]): void {
+    for (const key of keys) {
+        memCache.delete(key);
+        localStorage.removeItem(key);
+    }
+}
+
+/**
  * TTL freshness check that also rejects a future timestamp left behind by a
  * clock rollback (which would otherwise never expire by elapsed time).
  */

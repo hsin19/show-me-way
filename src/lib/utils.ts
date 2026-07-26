@@ -338,8 +338,19 @@ export function insertAtClamped<T>(arr: T[], index: number, item: T): T[] {
  * Does the user prefer reduced motion? app.css's `prefers-reduced-motion` rule
  * only reaches CSS animations/transitions, so Svelte's JS transitions and
  * programmatic smooth scrolling have to ask here. Read at the point of use, not
- * cached at component init, so flipping the OS setting mid-session takes effect.
+ * once at boot, so toggling the OS setting takes effect on the next event.
  */
 export function prefersReducedMotion(): boolean {
+    if (typeof window === "undefined") return false;
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/**
+ * Format a byte count into a human-readable string (B, KB, MB).
+ */
+export function formatBytes(bytes: number): string {
+    if (bytes <= 0) return "0 B";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

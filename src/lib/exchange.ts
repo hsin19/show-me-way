@@ -1,6 +1,8 @@
 import {
+    cachedKeysWithPrefix,
     isFresh,
     readCachedJson,
+    removeCachedKeys,
     writeCachedJson,
 } from "./storage-cache";
 
@@ -18,6 +20,25 @@ export interface ExchangeRatesMeta {
 
 const CACHE_KEY = "showmeway_exchange_rates";
 export const EXCHANGE_CACHE_TTL = 1000 * 60 * 60 * 12; // 12 hours
+
+/**
+ * localStorage keys this module currently occupies, so the storage panel in
+ * App 設定 can size them without knowing the key shape.
+ */
+export function exchangeCacheKeys(): string[] {
+    return cachedKeysWithPrefix(`${CACHE_KEY}_`);
+}
+
+/**
+ * Drop every cached rate table and return how many keys went. Safe at any time:
+ * the next `loadExchangeRates` refetches. The user's manual override rate is a
+ * separate key owned by Ledger and is untouched.
+ */
+export function clearExchangeCache(): number {
+    const keys = exchangeCacheKeys();
+    removeCachedKeys(keys);
+    return keys.length;
+}
 
 interface CacheEntry {
     timestamp: number;

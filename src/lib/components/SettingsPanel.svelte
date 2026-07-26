@@ -7,7 +7,7 @@ import Layers from "@lucide/svelte/icons/layers";
 import Lightbulb from "@lucide/svelte/icons/lightbulb";
 import Link2 from "@lucide/svelte/icons/link-2";
 import Plus from "@lucide/svelte/icons/plus";
-import Settings from "@lucide/svelte/icons/settings";
+import Sliders from "@lucide/svelte/icons/sliders";
 import Trash2 from "@lucide/svelte/icons/trash-2";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import { onMount } from "svelte";
@@ -205,7 +205,7 @@ function clearEditor() {
 
 <div class="mb-4">
     <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
-        <Settings size={22} class="text-accent" aria-hidden="true" />行程管理
+        <Sliders size={22} class="text-accent" aria-hidden="true" />行程管理
     </h2>
     <p class="text-xs text-text-secondary mt-0.5">切換行程、直接編輯行程資料，儲存後立即套用</p>
 </div>
@@ -353,18 +353,20 @@ function clearEditor() {
             <Download size={12} class="shrink-0 text-accent" aria-hidden="true" />匯出資料
         </p>
         <p class="mt-1.5">複製成跨裝置連結快速搬移（含記帳），或下載成檔案保存，避免裝置遺失或清除瀏覽器資料時一併消失。</p>
-        <button
-            onclick={onExportUrl}
-            class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3 rounded-lg bg-accent/10 text-[11px] font-bold text-accent hover:bg-accent/15 transition cursor-pointer mt-1.5"
-        >
-            <Link2 size={12} aria-hidden="true" /> 複製跨裝置連結（含記帳）
-        </button>
-        <button
-            onclick={onExportYaml}
-            class="w-full min-h-[44px] flex items-center justify-center gap-1 px-3 rounded-lg bg-tint-1 border border-card-border text-[11px] font-bold text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer mt-2"
-        >
-            匯出行程 YAML
-        </button>
+        <div class="grid grid-cols-2 gap-2 mt-2">
+            <button
+                onclick={onExportUrl}
+                class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-2 rounded-lg bg-accent/10 text-[11px] font-bold text-accent hover:bg-accent/15 transition cursor-pointer text-center"
+            >
+                <Link2 size={12} class="shrink-0" aria-hidden="true" /> 複製跨裝置連結（含記帳）
+            </button>
+            <button
+                onclick={onExportYaml}
+                class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-2 rounded-lg bg-tint-1 border border-card-border text-[11px] font-bold text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-center"
+            >
+                <Download size={12} class="shrink-0" aria-hidden="true" /> 匯出行程 YAML
+            </button>
+        </div>
     </div>
 
     <div class="grid grid-cols-2 gap-2 mt-1">

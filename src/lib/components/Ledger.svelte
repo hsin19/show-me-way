@@ -20,6 +20,7 @@ import {
     foreignToTwd,
     getCurrencyConfig,
     ledgerTypeLabel,
+    MANUAL_RATE_KEY_PREFIX,
     twdToForeign,
 } from "../ledger";
 import { showToast } from "../toast.svelte";
@@ -115,7 +116,7 @@ let lastCurrency = "";
 $effect(() => {
     const currency = activeCurrency;
     untrack(() => {
-        const rateKey = `exchange_rate_${currency}`;
+        const rateKey = `${MANUAL_RATE_KEY_PREFIX}${currency}`;
         const savedRate = localStorage.getItem(rateKey);
         if (savedRate) {
             exchangeRate = parseFloat(savedRate);
@@ -170,7 +171,7 @@ $effect(() => {
 // Currency Conversion (math in src/lib/ledger.ts; persistence stays here)
 function convert(source: "foreign" | "twd" | "rate") {
     if (source === "rate") {
-        localStorage.setItem(`exchange_rate_${activeCurrency}`, exchangeRate.toString());
+        localStorage.setItem(`${MANUAL_RATE_KEY_PREFIX}${activeCurrency}`, exchangeRate.toString());
     }
 
     if (source === "foreign" || source === "rate") {

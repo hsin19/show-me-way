@@ -49,6 +49,10 @@ jobs:
         env:
           # GitHub Pages serves project sites under /<repo-name>/
           BASE_PATH: ${{ github.event.repository.name }}
+          # Shown in App 設定 › 關於 App. Passed explicitly rather than left to
+          # vite.config.ts's `git rev-parse` fallback, so the version on the
+          # deployed site is the commit Actions actually built.
+          VITE_GIT_SHA: ${{ github.sha }}
 
       - name: Upload Artifact
         uses: actions/upload-pages-artifact@v5
