@@ -348,7 +348,7 @@ export function serializeToYaml(data: TripData): string {
 
     const body = dumpYaml(clean, {
         lineWidth: -1, // no line folding — keep long strings on one readable line
-        quotingType: "'", // prefer single quotes to match the existing style
+        quoteStyle: "single", // prefer single quotes to match the existing style
         forceQuotes: false,
         noRefs: true, // never emit &anchor / *alias
     });
@@ -681,7 +681,7 @@ export function validateYaml(yamlStr: string): TripData {
     try {
         return normalizeTripData(parseYaml(yamlStr));
     } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : "無效的 YAML 語法";
+        const message = e instanceof Error ? (e.message.includes("expected a document, but the input is empty") ? "YAML 內容為空或格式不正確" : e.message) : "無效的 YAML 語法";
         throw new Error(message, { cause: e });
     }
 }
