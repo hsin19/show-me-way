@@ -215,6 +215,16 @@ describe("validateYaml — 結構與其餘 zh-TW 驗證", () => {
             .toThrow("YAML 缺少必要的結構 (trip 或 days 區塊)");
     });
 
+    it("只剩註解 / modeline 的內容視為空，仍回報 zh-TW 訊息", () => {
+        expect(() => validateYaml("# yaml-language-server: $schema=./showmeway-schema.json\n"))
+            .toThrow("YAML 內容為空或格式不正確");
+    });
+
+    it("拒絕含多份文件的 YAML", () => {
+        expect(() => validateYaml(`${validTripBlock}\ndays:\n  - day: 1\n---\ntrip: {}`))
+            .toThrow("YAML 只能包含一份行程");
+    });
+
     it("拒絕空的 days 列表", () => {
         expect(() => validateYaml(`${validTripBlock}\ndays: []`))
             .toThrow("days 至少需要一天的行程");

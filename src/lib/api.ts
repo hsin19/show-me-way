@@ -1,6 +1,6 @@
 import {
     dump as dumpYaml,
-    load as parseYaml,
+    loadAll as loadYamlDocuments,
 } from "js-yaml";
 import {
     type ExpenseItem,
@@ -195,6 +195,19 @@ function validateAlternatives(value: unknown, where: string): void {
 }
 
 /**
+ * Parse one itinerary document out of a YAML string. Goes through `loadAll`
+ * rather than `load` because `load` throws its own English message on an empty
+ * or comment-only stream (e.g. the editor cleared down to the `$schema`
+ * modeline), which would bypass the zh-TW messages below; `loadAll` reports
+ * that as `[]`, so an empty stream stays this module's error to word.
+ */
+function parseYaml(yaml: string): unknown {
+    const docs = loadYamlDocuments(yaml);
+    if (docs.length > 1) throw new Error("YAML 只能包含一份行程 (請移除多餘的 --- 文件分隔)");
+    return docs[0];
+}
+
+/**
  * Validate the required shape of a parsed itinerary object and normalize
  * optional sections (todo / packing) to empty arrays so downstream components
  * can always iterate safely. Any legacy top-level `phrases` is ignored —
@@ -348,7 +361,7 @@ export function serializeToYaml(data: TripData): string {
 
     const body = dumpYaml(clean, {
         lineWidth: -1, // no line folding — keep long strings on one readable line
-        quotingType: "'", // prefer single quotes to match the existing style
+        quoteStyle: "single", // prefer single quotes to match the existing style
         forceQuotes: false,
         noRefs: true, // never emit &anchor / *alias
     });
