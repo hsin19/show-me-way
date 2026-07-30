@@ -63,6 +63,17 @@ let apiKey = $state<string | null>(loadGeminiApiKey());
 const modelPicker = createModelPicker(() => apiKey);
 
 let scrollEl = $state<HTMLDivElement>();
+let composerEl = $state<HTMLTextAreaElement>();
+
+// Newlines are allowed, so the composer grows with the text up to ~5 lines and
+// scrolls after that; clearing `input` after a send shrinks it back.
+$effect(() => {
+    const el = composerEl;
+    if (!el) return;
+    void input;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
+});
 
 const QUICK_PROMPTS = [
     { label: "在地美食推薦", icon: "🍽️", text: "推薦這趟行程當地的必吃美食與口袋名單" },
@@ -114,6 +125,14 @@ async function triggerSend(promptText: string) {
 async function send(e: SubmitEvent) {
     e.preventDefault();
     await triggerSend(input);
+}
+
+// Enter is a newline (the composer is a textarea), so desktop keeps a shortcut.
+function onComposerKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        void triggerSend(input);
+    }
 }
 
 async function scrollToBottom() {
@@ -344,15 +363,19 @@ function applyEdit(message: UiMessage) {
                     </div>
                 </div>
 
-                <form onsubmit={send} class="flex items-center gap-2">
-                    <input
+                <form onsubmit={send} class="flex items-end gap-2">
+                    <textarea
+                        bind:this={composerEl}
                         bind:value={input}
+                        onkeydown={onComposerKeydown}
                         aria-label="輸入問題"
                         autocomplete="off"
-                        placeholder="詢問或用說的編輯行程…"
+                        rows="1"
+                        enterkeyhint="enter"
+                        placeholder="詢問或用說的編輯行程…（Enter 換行）"
                         disabled={isSending}
-                        class="flex-1 min-w-0 bg-well-deep border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent transition disabled:opacity-50"
-                    />
+                        class="flex-1 min-w-0 resize-none bg-well-deep border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent transition disabled:opacity-50"
+                    ></textarea>
                     <button
                         type="submit"
                         aria-label="送出"
