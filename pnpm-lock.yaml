@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@fontsource-variable/noto-sans-tc':
-        specifier: ^5.2.10
-        version: 5.2.10
+        specifier: ^5.3.0
+        version: 5.3.0
       '@fontsource-variable/plus-jakarta-sans':
         specifier: ^5.3.0
         version: 5.3.0
@@ -725,8 +725,8 @@ packages:
     resolution: {integrity: sha512-+CNAzxglkrpNf/kKywqQfk74QjtceuOE7Qm+AF8miRvPF/wmmK5+OJOgVh3AVTT3RP2mH3+FOaxlE5v72owk0A==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
 
-  '@fontsource-variable/noto-sans-tc@5.2.10':
-    resolution: {integrity: sha512-COVssWiIp9VVfdGuHpbrcH8u9H5JK4Lm6U7oee2BD6aLwKzPshj49KGmmQe/r3Fcp4e4SSuCaqyN/BtDKxHOGQ==}
+  '@fontsource-variable/noto-sans-tc@5.3.0':
+    resolution: {integrity: sha512-sniyvTx+yRXlce9bjBV0i3kBG3/YFJiz6SZA9plNJLCR4TbY8il+G759gAXWHZu01eAclbJEN2YR+qbQjZTjkg==}
 
   '@fontsource-variable/plus-jakarta-sans@5.3.0':
     resolution: {integrity: sha512-/l/4r0yyWK9JzAlmA0LiYgGgmJe/Gswt4jTJEzr5QhJfwMbvJZDmYWyW0M4X7yCK69BajMVlV/Lx8g7WDc1+sw==}
@@ -1496,6 +1496,11 @@ packages:
     resolution: {integrity: sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==}
     peerDependencies:
       acorn: ^6.0.0 || ^7.0.0 || ^8.0.0
+
+  acorn@8.18.0:
+    resolution: {integrity: sha512-lGq+9yr1/GuAWaVYIHRjvvySG5/4VfKIvC8EWxStPdcDh/Ka7FG3twP6v4d5BkravUilhIAsG4Qj83t02LWUPQ==}
+    engines: {node: '>=0.4.0'}
+    hasBin: true
 
   acorn@8.18.0:
     resolution: {integrity: sha512-lGq+9yr1/GuAWaVYIHRjvvySG5/4VfKIvC8EWxStPdcDh/Ka7FG3twP6v4d5BkravUilhIAsG4Qj83t02LWUPQ==}
@@ -4000,7 +4005,7 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@fontsource-variable/noto-sans-tc@5.2.10': {}
+  '@fontsource-variable/noto-sans-tc@5.3.0': {}
 
   '@fontsource-variable/plus-jakarta-sans@5.3.0': {}
 
@@ -4124,6 +4129,9 @@ snapshots:
   '@lucide/svelte@1.24.0(svelte@5.56.8(@typescript-eslint/types@8.65.0))':
     dependencies:
       svelte: 5.56.8(@typescript-eslint/types@8.65.0)
+
+  '@napi-rs/lzma-linux-x64-gnu@1.5.1':
+    optional: true
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
@@ -4612,6 +4620,8 @@ snapshots:
   acorn-jsx@5.3.2(acorn@8.18.0):
     dependencies:
       acorn: 8.18.0
+
+  acorn@8.18.0: {}
 
   acorn@8.18.0: {}
 
