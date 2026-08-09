@@ -35,6 +35,12 @@ updates:
           - 'eslint-*'
           - '@eslint/*'
           - 'typescript-eslint'
+      non-major:
+        patterns:
+          - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
 
   - package-ecosystem: 'github-actions'
     directory: '/'
