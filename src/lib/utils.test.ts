@@ -19,7 +19,6 @@ import {
     insertAtClamped,
     isCheckoutDay,
     isOvernightStay,
-    mapDirections,
     mapSearch,
     parseEventStartMinutes,
     parseLocalDate,
@@ -477,29 +476,6 @@ describe("mapSearch", () => {
 
     it("encodes the query string", () => {
         expect(mapSearch("a b&c", "naver")).toBe("https://map.naver.com/p/search/a%20b%26c");
-    });
-});
-
-describe("mapDirections", () => {
-    it("builds a Google transit-directions URL with the destination encoded", () => {
-        expect(mapDirections("東京タワー & 周辺", "google")).toBe(
-            "https://www.google.com/maps/dir/?api=1&destination=%E6%9D%B1%E4%BA%AC%E3%82%BF%E3%83%AF%E3%83%BC%20%26%20%E5%91%A8%E8%BE%BA&travelmode=transit",
-        );
-    });
-
-    it("omits origin so the route starts from the current location", () => {
-        expect(mapDirections("Tokyo Tower")).not.toContain("origin=");
-    });
-
-    it("falls back to the Naver search page (no stable directions URL)", () => {
-        expect(mapDirections("엘양호텔", "naver")).toBe(mapSearch("엘양호텔", "naver"));
-        expect(mapDirections("엘양호텔", "naver")).toBe("https://map.naver.com/p/search/%EC%97%98%EC%96%91%ED%98%B8%ED%85%94");
-    });
-
-    it("uses Google for undefined or unknown providers", () => {
-        const googlePrefix = "https://www.google.com/maps/dir/?api=1&destination=";
-        expect(mapDirections("x")).toBe(`${googlePrefix}x&travelmode=transit`);
-        expect(mapDirections("x", "kakao")).toBe(`${googlePrefix}x&travelmode=transit`);
     });
 });
 

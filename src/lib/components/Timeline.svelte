@@ -8,7 +8,6 @@ import Flame from "@lucide/svelte/icons/flame";
 import Link from "@lucide/svelte/icons/link";
 import LogOut from "@lucide/svelte/icons/log-out";
 import Maximize2 from "@lucide/svelte/icons/maximize-2";
-import Navigation from "@lucide/svelte/icons/navigation";
 import Play from "@lucide/svelte/icons/play";
 import Share2 from "@lucide/svelte/icons/share-2";
 import SkipForward from "@lucide/svelte/icons/skip-forward";
@@ -20,7 +19,6 @@ import {
     classifyTimelineEvents,
     isCheckoutDay,
     isOvernightStay,
-    mapDirections,
     mapSearch,
 } from "../utils";
 import type { DailyWeather } from "../weather";
@@ -99,11 +97,11 @@ let expandedAlts = $state<Record<string, boolean>>({});
     {/if}
 </div>
 
-<!-- Map link + directions + "show enlarged" button for a place. A direct
-     `mapLink` (e.g. a naver.me short link) wins over a search built from
-     `localName`; directions need a text query, so that chip requires
-     `localName`. Emits bare chips so the caller can group them in one row
-     with any extra `links`. -->
+<!-- Map link + "show enlarged" button for a place. A direct `mapLink` (e.g. a
+     naver.me short link) wins over a search built from `localName`. There is
+     deliberately no directions chip: the map app's own 前往 button is one tap
+     away and always knows the right travel mode. Emits bare chips so the
+     caller can group them in one row with any extra `links`. -->
 {#snippet placeActions(localName: string | undefined, title: string, address?: string, mapLink?: string)}
     {@const href = mapLink ?? (localName ? mapSearch(localName, mapProvider) : undefined)}
     {@const isNaver = mapLink ? mapLink.includes("naver") : mapProvider === "naver"}
@@ -123,16 +121,6 @@ let expandedAlts = $state<Record<string, boolean>>({});
         </a>
     {/if}
     {#if localName}
-        <a
-            href={mapDirections(localName, mapProvider)}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex items-center gap-1.5 min-h-[44px] bg-accent/10 text-accent text-xs font-bold px-3 py-1.5 rounded-lg transition duration-200 hover:bg-accent/20"
-            title="從目前位置出發的大眾運輸路線"
-        >
-            <Navigation size={13} class="shrink-0" aria-hidden="true" />
-            導航
-        </a>
         <button
             onclick={() => onEnlarge({ kind: "place", title, localName, address })}
             class="min-w-[44px] min-h-[44px] flex items-center justify-center bg-accent/10 text-accent/80 rounded-lg transition duration-200 hover:bg-accent/20 cursor-pointer"
@@ -312,15 +300,18 @@ let expandedAlts = $state<Record<string, boolean>>({});
                         {#if expandedAlts[altKey]}
                             <ul class="space-y-2 pb-1">
                                 {#each event.alternatives as alt, k (`${k}-${alt.title}`)}
-                                    <li class="flex flex-wrap items-center gap-x-2 gap-y-1 bg-tint-1 border border-line rounded-xl px-3 py-2">
-                                        <div class="min-w-0 flex-1">
+                                    <!-- Stacked, not side-by-side: the action chips are a fixed ~100px
+                                         and would otherwise permanently squeeze `note` into a narrow
+                                         column. Mirrors the main event card's title / desc / chips order. -->
+                                    <li class="bg-tint-1 border border-line rounded-xl px-3 py-2">
+                                        <div class="min-w-0">
                                             <span class="text-xs font-bold text-text-primary">{alt.title}</span>
                                             {#if alt.note}
                                                 <p class="text-[11px] text-text-muted leading-relaxed">{alt.note}</p>
                                             {/if}
                                         </div>
                                         {#if alt.localName || alt.mapLink}
-                                            <div class="flex items-center gap-2 shrink-0">
+                                            <div class="flex flex-wrap items-center gap-2 mt-1">
                                                 {@render placeActions(alt.localName, alt.title, undefined, alt.mapLink)}
                                             </div>
                                         {/if}

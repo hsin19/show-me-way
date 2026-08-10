@@ -312,17 +312,6 @@ export function mapSearch(query: string, provider?: string): string {
 }
 
 /**
- * Build a transit-directions URL to a place. Omitting `origin` makes Google
- * Maps start from the user's current location — no geolocation permission
- * needed on our side. Naver's directions URL format is unstable, so it falls
- * back to the regular search page (`mapSearch`).
- */
-export function mapDirections(query: string, provider?: string): string {
-    if (provider === "naver") return mapSearch(query, provider);
-    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}&travelmode=transit`;
-}
-
-/**
  * Return a new array with `item` reinserted at `index`, clamped to the current
  * bounds. Used by the delete-undo handlers: the list may have changed between
  * the delete and the undo (another item removed), so a stale index must never
