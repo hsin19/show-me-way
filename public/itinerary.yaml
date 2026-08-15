@@ -93,9 +93,17 @@ days:
         desc: 網紅咖啡廳點杯咖啡與招牌甜點，稍作休息。
         status: skipped
       - time: '19:00'
-        title: 澀谷逛街採購
+        title: 忠犬八公像 ➔ PARCO ➔ 唐吉訶德
         type: standard
-        desc: 逛 PARCO、唐吉訶德補貨，注意免稅門檻與營業時間。
+        desc: 澀谷散步採購路線，注意免稅門檻與各店營業時間。
+        stops:
+          - name: 忠犬八公像
+            localName: ハチ公像
+          - name: 澀谷 PARCO
+            localName: 渋谷PARCO
+            mapLink: 'https://maps.app.goo.gl/example-parco'
+          - name: 唐吉訶德
+            localName: ドン・キホーテ 渋谷店
         links:
           - label: 免稅須知
             url: 'https://example.com/tax-free'

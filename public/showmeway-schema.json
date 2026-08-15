@@ -266,9 +266,31 @@
                     }
                   }
                 },
+                "stops": {
+                  "type": "array",
+                  "description": "本事件依序走訪的多個地點 (選填)，例如「西班牙階梯 ➔ 特雷維噴泉 ➔ 萬神殿」這種串聯行程。每站各自產生地圖與放大按鈕，所以每一站都能放大出示問路，不像事件層的 localName 只能有一個。在事件卡上直接展開顯示 (不折疊)，因為這是行程主體。若是「擇一前往」的備選地點請用 alternatives；若只是官網、攻略文等補充網址請用 links。",
+                  "items": {
+                    "type": "object",
+                    "required": ["name"],
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "地點顯示名稱 (通常是中文，例如「特雷維噴泉」)"
+                      },
+                      "localName": {
+                        "type": "string",
+                        "description": "地點的當地語言名稱 (選填，例如 'Fontana di Trevi')，可放大出示問路，也作為地圖搜尋關鍵字。沒有這個欄位 (也沒有 mapLink) 的話該站不會有地圖按鈕，所以建議填。"
+                      },
+                      "mapLink": {
+                        "type": "string",
+                        "description": "地圖直接連結 (選填，如 maps.app.goo.gl 短網址)。有設定時會優先使用，比關鍵字搜尋更精準。"
+                      }
+                    }
+                  }
+                },
                 "links": {
                   "type": "array",
-                  "description": "同一事件的補充連結 (選填)，例如官網、攻略文，或同一行程想放的多個點。地圖連結會自動顯示對應的品牌 icon。若是「擇一前往」的備選地點 (如備案餐廳)，請改用 alternatives。",
+                  "description": "同一事件的補充連結 (選填)，例如官網、攻略文。地圖連結會自動顯示對應的品牌 icon。若要列出本事件走訪的多個地點請改用 stops (每站會有地圖與放大按鈕)；若是「擇一前往」的備選地點 (如備案餐廳) 請改用 alternatives。",
                   "items": {
                     "type": "object",
                     "required": ["label", "url"],

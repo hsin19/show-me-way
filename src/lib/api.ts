@@ -27,8 +27,16 @@ export interface TimelineEvent {
     localName?: string;
     /** Direct map URL (e.g. a naver.me / maps.app.goo.gl short link). Preferred over searching `localName`. */
     mapLink?: string;
-    /** Extra labeled links for this event (e.g. several spots/points). Map URLs get a matching brand icon. For pick-one backup places, use `alternatives` instead. */
+    /** Extra labeled links for this event (e.g. official site, a guide article). Map URLs get a matching brand icon. For the places this event actually visits, use `stops`; for pick-one backup places, `alternatives`. */
     links?: { label: string; url: string; }[];
+    /**
+     * The places this event walks through in order (e.g. a "A ➔ B ➔ C" stroll).
+     * Each gets its own map + enlarge actions, so every stop — not just the one
+     * `localName` the event itself carries — can be shown to a driver. Rendered
+     * expanded (unlike `alternatives`): these are the event's main content, not
+     * a fallback. No `note` field on purpose, so each stop stays one row.
+     */
+    stops?: { name: string; localName?: string; mapLink?: string; }[];
     /** Backup place choices (e.g. fallback restaurants): each carries a local-language name (enlargeable for asking directions) and a switch-decision note. Shown as a collapsed list at the card's tail. For plain supplementary URLs of the same event, use `links` instead. */
     alternatives?: { title: string; localName?: string; mapLink?: string; note?: string; }[];
     /** Manual check-in state. Persisted into YAML, so progress travels with share links. Unset = not visited yet. */
@@ -172,23 +180,34 @@ function validateConfirmation(value: unknown, where: string): void {
     }
 }
 
-/** Validate an optional `alternatives` list: each entry needs a string `title`; other fields are optional strings. */
-function validateAlternatives(value: unknown, where: string): void {
+/**
+ * Validate an optional list of place entries (`alternatives`, `stops`): each
+ * entry needs its identity field as a string, and every other field is an
+ * optional string. The two lists differ only in that identity field's name
+ * (`title` vs `name`) and which extras they carry, so they share this loop.
+ */
+function validatePlaceList(
+    value: unknown,
+    where: string,
+    listName: "alternatives" | "stops",
+    required: string,
+    optional: readonly string[],
+): void {
     if (value == null) return;
     if (!Array.isArray(value)) {
-        throw new Error(`${where}的 alternatives 必須是列表`);
+        throw new Error(`${where}的 ${listName} 必須是列表`);
     }
-    for (const [k, alt] of value.entries()) {
-        if (!alt || typeof alt !== "object" || Array.isArray(alt)) {
-            throw new Error(`${where}的 alternatives 第 ${k + 1} 項必須是物件 (不可為空白列表項)`);
+    for (const [k, entry] of value.entries()) {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+            throw new Error(`${where}的 ${listName} 第 ${k + 1} 項必須是物件 (不可為空白列表項)`);
         }
-        const fields = alt as Partial<Record<"title" | "localName" | "mapLink" | "note", unknown>>;
-        if (fields.title == null) {
-            throw new Error(`${where}的 alternatives 第 ${k + 1} 項缺少 title 屬性`);
+        const fields = entry as Record<string, unknown>;
+        if (fields[required] == null) {
+            throw new Error(`${where}的 ${listName} 第 ${k + 1} 項缺少 ${required} 屬性`);
         }
-        for (const field of ["title", "localName", "mapLink", "note"] as const) {
+        for (const field of [required, ...optional]) {
             if (fields[field] != null && typeof fields[field] !== "string") {
-                throw new Error(`${where}的 alternatives 第 ${k + 1} 項的 ${field} 必須是文字`);
+                throw new Error(`${where}的 ${listName} 第 ${k + 1} 項的 ${field} 必須是文字`);
             }
         }
     }
@@ -286,8 +305,10 @@ function normalizeTripData(raw: unknown): TripData {
             if (evStatus != null && evStatus !== "done" && evStatus !== "skipped") {
                 throw new Error(`days 第 ${i + 1} 項的 timeline 第 ${j + 1} 項的 status 必須是 'done' 或 'skipped'`);
             }
-            validateConfirmation((ev as { confirmation?: unknown; }).confirmation, `days 第 ${i + 1} 項的 timeline 第 ${j + 1} 項`);
-            validateAlternatives((ev as { alternatives?: unknown; }).alternatives, `days 第 ${i + 1} 項的 timeline 第 ${j + 1} 項`);
+            const evWhere = `days 第 ${i + 1} 項的 timeline 第 ${j + 1} 項`;
+            validateConfirmation((ev as { confirmation?: unknown; }).confirmation, evWhere);
+            validatePlaceList((ev as { alternatives?: unknown; }).alternatives, evWhere, "alternatives", "title", ["localName", "mapLink", "note"]);
+            validatePlaceList((ev as { stops?: unknown; }).stops, evWhere, "stops", "name", ["localName", "mapLink"]);
         }
         if (day.city != null && typeof day.city !== "string") {
             throw new Error(`days 第 ${i + 1} 項的 city 必須是文字 (例如 'Tokyo')`);

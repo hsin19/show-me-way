@@ -7,6 +7,7 @@ import ClipboardList from "@lucide/svelte/icons/clipboard-list";
 import Flame from "@lucide/svelte/icons/flame";
 import Link from "@lucide/svelte/icons/link";
 import LogOut from "@lucide/svelte/icons/log-out";
+import MapPin from "@lucide/svelte/icons/map-pin";
 import Maximize2 from "@lucide/svelte/icons/maximize-2";
 import Play from "@lucide/svelte/icons/play";
 import Share2 from "@lucide/svelte/icons/share-2";
@@ -279,6 +280,29 @@ let expandedAlts = $state<Record<string, boolean>>({});
                         {#each event.links ?? [] as link (link.url)}
                             {@render linkChip(link.label, link.url)}
                         {/each}
+                    </div>
+                {/if}
+
+                <!-- The places this event walks through. Always expanded, unlike
+                     `alternatives`: these are what the event IS, so hiding them
+                     behind a tap would bury the map action you want while standing
+                     at stop 1. One row each — a stop carries no note by design. -->
+                {#if event.stops && event.stops.length > 0}
+                    <div class="mt-3 pt-3 border-t border-line">
+                        <p class="flex items-center gap-1.5 text-xs font-bold text-text-secondary mb-1">
+                            <MapPin size={13} class="text-accent shrink-0" aria-hidden="true" />
+                            地點（{event.stops.length}）
+                        </p>
+                        <ul class="space-y-1.5">
+                            {#each event.stops as stop, k (`${k}-${stop.name}`)}
+                                <li class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                                    <span class="min-w-0 text-xs text-text-primary">{stop.name}</span>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        {@render placeActions(stop.localName, stop.name, undefined, stop.mapLink)}
+                                    </div>
+                                </li>
+                            {/each}
+                        </ul>
                     </div>
                 {/if}
 

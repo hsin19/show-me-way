@@ -346,6 +346,51 @@ describe("validateYaml — alternatives 形狀", () => {
     });
 });
 
+const validStops = [
+    "",
+    "        stops:",
+    "          - name: '西班牙階梯'",
+    "            localName: 'Piazza di Spagna'",
+    "          - name: '特雷維噴泉'",
+    "            localName: 'Fontana di Trevi'",
+    "            mapLink: 'https://maps.app.goo.gl/xyz'",
+].join("\n");
+
+describe("validateYaml — stops 形狀", () => {
+    it("接受完整的地點清單", () => {
+        const data = validateYaml(timelineYaml(bookedEvent + validStops));
+        expect(data.days[0].timeline[0].stops).toEqual([
+            { name: "西班牙階梯", localName: "Piazza di Spagna" },
+            { name: "特雷維噴泉", localName: "Fontana di Trevi", mapLink: "https://maps.app.goo.gl/xyz" },
+        ]);
+    });
+
+    it("接受只有 name 的地點 (只是不會有地圖按鈕)", () => {
+        const data = validateYaml(timelineYaml(`${bookedEvent}\n        stops:\n          - name: '納沃納廣場'`));
+        expect(data.days[0].timeline[0].stops).toEqual([{ name: "納沃納廣場" }]);
+    });
+
+    it("拒絕非列表的 stops", () => {
+        expect(() => validateYaml(timelineYaml(`${bookedEvent}\n        stops: '萬神殿'`)))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 stops 必須是列表");
+    });
+
+    it("拒絕空白列表項並指出項次", () => {
+        expect(() => validateYaml(timelineYaml(`${bookedEvent}\n        stops:\n          - name: '萬神殿'\n          -`)))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 stops 第 2 項必須是物件 (不可為空白列表項)");
+    });
+
+    it("拒絕缺少 name 的項目 (alternatives 用 title，stops 用 name)", () => {
+        expect(() => validateYaml(timelineYaml(`${bookedEvent}\n        stops:\n          - localName: 'Pantheon'`)))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 stops 第 1 項缺少 name 屬性");
+    });
+
+    it("拒絕非文字的選填欄位", () => {
+        expect(() => validateYaml(timelineYaml(`${bookedEvent}\n        stops:\n          - name: '萬神殿'\n            localName: 123`)))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 stops 第 1 項的 localName 必須是文字");
+    });
+});
+
 describe("serializeToYaml 與 round-trip", () => {
     const richEvent = [
         "",
@@ -356,7 +401,7 @@ describe("serializeToYaml 與 round-trip", () => {
         "        status: done",
         "        confirmation:",
         "          code: '012345'",
-    ].join("\n") + validAlternatives;
+    ].join("\n") + validAlternatives + validStops;
 
     const richYaml = [
         timelineYaml(richEvent),
@@ -390,7 +435,7 @@ describe("serializeToYaml 與 round-trip", () => {
         expect(second).toBe(first);
     });
 
-    it("status / confirmation / alternatives 經 round-trip 不遺失", () => {
+    it("status / confirmation / alternatives / stops 經 round-trip 不遺失", () => {
         const data = validateYaml(serializeToYaml(validateYaml(richYaml)));
         const ev = data.days[0].timeline[0];
         expect(ev.status).toBe("done");
@@ -401,6 +446,10 @@ describe("serializeToYaml 與 round-trip", () => {
             mapLink: "https://naver.me/abc",
             note: "排隊超過 30 分鐘改來這裡",
         }]);
+        expect(ev.stops).toEqual([
+            { name: "西班牙階梯", localName: "Piazza di Spagna" },
+            { name: "特雷維噴泉", localName: "Fontana di Trevi", mapLink: "https://maps.app.goo.gl/xyz" },
+        ]);
         expect(data.todo[0]).toMatchObject({ text: "換錢", checked: true });
         expect(data.packing[0]).toMatchObject({ text: "充電器" });
     });
