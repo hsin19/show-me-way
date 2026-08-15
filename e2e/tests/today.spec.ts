@@ -14,7 +14,7 @@ test.use({ viewport: { width: 390, height: 844 } });
 //
 // The opposite branch — a trip that is not currently running lands on the day-0
 // overview — is already covered by smoke.spec.ts with the far-future fixture.
-function build() {
+function build(eventTitle = "") {
     // Today per Asia/Taipei, matching playwright.config.ts's timezoneId, so the
     // fixture and the app agree on which day is today. The offsets are then
     // applied to that CALENDAR DATE through UTC, not to the local instant:
@@ -30,7 +30,7 @@ function build() {
     const dayOf = (offset: number) => new Date(base + offset * 86_400_000).toISOString().slice(0, 10);
     const days = [-3, -2, -1, 0, 1, 2, 3].map((off, i) =>
         `  - day: ${i + 1}\n    date: '${dayOf(off)}'\n    title: 區域${i + 1}\n    pace: 悠閒\n`
-        + `    timeline:\n      - time: '00:30'\n        title: 第${i + 1}天事件\n        type: standard\n        desc: 說明\n`
+        + `    timeline:\n      - time: '00:30'\n        title: ${eventTitle || `第${i + 1}天事件`}\n        type: standard\n        desc: 說明\n`
     ).join("");
     return {
         todayIso,
@@ -68,4 +68,41 @@ test("開啟時自動定位到今天：面板、今天標記與 chip 進入視�
     expect(state.hasDot).toBe(true);
     expect(state.srOnly).toBe(true);
     expect(state.inView).toBe(true);
+});
+
+// Mid-trip the overview capsule stops showing a countdown and starts showing the
+// current/next event, whose title is arbitrarily long. It must ellipse rather
+// than wrap: wrapping pushes the 切換行程 switcher onto a second row. Only
+// reachable with a real "today", hence this suite rather than smoke.spec.ts.
+test("行程進行中：總覽膠囊截斷過長的事件標題，不擠掉切換行程", async ({ page }) => {
+    const { yaml } = build("聖母百花大教堂前往領主廣場沿途散步順道逛皮件小店與中央市場");
+    await stubMissingLocalItinerary(page);
+    await seedItinerary(page, yaml);
+    await page.goto("/");
+
+    // Today's panel is the landing spot; the hero card lives on the overview.
+    await page.getByRole("button", { name: "總覽" }).click();
+    const capsule = page.locator("[data-countdown]");
+    await expect(capsule).toBeVisible();
+    // Guard the premise: this only tests truncation if the label really is the
+    // long event title (getNextEventInfo returning null would show a countdown).
+    await expect(capsule).toContainText("聖母百花大教堂");
+
+    const layout = await page.evaluate(() => {
+        const cap = document.querySelector("[data-countdown]") as HTMLElement;
+        const span = cap.querySelector("span") as HTMLElement;
+        const switcher = document.querySelector('button[aria-label="切換行程選單"]') as HTMLElement;
+        const capRect = cap.getBoundingClientRect();
+        const swRect = switcher.getBoundingClientRect();
+        return {
+            // Vertical overlap, not equal tops: the two pills differ slightly in
+            // height (the switcher carries icons) and `items-center` centres them.
+            sameRow: capRect.bottom > swRect.top && swRect.bottom > capRect.top,
+            truncated: span.scrollWidth > span.clientWidth,
+            singleLine: capRect.height < 40,
+        };
+    });
+    expect(layout.truncated).toBe(true);
+    expect(layout.sameRow).toBe(true);
+    expect(layout.singleLine).toBe(true);
 });

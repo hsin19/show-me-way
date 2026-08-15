@@ -123,9 +123,18 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
         {formatDateRange(trip.start, trip.end)}・共 {days.length} 天
     </p>
 
-    <!-- Bottom utility row: Status Badge on Left + Profile Switcher Button on Right -->
-    <div class="mt-4 flex items-center justify-between gap-2 flex-wrap">
-        <div class="inline-flex max-w-full items-center bg-accent/12 text-accent text-xs font-bold px-3.5 py-2 rounded-full">
+    <!-- Bottom utility row: Status Badge on Left + Profile Switcher Button on Right.
+         Deliberately NOT flex-wrap: wrapping is decided from each item's full
+         content width BEFORE any shrinking, so a long capsule label would drop to
+         a second row untouched instead of ellipsing. One row + a shrinkable
+         capsule is what keeps the switcher beside it. -->
+    <div class="mt-4 flex items-center justify-between gap-2">
+        <!-- `min-w-0` is what makes the inner `truncate` work: without it this
+             flex item cannot shrink below its content, so a long in-progress
+             event label ("進行中：…") pushes the whole capsule onto a second row
+             instead of ellipsing. Truncating beats wrapping here — the switcher
+             next to it must stay on the same line. -->
+        <div data-countdown class="inline-flex min-w-0 items-center bg-accent/12 text-accent text-xs font-bold px-3.5 py-2 rounded-full">
             <span class="truncate">{countdownText}</span>
         </div>
 
