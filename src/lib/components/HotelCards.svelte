@@ -11,29 +11,27 @@ import ConfirmationChips from "./ConfirmationChips.svelte";
 
 interface Props {
     hotels: HotelInfo[];
-    /** Local YYYY-MM-DD "today"; drives the 今晚入住 highlight and sort. */
+    /** Local YYYY-MM-DD; drives the 今晚入住 highlight and the sort. */
     todayIso: string;
-    /** Localized prompt shown on the fullscreen driver card (from trip.lang). */
+    /** The trip language's "please take me here" line, for the driver card. */
     driverPrompt: string;
-    /** Enlarge a hotel's address or confirmation code; single app-level overlay. */
+    /** Ask App to open the fullscreen card; this component never renders a layer of its own. */
     onEnlarge: (card: EnlargedCard) => void;
 }
 
 let { hotels, todayIso, driverPrompt, onEnlarge }: Props = $props();
 
-// Same overnight semantics as Timeline / the 報平安 report (checkout day
-// belongs to the next hotel), so a changeover day never marks both hotels.
+// Shared with Timeline and the 報平安 report, so a changeover day cannot end up
+// marking both hotels.
 function isCurrentStay(hotel: HotelInfo): boolean {
     return isOvernightStay(hotel, todayIso);
 }
 
-// Tonight's hotel first during the trip; outside the trip nothing matches and
-// the YAML order is kept.
+// Outside the trip nothing matches and the YAML order survives.
 let sortedHotels = $derived(
     [...hotels].sort((a, b) => Number(isCurrentStay(b)) - Number(isCurrentStay(a))),
 );
 
-// Show the address (and local-language name) full-screen for a driver.
 function showAddressForDriver(hotel: HotelInfo) {
     onEnlarge({
         kind: "place",
@@ -44,7 +42,6 @@ function showAddressForDriver(hotel: HotelInfo) {
     });
 }
 
-// Format YYYY-MM-DD to display MM/DD
 function formatShortDate(dateStr: string): string {
     const parts = dateStr.split("-");
     if (parts.length === 3) {

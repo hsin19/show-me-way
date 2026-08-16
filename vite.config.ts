@@ -26,7 +26,6 @@ function resolveGitSha(): string {
 const appVersion = resolveGitSha();
 const buildTime = new Date().toISOString();
 
-// https://vite.dev/config/
 export default defineConfig({
     base,
     define: {

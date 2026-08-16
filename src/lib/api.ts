@@ -7,13 +7,12 @@ import {
     ledgerTypeLabel,
 } from "./ledger";
 
-/** Reservation confirmation shown as a tap-to-copy chip and an enlarged counter-facing view. */
 export interface ConfirmationInfo {
-    /** Confirmation / booking code. Numeric codes must be quoted in YAML so leading zeros survive. */
+    /** Numeric codes must be quoted in YAML, or leading zeros are lost to number parsing. */
     code: string;
-    /** Name the reservation is under (e.g. passport spelling). */
+    /** Whose name the reservation is under (e.g. passport spelling). */
     name?: string;
-    /** Short note, e.g. which document to present at the counter. */
+    /** e.g. which document to present at the counter. */
     note?: string;
 }
 
@@ -21,34 +20,29 @@ export interface TimelineEvent {
     time: string;
     title: string;
     type: "booked" | "must-go" | "option" | "standard";
-    /** Optional on purpose: `normalizeTripData` accepts an event without one, and it has always rendered as an empty line rather than failing the load. */
+    /** Optional on purpose — an event without one renders a blank line rather than failing the load. */
     desc?: string;
     bullets?: string[];
     /** Place name in the destination's local language, used as the map-search query. */
     localName?: string;
-    /** Direct map URL (e.g. a naver.me / maps.app.goo.gl short link). Preferred over searching `localName`. */
+    /** Direct map URL (e.g. a naver.me / maps.app.goo.gl short link); takes precedence over searching `localName`. */
     mapLink?: string;
-    /** Extra labeled links for this event (e.g. official site, a guide article). Map URLs get a matching brand icon. For the places this event actually visits, use `stops`; for pick-one backup places, `alternatives`. */
+    /** Supplementary URLs (official site, a guide article). Places this event visits belong in `stops`, backup places in `alternatives`. */
     links?: { label: string; url: string; }[];
     /**
-     * The places this event walks through in order (e.g. a "A ➔ B ➔ C" stroll).
-     * Each gets its own map + enlarge actions, so every stop — not just the one
-     * `localName` the event itself carries — can be shown to a driver. Rendered
-     * expanded (unlike `alternatives`): these are the event's main content, not
-     * a fallback. No `note` field on purpose, so each stop stays one row.
+     * The places this event walks through in order (an "A ➔ B ➔ C" stroll), each
+     * with its own map + enlarge actions so any of them — not just the event's own
+     * `localName` — can be shown to a driver. Rendered expanded, unlike
+     * `alternatives`: these are the event's content, not a fallback. No `note`
+     * field on purpose, so a stop stays one row.
      */
     stops?: { name: string; localName?: string; mapLink?: string; }[];
-    /** Backup place choices (e.g. fallback restaurants): each carries a local-language name (enlargeable for asking directions) and a switch-decision note. Shown as a collapsed list at the card's tail. For plain supplementary URLs of the same event, use `links` instead. */
+    /** Pick-one backup places (fallback restaurants), collapsed at the card's tail; `note` is the switch-decision hint. */
     alternatives?: { title: string; localName?: string; mapLink?: string; note?: string; }[];
-    /** Manual check-in state. Persisted into YAML, so progress travels with share links. Unset = not visited yet. */
+    /** Manual check-in state, persisted into YAML so progress travels with share links. */
     status?: "done" | "skipped";
-    /** Reservation confirmation code (typically for `booked` events). */
     confirmation?: ConfirmationInfo;
-    /**
-     * Ephemeral, runtime-only identity used as a stable `{#each}` key while
-     * editing. Assigned on load and stripped again on serialization, so it
-     * never appears in the saved/exported YAML.
-     */
+    /** Runtime-only `{#each}` key and edit handle; `serializeToYaml` strips it, so it never reaches saved YAML. */
     _id?: string;
 }
 
@@ -69,9 +63,8 @@ export interface HotelInfo {
     checkOut: string; // YYYY-MM-DD
     /** Hotel name in the destination's local language, used as the map-search query. */
     localName?: string;
-    /** Direct map URL (e.g. a naver.me / maps.app.goo.gl short link). Preferred over searching `localName`. */
+    /** Direct map URL (e.g. a naver.me / maps.app.goo.gl short link); takes precedence over searching `localName`. */
     mapLink?: string;
-    /** Reservation confirmation code shown on the hotel card. */
     confirmation?: ConfirmationInfo;
 }
 
@@ -81,65 +74,49 @@ export interface TripData {
         start: string; // YYYY-MM-DD
         end: string; // YYYY-MM-DD
         departure: string; // ISO date-time string, e.g., 2026-06-11T14:00:00+08:00
-        /** Language code (e.g. 'ko', 'ja', 'en') selecting the built-in phrase set. */
+        /** Selects the built-in phrase set: 'ko', 'ja', 'en' — see `lib/phrases.ts`. */
         lang?: string;
-        /** Currency code (e.g. 'KRW', 'JPY', 'USD') for the ledger. */
+        /** Ledger currency, e.g. 'KRW', 'JPY', 'USD'. */
         currency?: string;
         /**
-         * Which map service the destination uses — a market/regulatory choice
-         * (e.g. 'naver' for Korea), not a language one. Defaults to Google Maps
-         * when unset. See `mapSearch` in `lib/utils.ts`.
+         * Which map service the destination uses — a market/regulatory fact
+         * ('naver' for Korea), not a language one. Google Maps when unset.
          */
         mapProvider?: "naver" | "google";
         /**
-         * Destination city for the daily weather forecast, overridable per day
-         * via `DayItinerary.city`. English names (e.g. 'Tokyo', 'Seoul') geocode
-         * reliably; only some CJK names resolve. A ', XX' country suffix
-         * disambiguates — see `lib/weather.ts`. Weather is simply hidden when unset.
+         * Weather-forecast city, overridable per day via `DayItinerary.city`.
+         * English names ('Tokyo', 'Seoul') geocode reliably and only some CJK
+         * names resolve; a ', XX' country suffix disambiguates. Unset simply
+         * hides the badge — see `lib/weather.ts`.
          */
         city?: string;
-        /** Customized wallets/cards (e.g. 'Suica', 'WOWPASS') for the ledger. */
+        /** Ledger wallets/cards the trip uses, e.g. 'Suica', 'WOWPASS'. */
         wallets?: string[];
         hotels: HotelInfo[];
     };
     todo: ChecklistItem[];
     packing: ChecklistItem[];
     days: DayItinerary[];
-    /**
-     * Expense records for the ledger. Persisted in the itinerary YAML (like
-     * `todo` / `packing`) so they travel with the trip profile and share links.
-     * Optional in source YAML; normalized to an empty array on load.
-     */
+    /** Optional in source YAML, normalized to `[]` on load. Lives in the itinerary YAML so spending travels with the profile and share links. */
     expenses: ExpenseItem[];
 }
 
 export interface ChecklistItem {
-    /** Optional for the same reason as `TimelineEvent.desc`: the gate accepts an item without one. */
+    /** Optional for the same reason as `TimelineEvent.desc`. */
     text?: string;
     checked?: boolean;
-    /**
-     * Ephemeral, runtime-only identity used as a stable `{#each}` key and as the
-     * lookup handle for toggle/add/delete. Assigned on load and on creation,
-     * stripped again on serialization — it never appears in saved/exported YAML.
-     * (Same pattern as `TimelineEvent._id`.)
-     */
+    /** Runtime-only, like `TimelineEvent._id`. */
     _id?: string;
 }
 
 export const USER_YAML_KEY = "showmeway_user_yaml";
 
-// Schema modeline re-injected on every export so editor autocompletion keeps
-// working. Points at the schema deployed alongside the site (in `public/`), so
-// the reference resolves no matter where an exported/shared YAML ends up.
+// Absolute URL, not a relative one: an exported or shared YAML has to resolve
+// the schema from wherever it is opened, not just from the deployed site.
 const SCHEMA_LINE = "# yaml-language-server: $schema=https://hsin19.github.io/show-me-way/showmeway-schema.json\n";
 
 let runtimeIdSeq = 0;
 
-/**
- * Assign an ephemeral, session-stable `_id` to every timeline event and
- * checklist item. These ids exist only in memory (as `{#each}` keys and as the
- * lookup handle for editing) and are never persisted — see `serializeToYaml`.
- */
 function attachRuntimeIds(data: TripData): TripData {
     for (const day of data.days) {
         for (const ev of day.timeline) {
@@ -158,11 +135,7 @@ function attachRuntimeIds(data: TripData): TripData {
     return data;
 }
 
-/**
- * Validate an optional `confirmation` block (timeline events and hotels).
- * An unquoted numeric `code:` would lose leading zeros to YAML number parsing,
- * so a non-string code is rejected with a how-to-fix message instead of coerced.
- */
+/** A numeric `code:` is rejected rather than coerced: it already lost its leading zeros by the time we see it. */
 function validateConfirmation(value: unknown, where: string): void {
     if (value == null) return;
     if (typeof value !== "object" || Array.isArray(value)) {
@@ -183,12 +156,10 @@ function validateConfirmation(value: unknown, where: string): void {
 }
 
 /**
- * Guards an optional text field. Absent is allowed — every caller's field has
- * been optional in practice — but a number or a list is rejected: `desc` and
- * friends render through `markdown.ts` and an href through `sanitizeLinkHref`,
- * and both drop a non-string without a word, so this is where the author hears
- * about it. `field` is a phrase, not just a key, so a list element can name its
- * own position (`bullets 第 2 項`).
+ * Absent is allowed; a number or list is not. `markdown.ts` and
+ * `sanitizeLinkHref` both drop a non-string silently, so this is the only place
+ * the author ever hears that their `desc: 2024` vanished. `field` is a phrase
+ * rather than a key so a list element can name its position (`bullets 第 2 項`).
  */
 function validateOptionalString(value: unknown, where: string, field: string): void {
     if (value != null && typeof value !== "string") {
@@ -196,12 +167,7 @@ function validateOptionalString(value: unknown, where: string, field: string): v
     }
 }
 
-/**
- * Validate an optional list of object entries (`alternatives`, `stops`,
- * `links`): every `required` field must be present, and both those and the
- * optional ones must be strings. The lists differ only in which fields they
- * carry, so they share this loop.
- */
+/** `alternatives` / `stops` / `links` differ only in which fields they carry, so they share one loop. */
 function validateEntryList(
     value: unknown,
     where: string,
@@ -230,11 +196,10 @@ function validateEntryList(
 }
 
 /**
- * Parse one itinerary document out of a YAML string. Goes through `loadAll`
- * rather than `load` because `load` throws its own English message on an empty
- * or comment-only stream (e.g. the editor cleared down to the `$schema`
- * modeline), which would bypass the zh-TW messages below; `loadAll` reports
- * that as `[]`, so an empty stream stays this module's error to word.
+ * `loadAll` rather than `load`: on an empty or comment-only stream (the editor
+ * cleared down to the `$schema` modeline) `load` throws its own English message,
+ * bypassing the zh-TW ones below. `loadAll` reports that as `[]` instead, so the
+ * wording stays this module's.
  */
 function parseYaml(yaml: string): unknown {
     const docs = loadYamlDocuments(yaml);
@@ -242,14 +207,7 @@ function parseYaml(yaml: string): unknown {
     return docs[0];
 }
 
-/**
- * Validate the required shape of a parsed itinerary object and normalize
- * optional sections (todo / packing) to empty arrays so downstream components
- * can always iterate safely. Any legacy top-level `phrases` is ignored —
- * phrases are now hard-coded per `trip.lang` (see `lib/phrases.ts`).
- *
- * Throws an Error with a user-facing (zh-TW) message on invalid structure.
- */
+/** The only real gate on itinerary data; its zh-TW messages are shown to the user verbatim. */
 function normalizeTripData(raw: unknown): TripData {
     if (!raw || typeof raw !== "object") {
         throw new Error("YAML 內容為空或格式不正確");
@@ -266,8 +224,6 @@ function normalizeTripData(raw: unknown): TripData {
     if (!data.trip.start || !data.trip.end || !data.trip.departure || !Array.isArray(data.trip.hotels)) {
         throw new Error("trip 區塊缺少 start, end, departure 或 hotels 屬性");
     }
-    // Same bare-`-` hazard as days/timeline: a null or malformed hotel entry
-    // would otherwise crash later while rendering Timeline / HotelCards.
     for (const [i, hotel] of data.trip.hotels.entries()) {
         if (!hotel || typeof hotel !== "object" || Array.isArray(hotel)) {
             throw new Error(`hotels 第 ${i + 1} 項必須是物件 (不可為空白列表項)`);
@@ -278,8 +234,8 @@ function normalizeTripData(raw: unknown): TripData {
             if (value == null) {
                 throw new Error(`hotels 第 ${i + 1} 項缺少 ${field} 屬性`);
             }
-            // js-yaml parses an unquoted YYYY-MM-DD as a UTC-midnight Date;
-            // UTC getters recover the date exactly as written, in any timezone.
+            // js-yaml turns an unquoted YYYY-MM-DD into a UTC-midnight Date. UTC
+            // getters recover the date as written, in any runner timezone.
             if ((field === "checkIn" || field === "checkOut") && value instanceof Date) {
                 fields[field] = `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, "0")}-${String(value.getUTCDate()).padStart(2, "0")}`;
                 continue;
@@ -293,16 +249,14 @@ function normalizeTripData(raw: unknown): TripData {
         }
         validateConfirmation((hotel as { confirmation?: unknown; }).confirmation, `hotels 第 ${i + 1} 項`);
     }
-    // A bare-number city (e.g. `city: 123`) would crash weather lookups later;
-    // reject it here with a readable message instead.
     if (data.trip.city != null && typeof data.trip.city !== "string") {
         throw new Error("trip.city 必須是文字 (例如 'Tokyo')");
     }
     for (const [i, day] of data.days.entries()) {
-        // A bare `-` list item in hand-written YAML parses to null, and a
-        // string/number/array element would otherwise surface later as a
-        // cryptic English TypeError from `attachRuntimeIds`. Messages count by
-        // list position (not the `day` field, which may be missing/renumbered).
+        // A bare `-` in hand-written YAML parses to null, which would surface as
+        // a cryptic English TypeError out of `attachRuntimeIds` instead. Every
+        // message below counts by list position rather than by the `day` field,
+        // which may itself be missing or renumbered.
         if (!day || typeof day !== "object" || Array.isArray(day)) {
             throw new Error(`days 第 ${i + 1} 項必須是物件 (不可為空白列表項)`);
         }
@@ -325,12 +279,6 @@ function normalizeTripData(raw: unknown): TripData {
                 throw new Error(`days 第 ${i + 1} 項的 timeline 第 ${j + 1} 項的 status 必須是 'done' 或 'skipped'`);
             }
             const evWhere = `days 第 ${i + 1} 項的 timeline 第 ${j + 1} 項`;
-            // `desc` renders through `markdown.ts` and `mapLink` through
-            // `sanitizeLinkHref`; both degrade a non-string to nothing rather
-            // than throwing, so without this the author's `desc: 2024` would
-            // silently disappear off the card. Absent stays legal: it has
-            // always rendered as an empty line, and this same gate runs on an
-            // AI edit and on a share-link import.
             for (const field of ["desc", "localName", "mapLink"] as const) {
                 validateOptionalString((ev as unknown as Record<string, unknown>)[field], evWhere, field);
             }
@@ -349,16 +297,12 @@ function normalizeTripData(raw: unknown): TripData {
             validateConfirmation((ev as { confirmation?: unknown; }).confirmation, evWhere);
             validateEntryList((ev as { alternatives?: unknown; }).alternatives, evWhere, "alternatives", ["title"], ["localName", "mapLink", "note"]);
             validateEntryList((ev as { stops?: unknown; }).stops, evWhere, "stops", ["name"], ["localName", "mapLink"]);
-            // `links` had no shape check at all, so a `- label: 官網` with no
-            // `url` reached the render as `undefined`.
             validateEntryList((ev as { links?: unknown; }).links, evWhere, "links", ["label", "url"], []);
         }
         if (day.city != null && typeof day.city !== "string") {
             throw new Error(`days 第 ${i + 1} 項的 city 必須是文字 (例如 'Tokyo')`);
         }
     }
-    // Checklist items get `_id`s too, so a null / plain-string item would crash
-    // `attachRuntimeIds` just the same.
     for (const [listName, list] of [["todo", data.todo], ["packing", data.packing]] as const) {
         if (!Array.isArray(list)) continue;
         for (const [j, item] of list.entries()) {
@@ -368,8 +312,7 @@ function normalizeTripData(raw: unknown): TripData {
             validateOptionalString((item as { text?: unknown; }).text, `${listName} 第 ${j + 1} 項`, "text");
         }
     }
-    // Expense records get `_id`s too; a null / non-object entry would crash
-    // `attachRuntimeIds`. These are normally app-generated, but guard hand edits.
+    // Normally app-generated, but a hand-edited YAML reaches here too.
     if (data.expenses != null) {
         if (!Array.isArray(data.expenses)) {
             throw new Error("expenses 必須是列表");
@@ -381,8 +324,8 @@ function normalizeTripData(raw: unknown): TripData {
         }
     }
 
-    // Optional sections default to empty arrays. Note `phrases` is intentionally
-    // dropped here so any legacy value never round-trips back into saved YAML.
+    // Rebuilt field by field, which is what drops a legacy top-level `phrases`
+    // (now hard-coded per `trip.lang`) instead of round-tripping it back out.
     const normalized: TripData = {
         trip: data.trip,
         days: data.days,
@@ -395,16 +338,14 @@ function normalizeTripData(raw: unknown): TripData {
 }
 
 /**
- * Serialize trip data back to a YAML string for saving/exporting.
- * Strips the runtime-only `_id` fields (and any legacy `id` left over from the
- * old checklist schema) and re-adds the schema modeline. Array order is
- * preserved; comments and key ordering from any original hand-written YAML are
- * not (by design — the object is the source of truth).
+ * The YAML written to storage, exports and share links. Canonicalization rather
+ * than a round-trip: array order survives, comments and hand-authored key order
+ * do not.
  */
 export function serializeToYaml(data: TripData): string {
-    // JSON round-trip rather than structuredClone: `data` may be a Svelte
-    // reactive ($state) proxy, which structuredClone cannot clone. TripData is
-    // fully JSON-serializable, so this safely yields a plain detached object.
+    // JSON round-trip, NOT structuredClone: `data` is usually a Svelte $state
+    // proxy, which structuredClone throws on. Unit tests pass plain objects and
+    // would not catch the swap.
     const clean = JSON.parse(JSON.stringify(data)) as TripData;
     for (const day of clean.days) {
         delete (day as { region?: string; }).region;
@@ -412,21 +353,16 @@ export function serializeToYaml(data: TripData): string {
             delete ev._id;
         }
     }
-    for (const item of [...clean.todo, ...clean.packing]) {
+    // The `id`s are from the pre-`_id` checklist schema and the old localStorage
+    // ledger; dropping them here is what finally cleans them out of a saved trip.
+    for (const item of [...clean.todo, ...clean.packing, ...clean.expenses]) {
         delete item._id;
-        // Drop the obsolete persisted `id` so it is cleaned out on first save.
-        delete (item as { id?: string; }).id;
-    }
-    for (const item of clean.expenses) {
-        delete item._id;
-        // Drop the legacy persisted `id` carried over from the old localStorage
-        // ledger format, so migrated records serialize cleanly.
         delete (item as { id?: string; }).id;
     }
 
     const body = dumpYaml(clean, {
-        lineWidth: -1, // no line folding — keep long strings on one readable line
-        quoteStyle: "single", // prefer single quotes to match the existing style
+        lineWidth: -1, // no folding — long strings stay on one line
+        quoteStyle: "single",
         forceQuotes: false,
         noRefs: true, // never emit &anchor / *alias
     });
@@ -434,12 +370,6 @@ export function serializeToYaml(data: TripData): string {
     return SCHEMA_LINE + body;
 }
 
-/**
- * Persist the current in-memory trip data back into the user YAML stored in
- * localStorage. This is how runtime edits (e.g. adding/deleting checklist
- * items, toggling checked state) survive a reload — the serialized object
- * becomes the new source of truth on the next `fetchItinerary`.
- */
 export function saveTripData(data: TripData): void {
     localStorage.setItem(USER_YAML_KEY, serializeToYaml(data));
 }
@@ -452,7 +382,7 @@ export interface YamlBackup {
     yaml: string;
 }
 
-/** List saved YAML backups, newest first. Unreadable storage yields []. */
+/** Newest first. Unreadable or malformed storage yields []. */
 export function listYamlBackups(): YamlBackup[] {
     try {
         const raw = localStorage.getItem(YAML_BACKUPS_KEY);
@@ -469,17 +399,14 @@ export function listYamlBackups(): YamlBackup[] {
     }
 }
 
-/**
- * localStorage keys the backup ring currently occupies (one, or none), so the
- * storage panel in App 設定 can size it without naming the key itself.
- */
+/** The localStorage keys the backup ring occupies, for the storage accounting in App 設定. */
 export function yamlBackupKeys(): string[] {
     return localStorage.getItem(YAML_BACKUPS_KEY) === null ? [] : [YAML_BACKUPS_KEY];
 }
 
 /**
- * Drop every auto-snapshot. Irreversible and unlike the caches nothing refetches
- * it, so callers must confirm first. Reports whether anything was there to go.
+ * Irreversible — unlike the caches, nothing refetches these — so callers must
+ * confirm first. Returns whether there was anything to drop.
  */
 export function clearYamlBackups(): boolean {
     const existed = yamlBackupKeys().length > 0;
@@ -487,17 +414,15 @@ export function clearYamlBackups(): boolean {
     return existed;
 }
 
-/** YAML content of one backup, looked up by its `savedAt` timestamp. */
 export function getYamlBackup(savedAt: string): string | null {
     return listYamlBackups().find(b => b.savedAt === savedAt)?.yaml ?? null;
 }
 
 /**
- * Snapshot the current user YAML before a destructive overwrite (share-link
- * import, settings save, reset to default, backup restore). Keeps the newest
- * MAX_YAML_BACKUPS entries and skips when the content matches the latest
- * snapshot. A failed write (e.g. quota) only warns — it must never block the
- * overwrite itself.
+ * Snapshot the user YAML before overwriting it — this ring is the only undo there
+ * is, so every destructive path owes it a call. Repeated calls on unchanged
+ * content are free, and it never throws: losing a backup must not block the save
+ * it was protecting.
  */
 export function backupCurrentYaml(): void {
     const yaml = localStorage.getItem(USER_YAML_KEY);
@@ -512,15 +437,11 @@ export function backupCurrentYaml(): void {
     }
 }
 
-// --- Trip profiles -------------------------------------------------------
-// A lightweight multi-trip layer that mirrors the backup approach: the active
-// trip stays in USER_YAML_KEY (so every existing read/write path is untouched),
-// while the other trips are parked as YAML snapshots in PROFILES_KEY. Switching
-// just swaps the chosen snapshot with whatever is currently active. Unlike the
-// auto-backup ring this list is user-managed and never auto-evicted. Per-trip
-// state outside the itinerary YAML (e.g. the ledger) is intentionally NOT
-// swapped yet — only the itinerary travels with the profile.
-
+// The active trip deliberately stays in USER_YAML_KEY, with the others parked as
+// snapshots in PROFILES_KEY, so multi-trip support left every existing read/write
+// path untouched. Unlike the backup ring this list is user-managed and never
+// auto-evicted. Only the itinerary travels with a profile — per-trip state outside
+// the YAML (the ledger's working rate, say) is not swapped.
 export const PROFILES_KEY = "showmeway_profiles";
 export const ACTIVE_PROFILE_KEY = "showmeway_active_profile";
 
@@ -530,9 +451,9 @@ interface StoredProfile {
     savedAt: string; // ISO date-time the trip was last parked
 }
 
-/** Display summary of a parked (inactive) profile; the name is read live from its YAML. */
 export interface ProfileInfo {
     id: string;
+    /** Derived from the stored YAML on every read, so it cannot go stale against a renamed trip. */
     name: string;
     savedAt: string;
 }
@@ -544,7 +465,7 @@ function genProfileId(): string {
     return `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** Read parked profiles, newest first. Unreadable / malformed storage yields []. */
+/** Newest first. Unreadable or malformed storage yields []. */
 function readStoredProfiles(): StoredProfile[] {
     try {
         const raw = localStorage.getItem(PROFILES_KEY);
@@ -570,7 +491,7 @@ export function getActiveProfileId(): string | null {
     return localStorage.getItem(ACTIVE_PROFILE_KEY);
 }
 
-/** Assign an id to the active trip if it lacks one (bootstrap / migration). */
+/** The active trip's id, minted and persisted on first call (an install predating profiles has none). */
 export function ensureActiveProfileId(): string {
     let id = getActiveProfileId();
     if (!id) {
@@ -580,19 +501,19 @@ export function ensureActiveProfileId(): string {
     return id;
 }
 
-/** Best-effort `trip.name` from a YAML string, for labeling parked profiles. */
+/** Display label for a stored trip. Falls back to 未命名行程 rather than throwing, so an unparseable profile is still listable. */
 export function tripNameFromYaml(yaml: string): string {
     try {
         const data = parseYaml(yaml) as Partial<TripData> | null;
         const name = data?.trip?.name;
         if (typeof name === "string" && name.trim()) return name.trim();
     } catch {
-        // Malformed YAML still gets a usable label below.
+        // fall through to the placeholder
     }
     return "未命名行程";
 }
 
-/** The parked (inactive) trips, newest first. The active trip lives in USER_YAML_KEY. */
+/** Parked trips only, newest first — the active one lives in USER_YAML_KEY. */
 export function listProfiles(): ProfileInfo[] {
     return readStoredProfiles().map(p => ({
         id: p.id,
@@ -602,10 +523,10 @@ export function listProfiles(): ProfileInfo[] {
 }
 
 /**
- * Park the active trip and bring a stored profile to the front: snapshot the
- * current USER_YAML_KEY into the profile list, then load `targetId`'s YAML into
- * USER_YAML_KEY. The caller must persist the live trip into USER_YAML_KEY first
- * and reload trip data afterwards. Throws if `targetId` is unknown.
+ * Make a parked trip the active one and park the current trip in its place.
+ * Whatever sits in USER_YAML_KEY is what gets parked, so the caller must persist
+ * the live trip first, and must reload trip data afterwards. Throws if `targetId`
+ * is unknown.
  */
 export function switchToProfile(targetId: string): void {
     const list = readStoredProfiles();
@@ -622,11 +543,7 @@ export function switchToProfile(targetId: string): void {
     localStorage.setItem(ACTIVE_PROFILE_KEY, target.id);
 }
 
-/**
- * Park the active trip and start a new one from `yaml`. The caller must persist
- * the live trip into USER_YAML_KEY first and reload afterwards. Returns the new
- * profile id.
- */
+/** Start a new trip from `yaml`, parking the current one. Same caller contract as `switchToProfile`; returns the new profile's id. */
 export function createProfile(yaml: string): string {
     const activeId = ensureActiveProfileId();
     const activeYaml = localStorage.getItem(USER_YAML_KEY);
@@ -641,16 +558,15 @@ export function createProfile(yaml: string): string {
     return id;
 }
 
-/** Remove a parked (inactive) profile. The active trip cannot be deleted here. */
+/** Parked profiles only; the active trip is not in this list and cannot be deleted here. */
 export function deleteProfile(id: string): void {
     writeStoredProfiles(readStoredProfiles().filter(p => p.id !== id));
 }
 
 /**
- * Download text content as a file on the user's device — the only channel
- * that gets data out of localStorage and off this single device. Works via
- * a temporary object URL on an `a[download]` anchor (no dependencies); on
- * iOS 16.4+ standalone PWAs this lands in the Files app / share sheet.
+ * Hand a generated file (YAML export, ledger CSV) to the device — the only way
+ * trip data leaves localStorage. On an iOS standalone PWA it arrives via the
+ * Files app / share sheet rather than a downloads folder.
  */
 export function downloadTextFile(filename: string, content: string, mimeType: string): void {
     const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
@@ -660,7 +576,7 @@ export function downloadTextFile(filename: string, content: string, mimeType: st
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
-    // Deferred revoke: the download starts asynchronously from the URL.
+    // The download reads the URL asynchronously, so revoking inline would race it.
     window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
@@ -668,12 +584,7 @@ function escapeCsvField(value: string): string {
     return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }
 
-/**
- * Build a CSV export of the given expense records (now part of the itinerary
- * YAML — see `TripData.expenses`). zh-TW headers plus a UTF-8 BOM so Excel
- * decodes the Chinese text correctly. Returns null when there is nothing to
- * export (no records).
- */
+/** Spreadsheet export of the ledger, or null when there are no records to export. */
 export function buildLedgerCsv(expenses: ExpenseItem[]): string | null {
     if (!Array.isArray(expenses) || expenses.length === 0) return null;
     const lines = ["日期,項目,金額,類別"];
@@ -685,35 +596,26 @@ export function buildLedgerCsv(expenses: ExpenseItem[]): string | null {
             escapeCsvField(ledgerTypeLabel(typeof item?.type === "string" ? item.type : "")),
         ].join(","));
     }
+    // Leading BOM: without it Excel decodes the zh-TW headers as mojibake.
     return "\uFEFF" + lines.join("\r\n") + "\r\n";
 }
 
-/**
- * Generate a runtime-only `_id` for a newly added checklist item. Shares the
- * same sequence as `attachRuntimeIds` so ids never collide within a session.
- * Like all `_id`s, it is stripped on serialization and never written to YAML.
- */
+/** `_id` for an item created at runtime: unique for the session, and stripped again on save. */
 export function createChecklistItemId(prefix: "todo" | "pack"): string {
     return `${prefix}-${runtimeIdSeq++}`;
 }
 
-/**
- * Generate a runtime-only `_id` for a newly added expense record. Shares the
- * same sequence as `attachRuntimeIds`; stripped on serialization like all `_id`s.
- */
+/** `_id` for a record created at runtime: unique for the session, and stripped again on save. */
 export function createExpenseId(): string {
     return `exp-${runtimeIdSeq++}`;
 }
 
 /**
- * Fetch one candidate YAML file. Returns null (rather than throwing) for any
- * "not really there" outcome so the caller can fall through to the next:
- *  - network error / timeout (offline)
- *  - a non-OK status
- *  - an HTML body. The Vite dev server answers a MISSING public file with the
- *    SPA fallback — `200 text/html` (index.html) — not a 404, so `response.ok`
- *    alone would hand that page back as "YAML" and blow up the parser. A real
- *    itinerary YAML always starts with the `#` modeline or `trip:`, never `<`.
+ * Null rather than a throw for every "not really there" outcome, so the caller
+ * can fall through to the next candidate. The `<` check is the load-bearing one:
+ * the Vite dev server answers a MISSING public file with the SPA fallback —
+ * `200 text/html` — not a 404, so `response.ok` alone would hand index.html to
+ * the YAML parser. A real itinerary starts with the `#` modeline or `trip:`.
  */
 async function fetchYamlCandidate(url: string, opts?: RequestInit): Promise<string | null> {
     let response: Response;
@@ -729,13 +631,13 @@ async function fetchYamlCandidate(url: string, opts?: RequestInit): Promise<stri
 }
 
 /**
- * Fetch the default itinerary YAML text: itinerary.local.yaml first, then the
- * bundled itinerary.yaml. Shared by `fetchItinerary` and the settings editor so
- * their fallback behavior can't drift. The abort timeout bounds a hanging
- * network, and must stay ABOVE the service worker's 5s networkTimeoutSeconds so
- * the SW's cached copy of a real itinerary.local.yaml wins before we give up.
+ * The itinerary a device with no saved trip starts from: `itinerary.local.yaml`
+ * when the deployment carries one, otherwise the bundled template. Throws when
+ * neither is reachable. Shared with the settings editor so the two cannot drift.
  */
 export async function fetchDefaultYamlText(): Promise<string> {
+    // Above the service worker's 5s networkTimeoutSeconds on purpose: give up
+    // sooner and we lose the SW's cached copy of a real itinerary.local.yaml.
     const local = await fetchYamlCandidate("./itinerary.local.yaml", { signal: AbortSignal.timeout(8000) });
     if (local !== null) return local;
     const bundled = await fetchYamlCandidate("./itinerary.yaml");
@@ -743,7 +645,7 @@ export async function fetchDefaultYamlText(): Promise<string> {
     throw new Error("Neither itinerary.local.yaml nor itinerary.yaml was found.");
 }
 
-// Load and parse itinerary YAML from local storage or fallback file
+/** The trip to render: the user's saved YAML when there is one, otherwise the default itinerary. */
 export async function fetchItinerary(): Promise<TripData> {
     try {
         const yamlContent = localStorage.getItem(USER_YAML_KEY) || await fetchDefaultYamlText();
@@ -754,7 +656,11 @@ export async function fetchItinerary(): Promise<TripData> {
     }
 }
 
-// Validate raw YAML string (used by the in-app editor before saving)
+/**
+ * Gate a YAML string before it becomes the trip — the editor, share-link imports
+ * and AI edits all pass through here. Returns the normalized data, or throws with
+ * a zh-TW message safe to show the user (the raw parse error is on `cause`).
+ */
 export function validateYaml(yamlStr: string): TripData {
     try {
         return normalizeTripData(parseYaml(yamlStr));

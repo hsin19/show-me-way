@@ -6,7 +6,7 @@ import { copyToClipboard } from "../toast.svelte";
 import { acquireScreenWakeLock } from "../wakelock";
 
 interface Props {
-    /** The card to show, or null when the overlay is closed. */
+    /** Null closes the overlay. Mounted once in App, so two cards can never stack. */
     card: EnlargedCard | null;
     onClose: () => void;
 }
@@ -15,8 +15,7 @@ let { card, onClose }: Props = $props();
 
 let dialogEl = $state<HTMLDivElement>();
 
-// Move focus onto the dialog when it opens and hand it back to the trigger on
-// close (same contract as the app's other dialogs).
+// The trigger gets its focus back on close; App owns the Escape key.
 let returnFocus: HTMLElement | null = null;
 $effect(() => {
     if (card) {
@@ -28,17 +27,13 @@ $effect(() => {
     }
 });
 
-// Keep the screen on while the card is shown to a driver. Unsupported browsers
-// (iOS standalone < 18.4) silently no-op — see lib/wakelock.ts.
+// The phone is being held up to someone; it must not lock mid-conversation.
 $effect(() => {
     if (!card) return;
     return acquireScreenWakeLock();
 });
 </script>
 
-<!-- Fullscreen enlarged-card overlay: a place's local-language name (and hotel
-     address) for a driver / local staff, or a reservation confirmation code for
-     a check-in counter. -->
 {#if card}
     {@const data = card}
     <!-- svelte-ignore a11y_click_events_have_key_events -->

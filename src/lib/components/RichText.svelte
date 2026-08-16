@@ -5,7 +5,7 @@ import {
 } from "../markdown";
 
 interface Props {
-    /** Prose that may carry the inline-Markdown subset — see `lib/markdown.ts`. Undefined renders nothing: the fields behind it are optional at the gate. */
+    /** Inline Markdown, per `lib/markdown.ts`. Undefined renders nothing — these fields are optional at the gate. */
     text: string | undefined;
 }
 
@@ -14,21 +14,17 @@ let { text }: Props = $props();
 const nodes = $derived(parseInline(text));
 </script>
 
-<!-- Walks the node tree from `parseInline`. Every leaf goes through ordinary
-     interpolation, never `{@html}` — share links import other people's YAML, so
-     their prose must never be able to execute anything here. `sanitizeHref` has
-     already rejected any non-http(s)/mailto target upstream.
+<!-- Ordinary interpolation, never `{@html}`: share links import other people's
+     YAML, so their prose must never be able to execute anything here.
 
-     A link tap inside a checklist row does NOT tick the item off, but that is
-     the HTML spec's doing, not this handler's: a `<label>`'s activation
-     behavior is defined to do nothing for events targeted at an interactive
-     descendant. `stopPropagation` only stops OTHER Svelte handlers on ancestor
-     elements — Svelte delegates `onclick` to the root, so it runs after the
-     event has already passed the label. Keep it for that case; do not rely on
-     it to suppress a native `addEventListener` on the row.
+     A link tap inside a checklist row does NOT tick the item off, but that is the
+     HTML spec's doing rather than this handler's — a `<label>`'s activation
+     behavior does nothing for an event targeted at an interactive descendant.
+     `stopPropagation` only stops other Svelte handlers on ancestors, since Svelte
+     delegates `onclick` to the root; keep it for that, but do not rely on it to
+     suppress a native listener on the row.
 
-     Keyed by index because a node IS its position in the string — it has no
-     identity of its own to key on. -->
+     Keyed by index because a node IS its position in the string. -->
 
 {#snippet render(list: InlineNode[])}
     {#each list as node, i (i)}

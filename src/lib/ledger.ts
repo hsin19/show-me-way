@@ -1,11 +1,10 @@
-// Pure Ledger calculations (no localStorage, no Svelte state) so Vitest can
-// cover them without plugins. Ledger.svelte wraps these in $derived.
+// Ledger math kept free of localStorage and Svelte state, which is what lets
+// Vitest cover it — `Ledger.svelte` wraps these in `$derived`.
 
 /**
- * Prefix of the manual exchange-rate override Ledger.svelte writes, one key per
- * currency (`exchange_rate_JPY`). Predates the `showmeway_` prefix convention,
- * so `storage-admin.ts` has to know it by name — declared here, with the rest of
- * the Ledger's contract, rather than restated there.
+ * One key per currency (`exchange_rate_JPY`). Predates the `showmeway_` prefix,
+ * so `storage-admin.ts` has to know it by name — declared here, where the Ledger
+ * owns it, rather than restated there.
  */
 export const MANUAL_RATE_KEY_PREFIX = "exchange_rate_";
 
@@ -14,12 +13,7 @@ export interface ExpenseItem {
     amount: number;
     type: string; // WOWPASS | Cash | Deposit-WOWPASS | Deposit-Cash
     date: string;
-    /**
-     * Ephemeral, runtime-only key (same pattern as `ChecklistItem._id`):
-     * assigned on load / creation and stripped on serialization, so it never
-     * appears in the saved/exported YAML. Used as the `{#each}` key and the
-     * lookup handle for delete.
-     */
+    /** Runtime-only, like `ChecklistItem._id`. */
     _id?: string;
 }
 
@@ -113,7 +107,8 @@ export function roundQuickAmount(val: number): number {
     return Math.round(val / 5000) * 5000;
 }
 
-// Quick buttons follow fixed TWD price points converted at the current rate.
+// Anchored to TWD price points rather than round foreign numbers: the user is
+// thinking in what it costs back home.
 export function computeQuickAmounts(activeCurrency: string, exchangeRate: number): number[] {
     if (activeCurrency === "TWD" || !isUsableRate(exchangeRate)) {
         return [100, 200, 500, 1000, 2000, 5000];
@@ -136,11 +131,10 @@ export function twdToForeign(twdValue: string, exchangeRate: number): string {
 }
 
 /**
- * Coerce the raw value parsed from the legacy `ledger_expenses` localStorage key
- * into validated `ExpenseItem`s (one-time migration into the itinerary YAML).
- * Non-arrays yield `[]`; non-object entries are skipped; each field falls back
- * to a safe default rather than trusting the stored shape. `_id` is assigned via
- * `makeId` and `date` defaults to `today` (local YYYY-MM-DD).
+ * Coerce whatever the legacy `ledger_expenses` key holds into usable records.
+ * Nothing is trusted and nothing throws: a bad entry is skipped and a bad field
+ * takes a default, because a decade-old localStorage value is not worth failing
+ * a boot over.
  */
 export function parseLegacyExpenses(raw: unknown, today: string, makeId: () => string): ExpenseItem[] {
     if (!Array.isArray(raw)) return [];
@@ -159,8 +153,7 @@ export function parseLegacyExpenses(raw: unknown, today: string, makeId: () => s
     return out;
 }
 
-// Single source for the zh-TW type label — the history list and the CSV
-// export must never drift apart.
+/** The one place a type is worded, so the history list and the CSV export cannot drift. */
 export function ledgerTypeLabel(type: string): string {
     if (!type) return "";
     if (type === "Cash") return "現金支付";

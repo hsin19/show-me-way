@@ -36,13 +36,12 @@ import ConfirmBar from "./ConfirmBar.svelte";
 import ProfileManager from "./ProfileManager.svelte";
 
 interface Props {
-    /** Active trip's name for the switcher header; null while the YAML fails to load. */
+    /** Null while the YAML fails to load — this page has to work in exactly that case. */
     activeTripName: string | null;
-    /** Other saved trips (the active one is the YAML in USER_YAML_KEY); empty when none parked. */
+    /** The parked trips only; the active one is not in this list. */
     profiles: ProfileInfo[];
-    /** Reload trip data after a successful save / restore / reset (App's loadTripData). */
+    /** Awaited after a save / restore / reset, so `onDone` navigates to fresh data. */
     onReload: () => Promise<void>;
-    /** Navigate back to the itinerary after a successful save / restore / reset. */
     onDone: () => void;
     onSwitchProfile: (id: string) => void;
     onCreateProfile: () => void;
@@ -66,18 +65,15 @@ let {
 let yamlInput = $state("");
 let validationError = $state<string | null>(null);
 let yamlBackups = $state<YamlBackup[]>([]);
-// Snapshot of the persisted YAML, used to detect unsaved edits (restore/reset guards).
+// What the editor is compared against to spot unsaved edits.
 let yamlSnapshot = $state("");
 
-// Populate the editor + backup list on mount. The panel is a page, not a
-// modal — an in-session draft (settingsDraft) survives tab navigation and
-// takes precedence over the persisted YAML.
+// This is a page, not a modal, so leaving the tab unmounts it — an in-session
+// draft outranks the persisted YAML on the way back in.
 onMount(async () => {
     yamlBackups = listYamlBackups();
     let persisted = localStorage.getItem(USER_YAML_KEY);
     if (persisted === null) {
-        // Load default template for editing — same offline-safe fallback chain
-        // as the initial load (see fetchDefaultYamlText).
         try {
             persisted = await fetchDefaultYamlText();
         } catch {
@@ -88,19 +84,18 @@ onMount(async () => {
     yamlInput = settingsDraft.yaml ?? persisted;
 });
 
-// Every keystroke updates the session draft so navigating away never loses edits.
 function markDraft() {
     settingsDraft.yaml = yamlInput;
 }
 
-// Save & validate YAML (also accepts a pasted share link).
+/** 儲存並解析 — also the import path for a pasted share link. */
 async function save() {
     try {
         const token = parseShareToken(yamlInput);
         const source = token ? await decodeShareToken(token) : yamlInput;
         const parsed = validateYaml(source);
-        // Canonicalize on save: re-serialize so the stored (and re-displayed)
-        // YAML always has a consistent key order and is stripped of runtime ids.
+        // Store what was parsed, not what was typed, so the editor shows the
+        // canonical form from here on.
         const tidied = serializeToYaml(parsed);
         backupCurrentYaml();
         localStorage.setItem(USER_YAML_KEY, tidied);
@@ -117,7 +112,7 @@ async function save() {
     }
 }
 
-// zh-TW timestamp for the backup list, e.g. "06/11(四) 14:30".
+/** "06/11(四) 14:30" */
 function formatBackupTime(savedAt: string): string {
     const date = new Date(savedAt);
     if (isNaN(date.getTime())) return savedAt;
@@ -128,10 +123,9 @@ function formatBackupTime(savedAt: string): string {
 
 let confirmingBackupSavedAt = $state<string | null>(null);
 
-// Restore an auto-backup. Validation runs before anything else so a failed
-// restore never touches the backup ring; the snapshot of the current YAML is
-// taken right before the overwrite. The backup content is read out first, or
-// a full ring could evict the very entry being restored.
+// Order matters twice here: the backup is read out before anything is written,
+// or a full ring could evict the very entry being restored, and validation runs
+// before the pre-restore snapshot, so a failed restore leaves the ring untouched.
 async function executeRestore(savedAt: string) {
     confirmingBackupSavedAt = null;
     const yaml = getYamlBackup(savedAt);
@@ -143,8 +137,8 @@ async function executeRestore(savedAt: string) {
     try {
         validateYaml(yaml);
     } catch (err) {
-        // A backup saved under older, looser validation rules can fail here.
-        // Load it into the editor so the exact error can guide a manual fix.
+        // A backup taken under looser validation rules can fail today. Put it in
+        // the editor so the error message can guide a manual fix.
         console.error("Backup YAML validation failed:", err);
         yamlInput = yaml;
         settingsDraft.yaml = yaml;
@@ -164,7 +158,6 @@ async function executeRestore(savedAt: string) {
 
 let confirmingReset = $state(false);
 
-// Reset to the project default itinerary.
 async function handleReset() {
     confirmingReset = false;
     backupCurrentYaml();
@@ -217,13 +210,12 @@ function discardDraft() {
 </div>
 
 <div class="flex flex-col gap-2.5 text-xs">
-    <!-- YAML Editor Textarea -->
     <div class="flex flex-col gap-1.5">
         <div class="flex justify-between items-center">
             <label for="yaml-editor" class="font-bold text-text-primary">行程資料 (YAML)</label>
-            <!-- 44px hot zones. Width grows in-flow (no -mx) so adjacent
-                 zones can't overlap; -mb is capped at the 6px gap so the
-                 zones stop at the textarea below (pt-1.5 re-centers text). -->
+            <!-- 44px hot zones grown in-flow (no -mx), so adjacent ones cannot
+                 overlap; the -mb is capped at the 6px gap so they stop short of
+                 the textarea. -->
             <div class="flex items-center gap-2.5">
                 <button
                     onclick={selectAll}
@@ -257,8 +249,6 @@ function discardDraft() {
             class="w-full h-[45dvh] min-h-[240px] bg-well-deep border border-card-border rounded-xl p-3 text-[11px] text-text-primary font-mono outline-none focus:border-accent resize-none overflow-y-auto overscroll-contain"
         ></textarea>
     </div>
-
-    <!-- Validation Error Message -->
     {#if validationError}
         <div class="flex items-start gap-1.5 text-[10px] text-danger bg-danger/10 border border-danger/20 p-2.5 rounded-lg font-mono">
             <TriangleAlert size={12} class="shrink-0 mt-px" aria-hidden="true" />
@@ -298,7 +288,6 @@ function discardDraft() {
         </ul>
     </div>
 
-    <!-- Auto-backup restore list: snapshots taken before each destructive overwrite -->
     <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint">
         <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
             <History size={12} class="shrink-0 text-accent" aria-hidden="true" />還原備份
@@ -337,9 +326,8 @@ function discardDraft() {
         {/if}
     </div>
 
-    <!-- File export: data leaves the device — the transfer link moves the trip
-         (incl. expenses) between your own devices, the YAML file is a backup
-         against localStorage loss. 分享給同行者 lives on the overview hero. -->
+    <!-- Both of these carry expenses: they are for the trip's owner. Sharing with
+         other people is the overview hero's 分享行程, which strips them. -->
     <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint">
         <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
             <Download size={12} class="shrink-0 text-accent" aria-hidden="true" />匯出資料

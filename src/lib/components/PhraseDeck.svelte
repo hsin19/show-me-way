@@ -23,8 +23,8 @@ const CATEGORY_LABELS: Record<PhraseCategory, string> = {
 const CATEGORY_ORDER = Object.keys(CATEGORY_LABELS) as PhraseCategory[];
 
 let phraseFilter = $state<PhraseCategory | "all">("all");
-// Chips only list categories present in the deck; if the deck changes and the
-// selected category disappears, fall back to 全部 instead of an empty list.
+// A category the current deck has nothing in would filter to an empty list, so
+// it is neither offered nor kept selected.
 let availableCats = $derived(CATEGORY_ORDER.filter(cat => phrases.some(p => p.cat === cat)));
 let filterChips = $derived<(PhraseCategory | "all")[]>(["all", ...availableCats]);
 let activeFilter = $derived(
@@ -35,13 +35,11 @@ let filteredPhrases = $derived(
 );
 </script>
 
-<!-- Survival phrase deck (tap a card to copy); hosted in the 常用語 ToolSheet. -->
 {#if availableCats.length > 0}
-    <!-- Same treatment as TabPager's chip header, so the two rows behave alike:
-         the shared edgeFade attachment, and py-1.5 inside the scrollport for the
-         focus ring (a horizontal scrollport clips vertically too — see
-         TabPager.svelte). The negative top margin plus the halved bottom one keep
-         that padding from moving anything. Opt out of the TabPager swipe gesture. -->
+    <!-- The padding is room for the focus ring inside the scrollport, not spacing
+         — see TabPager for why a horizontal scrollport clips vertically. The
+         margins keep it from moving anything, and `data-swipe-ignore` hands
+         horizontal drags to this row instead of the pager. -->
     <div
         class="-mt-1.5 py-1.5 mb-1.5 overflow-x-auto no-scrollbar edge-fade"
         data-swipe-ignore

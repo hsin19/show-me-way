@@ -6,11 +6,11 @@ import TabPager from "./TabPager.svelte";
 type ToolTabId = "prep" | "ledger" | "phrases" | "settings" | "prefs";
 
 interface Props {
-    /** Selected sub-tab; App owns it so overview cards / error CTA can deep-link. */
+    /** Bindable — App owns it, so the overview cards and the load-error CTA can deep-link. */
     tab: ToolTabId;
-    /** prep/ledger need a loaded trip; false (YAML load error) leaves 行程管理 and App 設定. */
+    /** False on a YAML load error, which leaves only 行程管理 and App 設定 available. */
     hasTrip: boolean;
-    /** Hide the 常用語 chip when the trip language has no built-in phrase deck. */
+    /** False hides 常用語: the trip's language has no built-in deck. */
     hasPhrases: boolean;
     prep: Snippet;
     ledger: Snippet;
@@ -37,18 +37,14 @@ let chips = $derived((["prep", "ledger", "phrases", "settings", "prefs"] as cons
     return id !== "phrases" || hasPhrases;
 }));
 
-// If the selected sub-tab becomes unavailable (e.g. the YAML failed to load),
-// fall back instead of rendering nothing.
+// `tab` can still name a page that just became unavailable — fall back rather
+// than render nothing.
 let activeTabId = $derived(chips.includes(tab) ? tab : (hasTrip ? "prep" : "settings"));
 </script>
 
-<!-- 工具 tab: sub-pages behind the shared chip header. Paging (swipe / wheel / slide
-     transition) is the shared TabPager — same interaction model as the
-     itinerary strip. -->
 <TabPager keys={chips} bind:current={tab}>
-    <!-- `active` from TabPager is `key === current`, but `tab` can point at a page
-         that is no longer available; activeTabId is the corrected value, so the
-         highlight follows it rather than the passed flag. -->
+    <!-- The highlight follows `activeTabId`, not TabPager's `active`: that is
+         `key === current`, and `current` may be the stale page corrected above. -->
     {#snippet chip(id, select)}
         <button
             aria-pressed={activeTabId === id}

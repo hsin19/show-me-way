@@ -7,9 +7,7 @@ import {
 } from "../diff";
 
 interface Props {
-    /** Itinerary YAML before the proposed edit. */
     base: string;
-    /** Itinerary YAML the model proposed. */
     proposed: string;
 }
 
@@ -18,8 +16,8 @@ let { base, proposed }: Props = $props();
 let lines = $derived(diffLines(base, proposed));
 let stats = $derived(diffStats(lines));
 
-// First line index of each change "hunk" (a run of added/removed lines), used
-// as the jump targets for the prev/next buttons.
+// One jump target per run of changed lines, so prev/next steps between edits
+// rather than between lines.
 let hunkStarts = $derived.by(() => {
     const starts: number[] = [];
     let inHunk = false;
@@ -32,12 +30,12 @@ let hunkStarts = $derived.by(() => {
 });
 
 let scrollEl = $state<HTMLDivElement>();
-// Per-line element refs, so a jump can scroll the hunk to the container's center
-// without moving the outer chat scroll (offsetTop is relative to scrollEl).
+// Element refs rather than `scrollIntoView`: `offsetTop` is relative to
+// `scrollEl`, so a jump moves this container and leaves the chat thread beneath
+// it where it was.
 let lineEls: HTMLElement[] = [];
 let current = $state(-1);
 
-// Cycle to the next/previous hunk and center it in the scroll container.
 function jump(dir: 1 | -1) {
     const n = hunkStarts.length;
     if (n === 0) return;

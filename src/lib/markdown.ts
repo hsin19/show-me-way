@@ -1,21 +1,17 @@
 /**
- * A deliberately small inline-Markdown parser for itinerary prose (an event's
- * `desc` / `bullets`, an alternative's `note`, a checklist item's `text`).
+ * Inline Markdown for itinerary prose: `[label](href)`, `**strong**`, `*em*`,
+ * `***both***`, `` `code` ``, a `\` escape for their delimiters — and nothing
+ * else. No block level (the field is already one line of a YAML list) and no raw
+ * HTML, ever.
  *
- * Supported, and nothing else: `[label](href)`, `**strong**`, `*em*`,
- * `***both***`, `` `code` ``, and a `\` escape for any of their delimiters.
- * There is no block level — headings, lists and tables have no place in a
- * field that is already one line of a YAML list — and **no raw HTML**, ever.
- *
- * It returns a node tree rather than an HTML string because share links import
- * *other people's* YAML: rendering someone else's prose through `{@html}` would
+ * The output is a node tree rather than an HTML string because share links import
+ * *other people's* YAML: rendering a stranger's prose through `{@html}` would
  * hand them script execution on the importer's device. `RichText.svelte` walks
- * this tree with ordinary interpolation, so there is no escaping step to get
- * wrong. `sanitizeHref` closes the other half of that hole — a `javascript:`
- * URL in a shared itinerary must never become a live link.
+ * the tree with ordinary interpolation, so there is no escaping step to get
+ * wrong, and `sanitizeHref` closes the other half of the hole.
  *
- * Bare URLs are NOT auto-linked. Write `[官方售票頁](https://…)` and the label
- * is what the reader sees; a URL typed on its own stays plain text.
+ * Bare URLs are deliberately not auto-linked — a URL makes a poor link label, so
+ * authors write `[官方售票頁](https://…)`.
  */
 
 export type InlineNode =
@@ -40,19 +36,19 @@ const PROSE_SCHEMES = ["http", "https", "mailto"];
 
 /**
  * Schemes an author-labeled chip (`links[].url`, `mapLink`) may point at. The
- * extra four hand the target to the phone rather than opening a page, which is
- * exactly what a travel itinerary wants — a restaurant's number, a meeting
- * point's coordinates. Deep links into specific apps (`line:`, `kakaomap:`)
- * are NOT here: add one only when a trip actually needs it, so the list stays
- * an allowlist and cannot rot into "everything except the bad ones".
+ * extra three hand the target to the phone instead of opening a page, which is
+ * what an itinerary wants — a restaurant's number, a meeting point's coordinates.
+ * App deep links (`line:`, `kakaomap:`) are absent on purpose: add one when a
+ * trip needs it, so this stays an allowlist rather than rotting into "everything
+ * except the bad ones".
  */
 const CHIP_SCHEMES = [...PROSE_SCHEMES, "tel", "sms", "geo"];
 
 /**
- * True for the one schemeless form worth reading as `https://…`: a dotted host
- * with an optional numeric port. The host is checked label by label rather
- * than by one regex so the rules stay legible — in particular a purely numeric
- * last label means this is a number (`56.23`), not a destination.
+ * The one schemeless form worth reading as `https://…`: a dotted host with an
+ * optional numeric port. Checked label by label rather than by one regex so the
+ * rules stay legible — notably, a purely numeric last label means this is a
+ * number (`56.23`), not a destination.
  */
 function isBareDomain(target: string): boolean {
     const authority = target.split(/[/?#]/, 1)[0];
@@ -84,54 +80,43 @@ function sanitize(raw: unknown, allowed: readonly string[]): string | null {
 }
 
 /**
- * Normalizes a Markdown link's target, or returns null to leave the whole
- * `[…](…)` as literal text. Only `http(s)` / `mailto` and bare domains
- * survive; anything carrying whitespace or control characters is rejected
- * outright, since in an href those only show up in attempts to smuggle a
- * scheme past the check.
- *
- * A root-relative path (`/docs/x.html`), a fragment (`#a.b`) or a query
- * (`?q=1`) is not a destination in someone else's itinerary either — there is
- * nothing on this origin to point at — so those stay literal text too.
+ * A safe absolute URL for a link in prose, or null — meaning the caller leaves
+ * the whole `[…](…)` as literal text. Only `http(s)`, `mailto` and bare domains
+ * survive. Anything with whitespace or control characters is rejected outright:
+ * in an href those only appear in attempts to smuggle a scheme past the check.
+ * A root-relative path, fragment or query is not a destination in someone else's
+ * itinerary either — there is nothing on this origin to point at.
  */
 export function sanitizeHref(raw: unknown): string | null {
     return sanitize(raw, PROSE_SCHEMES);
 }
 
 /**
- * The same guard for an href the author labeled themselves — `links[].url` and
- * `mapLink` — where `tel:` / `sms:` / `geo:` are useful and were accepted long
- * before any of this existed. Prose stays on the narrower list: a sentence in
- * an imported trip has no business dialing anything.
+ * The same guard for an href the author labeled themselves (`links[].url`,
+ * `mapLink`), which may also be `tel:` / `sms:` / `geo:`. Prose stays on the
+ * narrower list: a sentence in an imported trip has no business dialing anything.
  */
 export function sanitizeLinkHref(raw: unknown): string | null {
     return sanitize(raw, CHIP_SCHEMES);
 }
 
-/** True when `c` is absent or whitespace — used for the flanking rule below. */
 function isBlank(c: string | undefined): boolean {
     return c === undefined || /\s/.test(c);
 }
 
 /**
- * Finds where a run of exactly `len` asterisks closes the emphasis opened by
- * the same-length run, or -1.
+ * Emphasis needs some flanking rule, or `3 * 4 * 5` turns italic — but
+ * CommonMark's leans on word boundaries Chinese does not have. What survives
+ * translation is "no whitespace just inside either delimiter": `**5"×9"×1" 以內**`
+ * keeps working with no spaces anywhere, spaced-out arithmetic stays arithmetic.
  *
- * Emphasis needs some flanking rule or `3 * 4 * 5` turns italic, but
- * CommonMark's full version leans on word boundaries that Chinese does not
- * have. The rule here is the part that survives translation: no whitespace
- * just inside either delimiter. That keeps `**5"×9"×1" 以內**` working with no
- * spaces anywhere, while leaving spaced-out arithmetic alone.
+ * Asterisk runs are measured and stepped over whole, which is what keeps a `**`
+ * inside a `*…*` from half-matching, and what leaves `卡號 ****1234` its
+ * asterisks instead of eating them into an empty `<strong>` (hence `i > from`
+ * too — a closer at the opening delimiter is an empty span, not a match).
  *
- * Runs are measured whole and stepped over whole, which is what the two other
- * rules depend on: a `**` inside a `*…*` cannot half-match (its second star
- * would otherwise close the italic and strand the rest), and `卡號 ****1234`
- * finds no closer at all rather than eating its own asterisks into an empty
- * `<strong>` — hence also `i > from`, since a closer at the opening delimiter
- * itself is an empty span, not a match.
- *
- * Code spans and link targets are stepped over for the same reason they win in
- * `parse`: their contents are not markup. Without that, `` **注意 `a**b` 結束**``
+ * Code spans and link targets are skipped for the same reason they win in
+ * `parse`: their contents are not markup. Otherwise `` **注意 `a**b` 結束** ``
  * would close the bold inside the code span, and a `*` in a URL would tear the
  * anchor in half.
  */
@@ -168,10 +153,9 @@ function findEmphasisCloser(src: string, from: number, len: number): number {
 }
 
 /**
- * Drops the `\` from every escaped delimiter. A link's label gets this for
- * free by going through `parse`; its href does not, and leaving the slashes in
- * sends `[x](https://a.com/p\(1\))` — the one form the escape exists for — to
- * a different URL than it reads.
+ * A link's label gets its escapes dropped for free by going through `parse`; its
+ * href does not, and leaving the slashes in sends `[x](https://a.com/p\(1\))` —
+ * the one form the escape exists for — somewhere other than it reads.
  */
 function unescapeDelimiters(src: string): string {
     let out = "";
@@ -282,16 +266,10 @@ function parse(src: string, allowLink: boolean): InlineNode[] {
 }
 
 /**
- * Parses one line of prose. Text with no markup comes back as a single text
- * node; empty text as an empty array.
- *
- * Undefined is in the signature because the fields this backs are optional at
- * the gate; the `typeof` is a runtime guard on top, because those fields come
- * from user YAML and an event that omits `desc` used to render an empty
- * paragraph. Throwing here instead would take out the whole day panel, so
- * anything that is not a non-empty string degrades to nothing at all.
- * `normalizeTripData` is what tells the author their `desc: 123` is wrong;
- * this only keeps the app on its feet.
+ * Parse one line of prose. Never throws: the fields it backs are optional at the
+ * gate and come from hand-written YAML, and taking the whole day panel down over
+ * a `desc: 123` is not worth it — anything that is not a non-empty string
+ * degrades to `[]`. `normalizeTripData` is what tells the author it was wrong.
  */
 export function parseInline(text: string | undefined): InlineNode[] {
     return typeof text === "string" && text ? parse(text, true) : [];

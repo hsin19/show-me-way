@@ -442,8 +442,6 @@ describe("validateYaml — 行內 Markdown 欄位的形狀", () => {
 });
 
 describe("validateYaml — links 形狀", () => {
-    // `links` had no shape check at all until the hrefs started being
-    // sanitized: a missing `url` reached the renderer as `undefined`.
     it("接受完整的連結清單", () => {
         const data = validateYaml(timelineYaml(`${bookedEvent}\n        links:\n          - label: '官網'\n            url: 'https://example.com'`));
         expect(data.days[0].timeline[0].links).toEqual([{ label: "官網", url: "https://example.com" }]);

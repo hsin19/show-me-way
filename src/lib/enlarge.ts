@@ -1,9 +1,8 @@
-// Shared shape for the fullscreen enlarged-card overlay (a single app-level
-// instance in App.svelte): a place's local-language name (and optional address)
-// shown to a driver / clerk, or a reservation confirmation code shown at a
-// check-in counter. Components that open the overlay emit one of these.
-//   - place.prompt overrides the default driver/clerk heading (HotelCards passes
-//     the trip language's localized "please take me here" line).
+// What a component emits upward to open the fullscreen card: a place to show a
+// driver, or a code to show a counter clerk. Components never render a layer of
+// their own — see `EnlargedCardOverlay`, the single app-level instance.
+// `place.prompt` overrides the default heading, which is how HotelCards supplies
+// the trip language's own "please take me here" line.
 export type EnlargedCard =
     | { kind: "place"; title: string; localName: string; address?: string; prompt?: string; }
     | { kind: "confirmation"; title: string; code: string; name?: string; note?: string; };

@@ -57,7 +57,6 @@
     }
 }
 
-/* Base Styles */
 :root {
     --safe-bottom: env(safe-area-inset-bottom, 0px);
     --safe-top: env(safe-area-inset-top, 0px);
@@ -148,7 +147,6 @@ body {
     box-shadow: var(--panel-shadow);
 }
 
-/* Custom Scrollbars */
 ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -193,7 +191,6 @@ body {
     mask-image: var(--edge-fade-mask);
 }
 
-/* Hide scrollbar utility */
 .no-scrollbar::-webkit-scrollbar {
     display: none;
 }
@@ -215,14 +212,13 @@ body {
     }
 }
 
-/* Visible keyboard focus for interactive elements (low specificity so components can override) */
+/* Low specificity on purpose, so a component can override it. */
 :where(a, button, input, select, textarea, [role="button"], [role="checkbox"], [tabindex]):focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
     border-radius: 6px;
 }
 
-/* Respect users who prefer reduced motion: disable non-essential animations/transitions */
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

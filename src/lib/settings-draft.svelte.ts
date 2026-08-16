@@ -1,6 +1,6 @@
-// In-memory draft for the 行程管理 YAML editor. The editor is a page inside
-// the 工具 tab (not a modal), so navigating away unmounts it — this
-// module-level rune preserves unsaved edits for the session. `null` means no
-// draft (the editor shows the persisted YAML); cleared on save / restore /
-// reset, and by App when the active trip profile changes.
+// The YAML editor is a page, not a modal, so leaving the tab unmounts it and
+// takes any unsaved edit with it. This rune lives outside the component so the
+// draft survives. `null` means no draft — the editor falls back to the persisted
+// YAML — and it MUST be cleared whenever the active trip changes, or a draft from
+// the old trip gets saved over the new one.
 export const settingsDraft = $state<{ yaml: string | null; }>({ yaml: null });

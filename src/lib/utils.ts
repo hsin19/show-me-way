@@ -1,8 +1,7 @@
 /**
- * Parse a YYYY-MM-DD string as a date in the LOCAL timezone.
- * `new Date("2026-06-11")` parses as UTC midnight, which can shift the day
- * (and weekday) in timezones west of UTC. This builds the date locally instead.
- * Falls back to native Date for full ISO datetime strings (with time component).
+ * Parse a plain YYYY-MM-DD as a LOCAL date; anything with a time component goes
+ * to native `Date`. Use this, never `new Date(str)`: that parses a plain date as
+ * UTC midnight, landing on the previous day (and weekday) west of UTC.
  */
 export function parseLocalDate(dateStr: string): Date {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
@@ -14,11 +13,9 @@ export function parseLocalDate(dateStr: string): Date {
 }
 
 /**
- * Split an ISO date string (YYYY-MM-DD) into the two pieces the UI sizes
- * separately — the day chips and the overview list set the date large and the
- * weekday small, so they need the parts, not a joined string to pick apart
- * again. Example: "2026-06-11" -> { mmdd: "06/11", weekday: "四" }.
- * Invalid input keeps the raw string as `mmdd` with no weekday.
+ * The date in the two pieces the chips and the overview list size separately:
+ * "2026-06-11" -> { mmdd: "06/11", weekday: "四" }. Unparseable input comes back
+ * as `mmdd` verbatim with no weekday.
  */
 export function splitDayDate(isoDateStr: string): { mmdd: string; weekday: string; } {
     const date = parseLocalDate(isoDateStr);
@@ -29,19 +26,13 @@ export function splitDayDate(isoDateStr: string): { mmdd: string; weekday: strin
     return { mmdd: `${mm}/${dd}`, weekday: weekdays[date.getDay()] };
 }
 
-/**
- * Format an ISO date string (YYYY-MM-DD) into a localized Chinese display format: MM/DD(W)
- * Example: "2026-06-11" -> "06/11(四)"
- */
+/** "2026-06-11" -> "06/11(四)" */
 export function formatDayDate(isoDateStr: string): string {
     const { mmdd, weekday } = splitDayDate(isoDateStr);
     return weekday ? `${mmdd}(${weekday})` : mmdd;
 }
 
-/**
- * Format a Date as YYYY-MM-DD using its LOCAL calendar date. Counterpart of
- * `parseLocalDate` — `toISOString()` would shift the day across the UTC line.
- */
+/** Counterpart of `parseLocalDate`. Use this, never `toISOString()`, which shifts the day across the UTC line. */
 export function toLocalIsoDate(date: Date): string {
     const yyyy = date.getFullYear();
     const mm = String(date.getMonth() + 1).padStart(2, "0");
@@ -49,9 +40,6 @@ export function toLocalIsoDate(date: Date): string {
     return `${yyyy}-${mm}-${dd}`;
 }
 
-/**
- * Get current local date in YYYY-MM-DD format
- */
 export function getTodayIsoString(): string {
     return toLocalIsoDate(new Date());
 }
@@ -62,21 +50,15 @@ export interface CountdownTrip {
     departure: string; // ISO date-time
 }
 
-/**
- * Compute the home-screen countdown label for a trip relative to `now`.
- * Pure function (no Date.now side effects) so it can be unit-tested.
- */
+/** The hero's phase label: 進行中 / 已結束, or a countdown to the flight before departure. */
 export function getCountdownText(trip: CountdownTrip, now: Date = new Date()): string {
     const departureDate = new Date(trip.departure);
     const startDate = parseLocalDate(trip.start);
     const endDate = new Date(trip.end + "T23:59:59");
 
-    // During the trip
     if (now >= startDate && now <= endDate) return "✈️ 冒險進行中！";
-    // After the trip
     if (now > endDate) return "🗺️ 旅程圓滿結束";
 
-    // Before the trip: count down to the flight
     const diff = departureDate.getTime() - now.getTime();
     if (diff <= 0) return "✈️ 飛機已起飛！";
 
@@ -89,13 +71,13 @@ export function getCountdownText(trip: CountdownTrip, now: Date = new Date()): s
 }
 
 /**
- * Extract the start time from a free-form `event.time` string as minutes
- * since local midnight. Matches a leading H:MM / HH:MM after trimming leading
- * whitespace — "14:00 - 17:25" → 840, "22:00 之後" → 1320. Minutes must be
- * 00-59; hours may exceed 23 ("25:30" → 1530, the after-midnight timetable
- * notation), which sorts after every same-day time and therefore never becomes
- * "current" before the day rolls over. Returns null for anything unparseable
- * ("整天", "", "14:75") — the event is then treated as having no time.
+ * Start time of a free-form `event.time` as minutes since local midnight:
+ * "14:00 - 17:25" → 840, "22:00 之後" → 1320. Null for anything unparseable
+ * ("整天", "", "14:75"), which callers treat as an event with no time.
+ *
+ * Hours past 23 are accepted ("25:30" → 1530, the after-midnight timetable
+ * notation) and sort after every same-day time, so such an event never turns
+ * "current" before the day rolls over.
  */
 export function parseEventStartMinutes(time: string): number | null {
     const match = /^(\d{1,2}):(\d{2})/.exec(time.trimStart());
@@ -106,15 +88,13 @@ export function parseEventStartMinutes(time: string): number | null {
 }
 
 /**
- * Index (into the display-order event list) of the "current" event: the LAST
- * event whose parsed start time is <= `now`'s local time of day. Events
- * without a parseable time are skipped and can never be current. Times are
- * NOT re-sorted — for out-of-order data the last already-started entry in
- * display (YAML) order wins. Returns null when no timed event has started
- * yet, or when there are no timed events at all.
+ * Index of the "current" event: the last one already started at `now`'s local
+ * time of day. Untimed events can never be current, and null means nothing has
+ * started yet. Display (YAML) order decides — the list is not re-sorted — so with
+ * out-of-order times the last started entry wins.
  *
- * Date-agnostic: callers must check `dayDate === toLocalIsoDate(now)` before
- * treating the result as "today's in-progress event".
+ * Date-agnostic: check `dayDate === toLocalIsoDate(now)` yourself before treating
+ * the result as today's in-progress event.
  */
 export function findCurrentEventIndex(
     events: ReadonlyArray<{ time: string; }>,
@@ -132,18 +112,13 @@ export function findCurrentEventIndex(
 export type EventTimeStatus = "past" | "current" | "upcoming" | "no-time";
 
 /**
- * Classify each event of one day for timeline highlighting. Returns an array
- * parallel to `events`, or null when `dayDate` is not `now`'s local date —
- * meaning "no time styling for this day", so every day panel shares one code
- * path.
+ * Time styling for one day's timeline, parallel to `events`. Null means "style
+ * nothing" — `dayDate` is not today — so every day panel can take one code path.
  *
- * Within today: the event at `findCurrentEventIndex` is "current"; timed
- * events BEFORE it in display order are "past", timed events after it are
- * "upcoming" (display-order semantics — everything above the current card
- * reads as done, even if literal times are out of order); unparseable times
- * are always "no-time" (never dimmed). When nothing has started yet every
- * timed event is "upcoming". The last started event stays "current" until
- * midnight — there is no reliable end time to clear it.
+ * Position, not the clock, decides past vs. upcoming: everything above the
+ * current card reads as done even when the literal times are out of order.
+ * Untimed events are never dimmed, and the current event stays current until
+ * midnight, since an event has no end time to clear it.
  */
 export function classifyTimelineEvents(
     events: ReadonlyArray<{ time: string; }>,
@@ -177,11 +152,10 @@ function formatEventMinutes(minutes: number): string {
 }
 
 /**
- * The event to feature in the header capsule for `dayDate`. Returns null when
- * `dayDate` is not `now`'s local date or the day has no timed events (callers
- * fall back to `getCountdownText`). Otherwise: the first timed event after
- * the current one in display order (kind "upcoming"), or the current event
- * itself when nothing further is scheduled (kind "current").
+ * The event to feature in the header capsule: the next unresolved one, or the
+ * one in progress when nothing further is scheduled. Null when `dayDate` is not
+ * today or the day has nothing to announce — callers fall back to
+ * `getCountdownText`.
  */
 export function getNextEventInfo(
     events: ReadonlyArray<{ time: string; title: string; status?: "done" | "skipped"; }>,
@@ -200,8 +174,8 @@ export function getNextEventInfo(
             kind: "upcoming",
             title: events[i].title,
             time: formatEventMinutes(start),
-            // Anything after the current event must start later than now
-            // (otherwise it would BE the current one); clamp stays defensive.
+            // The clamp is belt-and-braces: an event after the current one must
+            // start later than now, or it would be the current one.
             minutesUntil: Math.max(0, start - nowMinutes),
         };
     }
@@ -215,17 +189,13 @@ export function getNextEventInfo(
     };
 }
 
-/** Render NextEventInfo as the header capsule label (zh-TW). */
 export function formatNextEventLabel(info: NextEventInfo): string {
     return info.kind === "upcoming"
         ? `接下來 ${info.time} ${info.title}`
         : `進行中：${info.title}`;
 }
 
-/**
- * Format start and end date into MM/DD display range
- * Example: start: "2026-06-11", end: "2026-06-16" -> "2026.06.11 – 06.16"
- */
+/** ("2026-06-11", "2026-06-16") -> "2026.06.11 – 06.16" */
 export function formatDateRange(startIso: string, endIso: string): string {
     const startDate = parseLocalDate(startIso);
     const endDate = parseLocalDate(endIso);
@@ -242,11 +212,10 @@ export function formatDateRange(startIso: string, endIso: string): string {
 }
 
 /**
- * Is `date` a night spent at this hotel? Check-in day yes, checkout day NO
- * (`date < checkOut`) — on a changeover day the checkout hotel and the next
- * check-in hotel share the date, and the night belongs to the new one. Single
- * source for the 回飯店 node, the 今晚住宿 report line, and HotelCards'
- * "current stay" badge, so all three agree (no double-highlight on move days).
+ * Is `date` a night spent at this hotel? Check-in day yes, checkout day no — the
+ * two hotels share a changeover date and the night belongs to the new one, which
+ * is what stops both from highlighting. Every 今晚住宿 answer in the app comes
+ * from here so they cannot disagree.
  */
 export function isOvernightStay(
     hotel: { checkIn: string; checkOut: string; },
@@ -260,12 +229,7 @@ export function isCheckoutDay(hotel: { checkOut: string; }, date: string): boole
     return date === hotel.checkOut;
 }
 
-/**
- * Compose the plain-text 報平安 report for one day: trip name / Day N / date /
- * title, tonight's hotel with its address, and a one-line-per-event timeline
- * summary. Plain text so it pastes cleanly into LINE etc. Tonight's hotel uses
- * `isOvernightStay` — the checkout day belongs to the next stay (or to none).
- */
+/** The 報平安 message for one day. Plain text, so it pastes cleanly into LINE. */
 export function buildDayReport(
     dayData: {
         day: number;
@@ -289,7 +253,8 @@ export function buildDayReport(
     } else {
         for (const event of dayData.timeline) {
             const line = `・${[event.time, event.title].filter(Boolean).join(" ")}`;
-            // Check-in marks travel with the report so family sees real progress.
+            // Check-in marks are included: the point of the report is real progress,
+            // not the plan.
             lines.push(event.status === "done" ? `${line} ✓` : event.status === "skipped" ? `${line}（略過）` : line);
         }
     }
@@ -297,11 +262,11 @@ export function buildDayReport(
 }
 
 /**
- * Build a map-search URL for a place's local-language name. Which map service
- * to use is a market/regulatory decision (e.g. Korea restricts Google Maps data,
- * so Naver dominates), not a language one — so the caller passes the trip's
- * explicit `mapProvider`. Unknown/undefined falls back to Google Maps, which
- * works everywhere.
+ * Search URL for a place's local-language name. The provider is the trip's
+ * explicit `mapProvider` because it is a market/regulatory fact — Korea restricts
+ * Google Maps data, so Naver dominates there — not something derivable from the
+ * language. An unknown or absent one falls back to Google Maps, which works
+ * everywhere.
  */
 export function mapSearch(query: string, provider?: string): string {
     const q = encodeURIComponent(query);
@@ -312,10 +277,9 @@ export function mapSearch(query: string, provider?: string): string {
 }
 
 /**
- * Return a new array with `item` reinserted at `index`, clamped to the current
- * bounds. Used by the delete-undo handlers: the list may have changed between
- * the delete and the undo (another item removed), so a stale index must never
- * land out of range or throw. A negative index clamps to the front.
+ * Reinsert `item` at `index`, clamped to the current bounds. For delete-undo: the
+ * list can have changed while the toast was up, so the remembered index must be
+ * allowed to be stale rather than throw.
  */
 export function insertAtClamped<T>(arr: T[], index: number, item: T): T[] {
     const next = [...arr];
@@ -324,19 +288,16 @@ export function insertAtClamped<T>(arr: T[], index: number, item: T): T[] {
 }
 
 /**
- * Does the user prefer reduced motion? app.css's `prefers-reduced-motion` rule
- * only reaches CSS animations/transitions, so Svelte's JS transitions and
- * programmatic smooth scrolling have to ask here. Read at the point of use, not
- * once at boot, so toggling the OS setting takes effect on the next event.
+ * Where Svelte's JS transitions and programmatic smooth scrolling ask about
+ * reduced motion — app.css's media query only reaches CSS animations. Call it at
+ * the point of use, not once at boot, so flipping the OS setting takes effect on
+ * the next interaction.
  */
 export function prefersReducedMotion(): boolean {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-/**
- * Format a byte count into a human-readable string (B, KB, MB).
- */
 export function formatBytes(bytes: number): string {
     if (bytes <= 0) return "0 B";
     if (bytes < 1024) return `${bytes} B`;

@@ -1,7 +1,6 @@
-// Daily weather via Open-Meteo (https://open-meteo.com, key-less, CC BY 4.0 —
-// the UI must show an attribution link wherever forecasts are displayed).
-// Mirrors the exchange-rate pattern in `lib/exchange.ts`: localStorage cache,
-// serve stale data first, refresh in the background, never surface errors.
+// Daily weather from Open-Meteo: key-less, but CC BY 4.0, so any screen showing a
+// forecast owes the attribution link. Same shape as `lib/exchange.ts` — serve the
+// cache first, refresh behind it, never surface an error to the traveler.
 
 import {
     cachedKeysWithPrefix,
@@ -44,11 +43,7 @@ export function resetWeatherCacheForTests(): void {
     clearStorageCacheMemory();
 }
 
-/**
- * localStorage keys this module currently occupies, so the storage panel in
- * App 設定 can size them. The key shapes stay private here; callers only ever
- * see the keys that happen to exist right now.
- */
+/** The keys this cache occupies right now, so App 設定 can size it without knowing their shape. */
 export function weatherCacheKeys(): string[] {
     // Deduped: the legacy prefix is also a prefix of the v1 keys, so every v1
     // entry matches twice and the caller would double-count it.
@@ -62,9 +57,9 @@ export function weatherCacheKeys(): string[] {
 }
 
 /**
- * Drop every cached geocode lookup and forecast, and return how many keys went.
- * Safe at any time: the next `loadDailyWeather` just refetches. The in-memory
- * negative-lookup cache goes too, so a city that failed to geocode is retried.
+ * Drop every cached lookup and forecast; returns how many keys went. Safe at any
+ * time — the next load refetches — and it also forgets the failed geocodes, so a
+ * city that would not resolve gets another chance.
  */
 export function clearWeatherCache(): number {
     const keys = weatherCacheKeys();
@@ -120,12 +115,9 @@ function parseCityQuery(city: string): { name: string; countryCode: string | nul
     return { name: city.trim(), countryCode: null };
 }
 
-/**
- * Resolve a city name to coordinates via the Open-Meteo geocoding API.
- * Hits are cached for 30 days; zero-result lookups are remembered in memory
- * for 3 hours, so a typo costs one request per app load plus one per cooldown
- * window. Network errors are never cached.
- */
+// Hits cache for 30 days and misses for 3 hours in memory, so a typo'd city costs
+// one request per app load rather than one per render. Network errors are never
+// cached — those are worth retrying.
 async function geocodeCity(city: string): Promise<GeoPoint | null> {
     const key = `${GEOCODE_CACHE_KEY}_${cityKey(city)}`;
     // Pre-v1 entries ({lat, lon}, no TTL) are unreadable now — clear, don't migrate.
@@ -234,10 +226,10 @@ async function fetchForecast(city: string): Promise<DailyWeatherByDate | null> {
 }
 
 /**
- * Load the daily forecast for a city. Cached data (even expired — the offline
- * fallback while traveling) is delivered synchronously; a background refresh
- * follows when stale, so `onUpdate` may fire 0, 1, or 2 times. `fetchedAt`
- * tells the caller how old the data is (cache timestamp vs. refresh time).
+ * The daily forecast for a city, via `onUpdate` — which fires 0, 1 or 2 times:
+ * once synchronously if anything is cached (expired included, since that is the
+ * offline fallback while traveling), then again after a background refresh.
+ * `fetchedAt` is how the caller tells those apart.
  */
 export function loadDailyWeather(
     city: string,

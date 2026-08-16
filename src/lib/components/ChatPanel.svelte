@@ -25,48 +25,45 @@ import DiffView from "./DiffView.svelte";
 
 interface Props {
     tripData: TripData;
-    /** Apply a full itinerary YAML the chat proposed; returns whether it took. */
+    /** Returns whether the edit actually took; false leaves the card unapplied. */
     onApplyEdit: (yaml: string) => boolean;
-    /** Navigate to App Settings page. */
     onOpenAppSettings?: () => void;
 }
 
 let { tripData, onApplyEdit, onOpenAppSettings }: Props = $props();
 
-// A chat message plus the UI-only edit state for conversational edits. `content`
-// is the text replayed to Gemini as history (the prose / edit summary, never the
-// raw YAML — the current itinerary is re-sent each turn via the system prompt).
+// Only `content` is replayed to Gemini as history — prose and edit summaries,
+// never YAML, since the current itinerary is re-sent in the system prompt. The
+// rest is UI state for the suggestion card.
 interface UiMessage extends ChatMessage {
-    /** Validated full itinerary YAML the model proposed via the update_itinerary tool. */
+    /** Set only once the proposed YAML has passed `validateYaml`. */
     editYaml?: string;
-    /** Itinerary YAML at the time the edit was proposed, for a stable before/after diff. */
+    /** The itinerary as it was when this edit was proposed, so its diff stays stable once another lands. */
     baseYaml?: string;
-    /** Whether the user has already applied this edit. */
     editApplied?: boolean;
-    /** Validation error when the model's proposed edit was not a valid itinerary. */
     editError?: string;
 }
 
-// In-memory only (v1): closing the tab keeps state, a page reload clears it.
+// The conversation lives only as long as the tab is mounted; leaving it is how
+// you clear it.
 let messages = $state<UiMessage[]>([]);
 let input = $state("");
 let isSending = $state(false);
 let errorText = $state<string | null>(null);
 
-// The key persists in localStorage; this mirrors it so the view reacts to
-// save / clear without a reload.
+// Mirrors the stored key as a rune, so saving or clearing it in App 設定 is
+// reflected here without a reload.
 let apiKey = $state<string | null>(loadGeminiApiKey());
 
-// Model selection, fetched per key so it always reflects what that key can
-// actually use. The App 設定 picker runs on the same helper — see
-// `gemini-models.svelte.ts` for why this is not inlined here.
+// The same helper App 設定's picker runs on, so the two cannot disagree about
+// which model is default.
 const modelPicker = createModelPicker(() => apiKey);
 
 let scrollEl = $state<HTMLDivElement>();
 let composerEl = $state<HTMLTextAreaElement>();
 
-// Newlines are allowed, so the composer grows with the text up to ~5 lines and
-// scrolls after that; clearing `input` after a send shrinks it back.
+// Grows with the text up to ~5 lines, then scrolls — Enter inserts a newline
+// here, so a multi-line question has to stay readable while it is typed.
 $effect(() => {
     const el = composerEl;
     if (!el) return;
@@ -93,17 +90,17 @@ async function triggerSend(promptText: string) {
     isSending = true;
     await scrollToBottom();
 
-    // Snapshot the itinerary the model is editing against, so a proposed edit's
-    // before/after diff stays stable even after it (or another edit) is applied.
+    // Snapshotted, not re-read later: this is what the model edits against, and
+    // what its diff must keep being compared to once another edit is applied.
     const baseYaml = buildItineraryContext(tripData);
 
     try {
         const turn = await sendChatMessage(apiKey, modelPicker.activeModel, history, text, baseYaml);
-        // The edit tool's handler: validate the proposed YAML here, then surface
-        // it behind a confirm step. Invalid edits show an inline note instead.
         const next: UiMessage = { role: "model", content: turn.text || turn.edit?.summary || "" };
         if (turn.edit) {
             next.content = turn.text || turn.edit.summary || "我已幫你準備好行程修改，請確認下方的變更。";
+            // Validated here, before an apply is even offered — one of the three
+            // gates between the model and the user's trip.
             try {
                 validateYaml(turn.edit.yaml);
                 next.editYaml = turn.edit.yaml;
@@ -114,7 +111,7 @@ async function triggerSend(promptText: string) {
         }
         messages = [...messages, next];
     } catch (err) {
-        // Keep the user's question in place so they can retry; surface the cause.
+        // The question stays in the thread, so a retry costs nothing to compose.
         errorText = err instanceof Error ? err.message : "發生未知錯誤，請再試一次。";
     } finally {
         isSending = false;
@@ -127,7 +124,7 @@ async function send(e: SubmitEvent) {
     await triggerSend(input);
 }
 
-// Enter is a newline (the composer is a textarea), so desktop keeps a shortcut.
+// Enter inserts a newline, so desktop needs some way to send.
 function onComposerKeydown(e: KeyboardEvent) {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
@@ -140,8 +137,7 @@ async function scrollToBottom() {
     scrollEl?.scrollTo({ top: scrollEl.scrollHeight, behavior: "smooth" });
 }
 
-// Hand the proposed YAML to App, which validates, backs up, and swaps it in.
-// Mark the card as applied only when it actually took.
+// The card only turns 已套用 on App's `true` — it revalidates, and can refuse.
 function applyEdit(message: UiMessage) {
     if (!message.editYaml || message.editApplied) return;
     if (onApplyEdit(message.editYaml)) message.editApplied = true;
@@ -150,7 +146,6 @@ function applyEdit(message: UiMessage) {
 
 <div class="h-full flex flex-col">
     {#if !apiKey}
-        <!-- No key set: direct user to App Settings -->
         <div class="flex-1 overflow-y-auto overscroll-contain flex items-center justify-center p-5">
             <div class="max-w-md w-full panel rounded-2xl p-6 text-center space-y-4">
                 <div class="w-12 h-12 rounded-full bg-accent/15 text-accent flex items-center justify-center mx-auto">
@@ -177,12 +172,10 @@ function applyEdit(message: UiMessage) {
             </div>
         </div>
     {:else if modelPicker.error}
-        <!-- The models call is the only key check there is, and it hits the same
-             host as the chat itself — if it failed, sending cannot work either.
-             So this replaces the whole tab rather than sitting above a composer
-             that would only fail again. 重試 is here because the cause may be a
-             network blip, which would otherwise dead-end on a settings page that
-             has nothing wrong to fix. -->
+        <!-- Blocking, not a banner over a live composer: the models call hits the
+             same host as the chat, so if it failed, sending would fail too. 重試 is
+             offered because the cause may be a network blip, which would otherwise
+             dead-end on a settings page with nothing wrong to fix. -->
         <div role="alert" class="flex-1 overflow-y-auto overscroll-contain flex items-center justify-center p-5">
             <div class="max-w-md w-full panel rounded-2xl p-6 text-center space-y-4">
                 <div class="w-12 h-12 rounded-full bg-danger/15 text-danger flex items-center justify-center mx-auto">
@@ -222,7 +215,6 @@ function applyEdit(message: UiMessage) {
             </div>
         </div>
     {:else}
-        <!-- Header -->
         <div class="shrink-0 px-5 pt-[calc(16px+var(--safe-top))] pb-3 border-b border-line flex items-center justify-between gap-3">
             <h2 class="text-lg font-extrabold text-text-primary tracking-tight flex items-center gap-2 min-w-0">
                 <Sparkles size={20} class="text-accent shrink-0" aria-hidden="true" /><span class="truncate">AI 行程小幫手</span>
@@ -254,8 +246,6 @@ function applyEdit(message: UiMessage) {
                 {/if}
             </div>
         </div>
-
-        <!-- Messages -->
         <div bind:this={scrollEl} class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4">
             <div class="max-w-3xl mx-auto w-full space-y-3">
                 {#if messages.length === 0}
@@ -281,7 +271,6 @@ function applyEdit(message: UiMessage) {
                         </div>
                     </div>
                     {#if message.editError}
-                        <!-- The model proposed an edit, but it failed validation. -->
                         <div class="flex justify-start">
                             <div class="max-w-[85%] flex items-start gap-1.5 text-xs text-danger bg-danger/10 border border-danger/20 p-2.5 rounded-lg">
                                 <TriangleAlert size={14} class="shrink-0 mt-px" aria-hidden="true" />
@@ -289,7 +278,6 @@ function applyEdit(message: UiMessage) {
                             </div>
                         </div>
                     {:else if message.editYaml}
-                        <!-- Conversational edit: confirm before changing the itinerary. -->
                         <div class="flex justify-start">
                             <div class="max-w-[85%] w-full rounded-2xl border border-accent/25 bg-accent/8 p-3 space-y-2.5">
                                 <div class="flex items-center gap-1.5 text-xs font-semibold text-accent">
@@ -330,19 +318,15 @@ function applyEdit(message: UiMessage) {
                 {/if}
             </div>
         </div>
-
-        <!-- Input -->
         <!-- No border-t: the quick prompt chips now lead this block, and a rule
              running straight across them read as a stray line rather than as the
              edge of the composer. -->
         <div class="shrink-0 px-5 pb-4 pt-2">
             <div class="max-w-3xl mx-auto w-full">
-                <!-- Quick prompt chips bar. Same scrolling chip row as TabPager's
-                     header and PhraseDeck's filter: the shared edgeFade attachment,
-                     plus room inside the scrollport for the focus ring (a
-                     horizontal scrollport clips vertically too — see
-                     TabPager.svelte). pb-2 already provides it at the bottom; the
-                     top needs pt-1.5, pulled back by -mt-1.5 so nothing moves. -->
+                <!-- The padding is room for the focus ring inside the scrollport,
+                     not spacing — see TabPager for why a horizontal scrollport
+                     clips vertically. pb-2 covers the bottom; -mt-1.5 pulls the
+                     top's pt-1.5 back so nothing moves. -->
                 <div
                     class="-mt-1.5 pt-1.5 pb-2 overflow-x-auto no-scrollbar edge-fade"
                     data-swipe-ignore

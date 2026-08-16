@@ -22,16 +22,13 @@ import TripOverview from "./TripOverview.svelte";
 interface Props {
     trip: TripData["trip"];
     days: DayItinerary[];
-    /** Single source of truth for the visible day; bound so App's today-sync can drive it. 0 = overview. */
+    /** 0 = the overview panel. Bindable, so App's today-sync can drive it. */
     currentDay: number;
-    /** App's ticking clock (passed to Timeline; also drives "today" derivations and the current-event scroll). */
+    /** App's ticking clock; every reactive "today" derivation here hangs off it. */
     clockNow: Date;
-    /** Checked / total across todo + packing (overview pre-trip progress card). */
     prepDone: number;
     prepTotal: number;
-    /** Expense records (overview post-trip spend summary card). */
     expenses: ExpenseItem[];
-    /** Parked profiles list for quick profile switching from overview hero. */
     profiles?: ProfileInfo[];
     showWeatherAttribution: boolean;
     staleWeatherHours: number | null;
@@ -39,12 +36,10 @@ interface Props {
     onEnlarge: (card: EnlargedCard) => void;
     onSetEventStatus: (id: string, status: "done" | "skipped" | undefined) => void;
     onShareDay: (day: DayItinerary) => void;
-    /** Overview phase-card deep-links into the 工具 tab sub-pages. */
+    /** Deep-links out of the overview's phase card into a 工具 sub-page. */
     onOpenPrepare: () => void;
     onOpenLedger: () => void;
-    /** Share the whole trip from the overview hero card. */
     onShare: () => void;
-    /** Profile switcher callbacks from App.svelte. */
     onSwitchProfile?: (id: string) => void;
     onCreateProfile?: () => void;
     onDeleteProfile?: (id: string) => void;
@@ -73,10 +68,9 @@ let {
     onDeleteProfile,
 }: Props = $props();
 
-// Gap kept above the current event card when a day panel auto-scrolls to it.
+// Breathing room above the card an auto-scroll lands on.
 const EVENT_SCROLL_GAP = 8;
 
-// "Today" derivations (consumed by DayChip's 今天 marker and the overview capsule).
 let todayIso = $derived(toLocalIsoDate(clockNow));
 let todayData = $derived(days.find(d => d.date === todayIso) ?? null);
 let todayDay = $derived(todayData?.day ?? null);
@@ -86,26 +80,23 @@ let countdownText = $derived.by(() => {
     return getCountdownText(trip, clockNow);
 });
 
-// Ordered panel keys for the pager: overview (0) then each day in order. The
-// same array drives the chip row, so chips and panels cannot fall out of step.
 let panelKeys = $derived([0, ...days.map(d => d.day)]);
-// Each day's ISO date, looked up by day number (key 0 has none). The chip does
-// its own formatting — the pager's snippet only hands it the key.
+// The pager's chip snippet is handed a key, not a day, so the date has to be
+// looked back up. Key 0 (the overview) has none.
 let dayDates = $derived(new Map(days.map(d => [d.day, d.date])));
 let currentDayData = $derived(days.find(d => d.day === currentDay) ?? null);
 
-// Vertical position within a freshly-rendered day panel (TabPager's
-// onPanelReady): today scrolls to its in-progress event (none started yet →
-// top), any other day stays at the top.
+// Where a freshly-mounted day panel lands vertically: today opens at whatever is
+// happening now, every other day at the top.
 function positionPanel(day: number, panel: HTMLElement) {
     const dayData = days.find(d => d.day === day);
-    if (!dayData) return; // overview rests at top (fresh panel is already at 0)
+    if (!dayData) return; // the overview; a fresh panel is already at 0
     const now = new Date();
     let eventIdx = dayData.date === toLocalIsoDate(now)
         ? findCurrentEventIndex(dayData.timeline, now)
         : null;
-    // A checked-off / skipped anchor would land on a struck-through card —
-    // advance to the first unresolved event, same semantics as the capsule.
+    // Skip past resolved events rather than open on a struck-through card — the
+    // same rule the header capsule follows.
     while (eventIdx !== null && dayData.timeline[eventIdx].status) {
         eventIdx = eventIdx + 1 < dayData.timeline.length ? eventIdx + 1 : null;
     }
@@ -117,10 +108,8 @@ function positionPanel(day: number, panel: HTMLElement) {
 }
 </script>
 
-<!-- Day paging (swipe / wheel / slide transition) and the chip row (scrolling,
-     edge fade, pinning) are the shared TabPager; this component supplies the day
-     data and the scroll-to-current-event behaviour. pinnedCount={1} keeps the
-     overview chip — panelKeys[0] — reachable however far the days scroll. -->
+<!-- pinnedCount={1} keeps the overview chip — panelKeys[0] — reachable however far
+     the day chips scroll. -->
 <TabPager keys={panelKeys} bind:current={currentDay} pinnedCount={1} onPanelReady={positionPanel}>
     {#snippet chip(day, select, active)}
         <DayChip {day} date={dayDates.get(day) ?? ""} {active} isToday={todayDay === day} onSelect={select} />

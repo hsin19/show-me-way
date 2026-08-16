@@ -1,10 +1,8 @@
-// Screen Wake Lock for driver-facing overlays: the display must not auto-lock
-// while the phone is being shown to someone. Each acquire returns its own
-// release; the lock is held while any holder remains. Browsers drop the lock
-// whenever the page is hidden, so a visibilitychange listener re-requests it
-// on foreground resume. Unsupported browsers silently no-op — notably iOS
-// standalone PWAs only expose the API from iOS 18.4 (WebKit bug 254545),
-// older versions keep the normal auto-lock behavior.
+// Keeps the screen awake while the phone is being held up to a driver or a
+// counter clerk. Refcounted, because two overlays could overlap. The browser
+// drops the lock whenever the page is hidden, hence the visibilitychange
+// re-request; where the API is missing it all no-ops — notably iOS standalone
+// PWAs before 18.4 (WebKit bug 254545), which simply keep auto-locking.
 
 let holders = 0;
 let sentinel: WakeLockSentinel | null = null;
@@ -38,6 +36,7 @@ function handleVisibilityChange(): void {
     if (document.visibilityState === "visible") void request();
 }
 
+/** Returns the release for this holder; calling it twice is safe. */
 export function acquireScreenWakeLock(): () => void {
     holders += 1;
     if (holders === 1 && isSupported()) {

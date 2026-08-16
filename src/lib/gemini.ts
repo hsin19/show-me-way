@@ -11,20 +11,19 @@ export type GeminiModelFilterMode = "default" | "all";
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
-// AI Studio keys authenticate via this header for every endpoint (chat uses
-// the newer Interactions API, which doesn't accept the `?key=` query form).
+// The header form, not `?key=`: the Interactions API does not accept the query form.
 function authHeaders(apiKey: string): Record<string, string> {
     return { "x-goog-api-key": apiKey };
 }
 
-// Gemini's content roles. The app's chat history maps onto these directly
-// (assistant turns are "model"), so no translation layer is needed.
+/** Gemini's own roles, so the chat history needs no translation layer. */
 export interface ChatMessage {
     role: "user" | "model";
     content: string;
 }
 
-// In-memory cache for models list per API key (session-only, not written to localStorage).
+// One session-scoped slot, keyed `apiKey:filterMode`. Never persisted: a stale
+// model list would outlive a revoked key.
 let cachedModelsKey: string | null = null;
 let cachedModelsPromise: Promise<GeminiModel[]> | null = null;
 
@@ -33,8 +32,8 @@ export function clearGeminiModelsMemory(): void {
     cachedModelsPromise = null;
 }
 
-// Key access mirrors exchange.ts: any storage failure (quota, private mode,
-// blocked storage) degrades to "no key" rather than throwing into the UI.
+// Every accessor below swallows storage failures (quota, private mode, blocked
+// storage) rather than throwing into the UI — same policy as exchange.ts.
 export function loadGeminiApiKey(): string | null {
     try {
         const key = localStorage.getItem(GEMINI_API_KEY_STORAGE);
@@ -63,7 +62,6 @@ export function clearGeminiApiKey(): void {
     }
 }
 
-// The chosen model is just a string preference; same silent-fail policy.
 export function loadGeminiModel(): string | null {
     try {
         const model = localStorage.getItem(GEMINI_MODEL_STORAGE);
@@ -101,9 +99,7 @@ export function saveGeminiModelFilter(mode: GeminiModelFilterMode): void {
     }
 }
 
-// The trip YAML is embedded verbatim as grounding context. Reusing
-// serializeToYaml keeps a single source of truth for the itinerary shape and
-// means the model sees exactly what the user could export.
+/** The grounding context for a chat turn: exactly the YAML the user could export. */
 export function buildItineraryContext(tripData: TripData): string {
     return serializeToYaml(tripData);
 }
@@ -121,15 +117,15 @@ export function buildSystemInstruction(itineraryYaml: string, currentDateTime: s
         "5. 當使用者要求新增、修改或刪除行程內容（例如加景點、改時間、換飯店、加待辦或打包項目）時，呼叫 update_itinerary 工具。",
         "6. 呼叫時 yaml 參數要傳入「完整」的更新後行程（沿用原本所有欄位與結構，只改動需要變動的部分，其餘原封不動保留，不可省略）；summary 參數用繁體中文一兩句話說明這次的變更。",
         "7. 僅在確實要修改行程時才呼叫 update_itinerary；單純回答問題時不要呼叫，直接用文字回覆即可。",
-        // The prose fields render an inline-Markdown subset (src/lib/markdown.ts).
-        // Without this the model writes bare URLs, which now show up as literal text.
+        // Without rule 8 the model writes bare URLs, which markdown.ts renders as
+        // literal text rather than links.
         "8. desc、bullets、alternatives 的 note、todo 與 packing 的 text 支援行內 Markdown：連結一律寫成 [說明文字](https://…)，不要放裸網址；可用 **粗體**、*斜體*、`等寬`。其餘欄位（title、pace、confirmation 的 note 等）不支援，請寫純文字。",
-        // `56*36*23` parses as emphasis (CommonMark does the same); a size
-        // written that way loses its asterisks and italicizes the middle number.
+        // Rule 9: `56*36*23` parses as emphasis, here and in CommonMark alike, so
+        // a size written that way loses its asterisks and italicizes the middle.
         "9. 在支援 Markdown 的欄位裡，尺寸與乘號請用 × 或反斜線跳脫（56×36×23 或 56\\*36\\*23），不要寫成 56*36*23，否則會被讀成斜體。",
-        // Without this the model emits `desc: [官網](https://…)` and js-yaml
-        // reads it as a flow sequence, or `desc: **提早**到` as an alias — the
-        // whole update_itinerary payload then fails validateYaml.
+        // Without rule 10 the model emits `desc: [官網](https://…)`, which js-yaml
+        // reads as a flow sequence, or `desc: **提早**到`, which it reads as an
+        // alias — either way the whole edit fails validateYaml.
         "10. 值的開頭若是 [ 或 *，整個值一定要用單引號包起來（例如 desc: '**提早兩小時**到機場'、text: '[申請入口](https://…) 記得先辦'），否則 YAML 會解析失敗、整次修改都套用不了。",
         "",
         "=== 行程資料 (YAML) ===",
@@ -138,10 +134,9 @@ export function buildSystemInstruction(itineraryYaml: string, currentDateTime: s
     ].join("\n");
 }
 
-// The single edit tool. Rather than the model wrapping a YAML block in prose
-// (which we'd have to scrape), it calls this with the full updated itinerary as
-// a structured argument. The call is intercepted client-side — the YAML is
-// validated and shown behind a confirm step — so the model never edits blindly.
+// A tool call rather than a YAML block in prose, so nothing has to be scraped out
+// of the reply. Every call is intercepted client-side, validated and confirmed —
+// see ChatPanel — so the model never edits the trip on its own.
 export const UPDATE_ITINERARY_TOOL_NAME = "update_itinerary";
 
 const UPDATE_ITINERARY_TOOL = {
@@ -164,19 +159,16 @@ const UPDATE_ITINERARY_TOOL = {
     },
 } as const;
 
-/** A full-itinerary edit the model proposed by calling the update_itinerary tool. */
 export interface ProposedEdit {
-    /** The full updated itinerary YAML (not yet validated — the caller validates). */
+    /** The complete updated itinerary, NOT yet validated — that is the caller's job. */
     yaml: string;
     /** zh-TW one-liner describing the change, for the chat bubble. */
     summary: string;
 }
 
-/** One chat turn's outcome: a text reply and/or a proposed itinerary edit. */
 export interface ChatTurn {
-    /** Conversational reply text; empty when the model only called the edit tool. */
+    /** Empty when the model only called the edit tool. */
     text: string;
-    /** Proposed edit when update_itinerary was called, else null. */
     edit: ProposedEdit | null;
 }
 
@@ -187,8 +179,8 @@ interface InteractionStep {
     content?: { type?: string; text?: string; }[];
 }
 
-// The Interactions response is a list of execution steps (thoughts, tool calls,
-// model output). Pull the model_output text and any update_itinerary call.
+// An Interactions response is a list of execution steps — thoughts, tool calls,
+// model output — of which only the last two kinds interest us.
 function extractTurn(payload: unknown): ChatTurn {
     const empty: ChatTurn = { text: "", edit: null };
     if (typeof payload !== "object" || payload === null) return empty;
@@ -205,7 +197,8 @@ function extractTurn(payload: unknown): ChatTurn {
     return { text, edit: call ? parseEditArgs(call.arguments) : null };
 }
 
-// Tool arguments arrive as an object, but tolerate a JSON-string form too.
+// Arguments normally arrive as an object; the JSON-string form is tolerated
+// because the API has been seen to send both.
 function parseEditArgs(args: unknown): ProposedEdit | null {
     let obj: unknown = args;
     if (typeof obj === "string") {
@@ -259,10 +252,10 @@ interface RawModel {
     supportedGenerationMethods?: string[];
 }
 
-// In default mode, exclude noisy/experimental suffixes, snapshot numbers, and non-text variants.
-// Keeps clean Gemini (Flash / Pro / Lite) and Gemma models, while filtering out preview, latest, exp, -001, tts, image, etc.
-// The snapshot rule is anchored: a pinned build is always a trailing `-001`, whereas
-// an unanchored `-\d{3}` would also swallow parameter counts like `gemma-3-270m-it`.
+// What "default" filtering hides: experimental and non-text variants, leaving the
+// clean Gemini and Gemma release names. The snapshot rule is anchored because a
+// pinned build is always a trailing `-001`, while an unanchored `-\d{3}` would
+// also swallow parameter counts like `gemma-3-270m-it`.
 const UNWANTED_MODEL_REGEX = /(?:preview|latest|exp|tts|image|banana|computer-use|lyria|robotics|-\d{3}$)/i;
 
 function parseModels(payload: unknown, filterMode: GeminiModelFilterMode = "default"): GeminiModel[] {
@@ -286,12 +279,10 @@ function parseModels(payload: unknown, filterMode: GeminiModelFilterMode = "defa
 }
 
 /**
- * List the chat-capable models available to this key. Doubles as key
- * validation — a bad key fails here before the user ever sends a message.
- * Results are cached in memory for the duration of the session per API key
- * and filter mode so switching tabs/components does not re-fetch the models API.
- * Rejects on failure (like sendChatMessage) so the UI can fall back to the
- * default model and report the cause.
+ * The chat-capable models this key can use. Doubles as key validation — the API
+ * has no verify endpoint — so it rejects rather than degrading, and the UI is
+ * expected to render the reason. Repeat calls with the same key and filter share
+ * one in-flight/settled promise for the session.
  */
 export function listGeminiModels(apiKey: string, filterMode?: GeminiModelFilterMode): Promise<GeminiModel[]> {
     const mode = filterMode ?? loadGeminiModelFilter();
@@ -328,6 +319,8 @@ export function listGeminiModels(apiKey: string, filterMode?: GeminiModelFilterM
 
         return [...collected].sort((a, b) => b.id.localeCompare(a.id));
     })().catch(err => {
+        // Drop the memo on failure, or the picker's 重試 button would keep handing
+        // back the same rejection.
         if (cachedModelsKey === cacheKey) {
             clearGeminiModelsMemory();
         }
@@ -338,21 +331,16 @@ export function listGeminiModels(apiKey: string, filterMode?: GeminiModelFilterM
 }
 
 /**
- * The model to auto-select when the user has no usable stored preference.
- * Never just `list[0]`: the list is sorted descending by id, which puts every
- * `gemma-*` ahead of every `gemini-*` and compares size suffixes as strings
- * (`-9b` beats `-31b`), so the head of the list is an arbitrary pick rather
- * than a sensible default. Prefer the first Gemini and fall back to whatever
- * the key can actually use.
+ * The model to auto-select for a user with no stored preference. Not `list[0]`:
+ * the descending id sort puts every `gemma-*` ahead of every `gemini-*` and
+ * compares size suffixes as strings (`-9b` beats `-31b`), so the head of the list
+ * is an arbitrary pick.
  */
 export function pickDefaultModel(models: GeminiModel[]): string | null {
     if (models.length === 0) return null;
     return (models.find(m => m.id.startsWith("gemini-")) ?? models[0]).id;
 }
 
-// Map our in-memory history to Interactions input steps. Stateless replay:
-// each prior turn is echoed back in its documented step shape, then the new
-// question is appended as a `user_input` step.
 function toInputSteps(history: ChatMessage[], userText: string) {
     const steps = history.map(m => ({
         type: m.role === "user" ? "user_input" : "model_output",
@@ -363,15 +351,10 @@ function toInputSteps(history: ChatMessage[], userText: string) {
 }
 
 /**
- * Send one chat turn to Gemini (Interactions API) and return the reply text
- * plus any proposed itinerary edit (when the model called update_itinerary).
- *
- * `store: false` keeps it stateless — Google retains nothing and we replay the
- * in-memory history each call, matching the chat's "memory only" design. The
- * itinerary YAML is re-sent in the system instruction every turn, so the model
- * always edits against the current state without replaying tool history. Unlike
- * the fail-silent caches in exchange.ts / weather.ts, this rejects on failure so
- * the calling component can surface the cause inline / via toast.
+ * One chat turn: the reply text plus any itinerary edit the model proposed. The
+ * caller owns the conversation — nothing is retained here or at Google
+ * (`store: false`) — and owns the failure too, since this rejects rather than
+ * degrading like the caches do.
  */
 export async function sendChatMessage(
     apiKey: string,
@@ -398,6 +381,8 @@ export async function sendChatMessage(
             body: JSON.stringify({
                 model,
                 store: false,
+                // Re-sent every turn, so the model always edits the current trip
+                // and the replayed history can stay prose-only.
                 system_instruction: buildSystemInstruction(itineraryYaml, nowStr),
                 input: toInputSteps(history, userText),
                 tools: [UPDATE_ITINERARY_TOOL],

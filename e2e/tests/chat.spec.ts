@@ -39,27 +39,21 @@ test("AI 聊天：儲存金鑰、AI 建議修改行程、套用後保留至重�
     await seedItinerary(page);
     await page.goto("/");
 
-    // 首次進入 AI 分頁：顯示未設定金鑰卡片，點擊前往 App 設定
     await page.locator("nav").getByRole("button", { name: "AI", exact: true }).click();
     await expect(page.getByRole("heading", { name: "尚未設定 AI 金鑰" })).toBeVisible();
     await page.getByRole("button", { name: "前往 App 設定" }).click();
 
-    // 在 App 設定頁面填寫並儲存金鑰
     await expect(page.getByRole("heading", { name: "AI 助手設定 (Gemini API)" })).toBeVisible();
     await page.getByLabel("Gemini API 金鑰").fill("test-key");
     await page.getByRole("button", { name: "儲存" }).click();
     await expect(page.getByRole("status")).toContainText("已儲存");
 
-    // 切回 AI 分頁
     await page.locator("nav").getByRole("button", { name: "AI", exact: true }).click();
-
-    // 模型清單 mock 生效：下拉選單載入可用模型
     await expect(page.getByLabel("選擇 AI 模型")).toContainText("Gemini 2.5 Flash");
 
     await page.getByLabel("輸入問題").fill("把待辦加上換日幣");
     await page.getByRole("button", { name: "送出" }).click();
 
-    // 回覆氣泡與建議修改卡片（diff 預覽收在「查看變更」內）
     await expect(page.getByText("已幫你加入待辦。")).toBeVisible();
     await expect(page.getByText("AI 建議修改行程")).toBeVisible();
     await expect(page.getByText("查看變更")).toBeVisible();
@@ -68,11 +62,11 @@ test("AI 聊天：儲存金鑰、AI 建議修改行程、套用後保留至重�
     await expect(page.getByRole("status")).toContainText("已套用");
     await expect(page.getByText("已套用變更")).toBeVisible();
 
-    // 套用結果出現在工具分頁的準備頁，且已寫入 showmeway_user_yaml（重新載入後保留）
     await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await page.getByRole("button", { name: "準備", exact: true }).click();
     await expect(page.getByRole("checkbox", { name: "換日幣" })).toBeVisible();
 
+    // 重新載入：確認確實寫進 showmeway_user_yaml，而不只是活在記憶體。
     await page.reload();
     await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await expect(page.getByRole("checkbox", { name: "換日幣" })).toBeVisible();

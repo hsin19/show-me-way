@@ -16,16 +16,14 @@ interface Props {
      */
     pinnedCount?: number;
     /**
-     * One chip's content, given its key, select(), and whether it is current.
-     * `active` comes last so a caller that derives its own highlight can just
-     * take (key, select). The caller renders its own <button> — the two rows
-     * differ too much to share styling — while TabPager owns the row layout, the
-     * scrolling and the edge fade.
+     * One chip's content — the caller renders its own `<button>`, since the two
+     * chip rows in the app differ too much to share styling. `active` comes last
+     * so a caller that derives its own highlight can take just (key, select).
      */
     chip: Snippet<[T, (key: T) => void, boolean]>;
-    /** The one visible panel; receives the current key and select() (for in-panel navigation). */
+    /** The one visible panel; `select` is there for in-panel navigation. */
     panel: Snippet<[T, (key: T) => void]>;
-    /** Called via rAF after a fresh panel mounts and lays out (e.g. scroll to the current event). */
+    /** After a fresh panel has mounted AND laid out, so the consumer can measure it. */
     onPanelReady?: (key: T, panel: HTMLElement) => void;
 }
 
@@ -34,29 +32,23 @@ let { keys, current = $bindable(), pinnedCount = 0, chip, panel, onPanelReady }:
 let pinnedKeys = $derived(keys.slice(0, pinnedCount));
 let scrollKeys = $derived(keys.slice(pinnedCount));
 
-// --- One panel on screen at a time, swapped with a slide transition ---
-// Only the current panel is rendered; the view is a pure function of `current`,
-// so there is no horizontal scroll machinery to keep in sync. Native vertical
-// scroll happens inside the panel; left/right paging is a swipe/wheel gesture
-// (or a chip tap) that simply steps `current`. Shared by the itinerary strip
-// (overview + days) and the 工具 tab (sub-pages).
-// Panel-change slide transition (ms / px). Tweak here for feel.
+// Only the current panel exists, so the view is a pure function of `current` and
+// there is no horizontal scroll machinery to keep in sync. Paging is a gesture or
+// a chip tap that steps the key; vertical scrolling stays native, inside a panel.
 const PAGE_MS = 280;
 const PAGE_SHIFT = 80;
 
-// Slide direction for the transition (+1 = new panel enters from the right).
+// +1 = the incoming panel enters from the right.
 let dir = $state(1);
 
-// Navigate to a specific panel (chip tap / in-panel link). Sets the slide
-// direction from the index delta, then changes the key. External `current`
-// writes (via the binding) skip this and reuse the last direction.
+// An external write to `current` (the binding, e.g. today-sync) bypasses this and
+// reuses whatever direction was last set.
 function select(key: T) {
     if (key === current) return;
     dir = keys.indexOf(key) >= keys.indexOf(current) ? 1 : -1;
     current = key;
 }
 
-// Step to the previous / next panel, clamped to the ends.
 function step(delta: number) {
     const i = keys.indexOf(current);
     const next = Math.max(0, Math.min(keys.length - 1, i + delta));
@@ -65,10 +57,9 @@ function step(delta: number) {
     current = keys[next];
 }
 
-// Horizontal swipe (mobile) → step a panel. Read on touchend so vertical
-// scrolling is never intercepted; only a clearly-horizontal flick past the
-// threshold pages. Gestures starting on form fields or horizontally scrolling
-// rows ([data-swipe-ignore]) belong to those elements, never the pager.
+// Measured on touchend, not during the move, so vertical scrolling is never
+// intercepted — only a clearly horizontal flick pages. A gesture that starts on a
+// form field or a `[data-swipe-ignore]` row belongs to that element.
 const SWIPE_MIN = 50;
 let touchX = 0;
 let touchY = 0;
@@ -89,8 +80,8 @@ function onTouchEnd(e: TouchEvent) {
     }
 }
 
-// Desktop horizontal wheel / trackpad → step a panel. One step per gesture (lock
-// releases once the wheel goes idle), so a flick's burst can't skip several panels.
+// Desktop trackpad. One step per gesture — the lock releases once the wheel goes
+// idle — so a single flick's burst of events cannot skip several panels.
 let pager = $state<HTMLElement>();
 $effect(() => {
     const el = pager;
@@ -115,14 +106,11 @@ $effect(() => {
     return () => el.removeEventListener("wheel", onWheel);
 });
 
-// --- Chip row: horizontal scroll, edge fade, keep the current chip in view ---
-// The fade itself is the shared `edgeFade` attachment (src/lib/edge-fade.ts).
 let scroller = $state<HTMLDivElement>();
 
-// Keep the current chip in view. Without this, deep-linking (the overview's
-// phase card jumps straight to 記帳) can select a chip that is scrolled off
-// screen. Scoped scrollTo, NOT scrollIntoView: the latter adjusts every
-// scrollable ancestor, which WebKit lets cancel the pager's own gestures.
+// Deep-linking (the overview's phase card jumps straight to 記帳) can select a
+// chip that is scrolled off screen. A scoped scrollTo, NOT scrollIntoView: that
+// adjusts every scrollable ancestor, which on WebKit cancels the pager's gestures.
 $effect(() => {
     if (!scroller) return;
     const behavior = prefersReducedMotion() ? "auto" : "smooth";
@@ -141,9 +129,8 @@ $effect(() => {
     scroller.scrollTo({ left: Math.max(0, left), behavior });
 });
 
-// Notify whenever the panel (re)mounts for a new key. `{#key current}`
-// recreates the section, so `panelEl` is reassigned each switch; rAF waits for
-// the new content to lay out before the consumer measures it.
+// `{#key current}` recreates the section on every switch, so this fires per
+// panel; the rAF is what lets the consumer measure laid-out content.
 let panelEl = $state<HTMLElement>();
 $effect(() => {
     const key = current;
@@ -154,17 +141,15 @@ $effect(() => {
 </script>
 
 <div class="flex flex-col h-full">
-    <!-- Chip header: chips drive the same `current` as the pager below. It is a
-         plain flex row above the pager, not `position: sticky` — the pager itself
-         is the only thing that scrolls vertically.
-         Pinned chips are a separate flex child rather than a sticky element
-         inside the scroller — that keeps them out of the scroll content entirely,
-         so nothing passes beneath them (no opaque backing needed) and the
-         scroller's own leading edge is free to fade. -->
+    <!-- A plain flex row, not `position: sticky`: the pager below is the only
+         thing that scrolls vertically. The pinned chips are a separate flex child
+         rather than a sticky element inside the scroller, which keeps them out of
+         the scroll content entirely — nothing passes beneath them, so they need
+         no opaque backing, and the scroller's leading edge is free to fade. -->
     <header class="shrink-0 z-[100] bg-bg-main/90 backdrop-blur-xl border-b border-line pt-[calc(6px+var(--safe-top))] px-5">
-        <!-- pt 6 + pb 1.5 here plus py-1.5 on both children = the original 12px
-             above and below the chips; see the scroller's comment for why the
-             padding has to sit inside the scrollport. -->
+        <!-- This pt/pb plus py-1.5 on both children add back up to the 12px the
+             chips need; the split exists because the padding has to sit inside the
+             scrollport — see the scroller below. -->
         <div class="max-w-3xl mx-auto w-full flex pb-1.5">
             {#if pinnedKeys.length > 0}
                 <div class="flex gap-2 shrink-0 pr-2 py-1.5">
@@ -173,18 +158,16 @@ $effect(() => {
                     {/each}
                 </div>
             {/if}
-            <!-- min-w-0 is required, not cosmetic: a flex item defaults to
-                 min-width:auto and would refuse to shrink below its content,
-                 pushing the row wider than the screen instead of scrolling.
-                 py-1.5 is not spacing either, it is room for the focus ring: a horizontal
+            <!-- Neither utility here is cosmetic. Without min-w-0 the flex item
+                 keeps its default min-width:auto, refuses to shrink below its
+                 content, and pushes the row wider than the screen instead of
+                 scrolling. py-1.5 is room for the focus ring: a horizontal
                  scrollport clips vertically too (`overflow-x: auto` makes the
                  untouched `overflow-y: visible` compute to `auto`), and app.css
-                 draws :focus-visible as a 2px outline at 2px offset, so a
-                 scrollport exactly as tall as a chip cuts the ring's top and
-                 bottom off. `overflow-clip-margin` cannot help — with the other
-                 axis on `auto`, `overflow-y: clip` computes to `hidden`, which
-                 ignores it. The header's pt / the row's pb give the same 6px back
-                 so the chips do not move. -->
+                 draws :focus-visible at a 2px offset, so a scrollport exactly as
+                 tall as a chip cuts the ring off. `overflow-clip-margin` cannot
+                 help — with the other axis on `auto`, `overflow-y: clip` computes
+                 to `hidden`, which ignores it. -->
             <div
                 bind:this={scroller}
                 data-pager-scroller
@@ -202,7 +185,6 @@ $effect(() => {
         </div>
     </header>
 
-    <!-- Pager viewport: one panel at a time, slid in/out on key change. -->
     <!-- svelte-ignore a11y_no_static_element_interactions (touch handlers only
          observe a horizontal flick to page; they never block scrolling) -->
     <div bind:this={pager} class="relative flex-1 min-h-0 overflow-hidden">

@@ -1,6 +1,6 @@
-// Line-level text diff for showing AI-proposed itinerary edits as a unified
-// (git-style) inline diff. Both sides come from the same `serializeToYaml`, so
-// a plain line diff highlights real content changes without formatting noise.
+// A line diff is enough for AI-proposed edits because both sides come out of the
+// same `serializeToYaml` — there is no formatting noise for a word diff to see
+// through, and this needs no dependency.
 
 export type DiffLineType = "equal" | "added" | "removed";
 
@@ -9,19 +9,16 @@ export interface DiffLine {
     text: string;
 }
 
-// Split into lines for diffing, dropping a single trailing newline so the
-// serializer's final "\n" doesn't surface as a spurious empty line.
+// The trailing newline goes, or the serializer's final "\n" shows up as an empty
+// diff line on both sides.
 function splitLines(text: string): string[] {
     return text.replace(/\n$/, "").split("\n");
 }
 
 /**
- * Compute a line-level unified diff between two texts via the classic LCS
- * dynamic-programming table. Returns the lines in order, each tagged `equal`,
- * `removed` (only in `oldText`), or `added` (only in `newText`). Removals are
- * emitted before additions within a change, matching `diff -u` / git output.
- *
- * O(m·n) time and memory — fine for itinerary YAML (a few hundred lines).
+ * A unified (git-style) diff: every line in order, removals before additions
+ * within a change. O(m·n) in time and memory, which is fine for an itinerary and
+ * would not be for a large file.
  */
 export function diffLines(oldText: string, newText: string): DiffLine[] {
     const a = splitLines(oldText);
@@ -58,7 +55,6 @@ export function diffLines(oldText: string, newText: string): DiffLine[] {
     return out;
 }
 
-/** Count added / removed lines in a diff, for a "+a -b" summary label. */
 export function diffStats(lines: DiffLine[]): { added: number; removed: number; } {
     let added = 0;
     let removed = 0;

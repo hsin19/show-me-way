@@ -14,29 +14,27 @@ import { prefersReducedMotion } from "../utils";
 
 const ICONS = { success: CheckCircle, update: RefreshCw, download: Download };
 
-// Enter / reorder / leave duration. Svelte's fly and flip are JS transitions, so
-// app.css's prefers-reduced-motion rule (which only reaches CSS
-// animations/transitions) does not cover them — asked per transition rather than
-// once at init, so switching the OS setting takes effect on the next toast.
+// `fly` and `flip` are JS transitions, so app.css's prefers-reduced-motion rule
+// does not reach them. Asked per transition, not once at init, so flipping the OS
+// setting takes effect on the next toast.
 const MOVE_MS = 220;
 const moveMs = () => (prefersReducedMotion() ? 0 : MOVE_MS);
 </script>
 
-<!-- Toast stack, one step above the nav (64px+safe). Newest at the bottom, older
-     ones pushed up (animate:flip slides them rather than jumping) — so the PWA
-     update notice, which arrives before any user action and never expires, ends
-     up at the top without needing any special casing.
-     The CONTAINER is the aria-live region, not each pill, because a live region
-     has to exist before content is inserted into it — so it stays mounted while
-     empty. aria-atomic="false" is what makes that safe: role="status" implies
-     atomic, which would re-read every pill in the stack (button labels included)
-     on each addition; false announces only the pill that was just added.
-     pointer-events-none so a passing notice never intercepts taps; only the
-     action / dismiss buttons re-enable them.
-     Spans the full width (inset-x-0) and centres each pill, rather than sitting
-     at left-1/2: shrink-to-fit against a 50% offset caps a pill at half the
-     screen, which wrapped "已有新版本 立即更新 ✕" onto two lines. Pills still wrap
-     when they genuinely need to, so no `whitespace-nowrap` here. -->
+<!-- Newest at the bottom, older ones pushed up, which is how the never-expiring
+     PWA update notice ends up at the top without any special casing.
+
+     The CONTAINER is the live region, not each pill: a live region has to exist
+     before content is inserted into it, so it stays mounted while empty.
+     aria-atomic="false" is what makes that safe — role="status" implies atomic,
+     which would re-read every pill in the stack on each addition.
+
+     pointer-events-none so a passing notice never intercepts a tap; the action and
+     dismiss buttons re-enable them.
+
+     Full width with centred pills rather than left-1/2: shrink-to-fit against a
+     50% offset caps a pill at half the screen, which wrapped
+     "已有新版本 立即更新 ✕" onto two lines. -->
 <div
     role="status"
     aria-live="polite"

@@ -2,33 +2,29 @@
 import Plane from "@lucide/svelte/icons/plane";
 import { splitDayDate } from "../utils";
 
-// One chip in the itinerary strip's header row. The row itself — layout,
-// horizontal scrolling, the edge fade and pinning day 0 — belongs to TabPager;
-// this component only decides what a chip looks like.
+// Only what a chip looks like — the row around it belongs to TabPager.
 
 interface Props {
-    /** Day number. 0 is the trip-overview chip (TabPager pins it). */
+    /** 0 is the trip-overview chip. */
     day: number;
-    /** This day's ISO date (YYYY-MM-DD). Empty for the overview chip. */
+    /** Empty for the overview chip, which has no date. */
     date?: string;
-    /** This chip's panel is the visible one. */
     active: boolean;
-    /** This day's date is today — shows the 今天 marker. */
     isToday?: boolean;
     onSelect: (day: number) => void;
 }
 
 let { day, date = "", active, isToday = false, onSelect }: Props = $props();
 
-// Shared between both variants; only the width and the 今天 dot's `relative`
-// differ, so keeping one copy is what stops the two chips drifting apart.
+// One copy for both variants — they differ only in width and the 今天 dot's
+// `relative` — so the two chips cannot drift apart.
 const SHAPE = "h-full flex flex-col items-center justify-center p-2 rounded-xl border transition duration-200 cursor-pointer";
 let tone = $derived(active ? "bg-accent/15 border-transparent" : "bg-tint-1 border-card-border hover:bg-tint-2");
 
-// The weekday sits on the date line at the same size and weight — it is part of
-// the date, not an annotation of it. It stays off the DAY line because a bare
-// 一/二/三 next to the day number reads as a second digit. 88px is what the
-// widest pair ("04/04 六", 66.1px) needs inside p-2; remeasure before shrinking.
+// The weekday belongs on the date line, at the same size and weight: it is part
+// of the date, and next to the day number a bare 一/二/三 reads as a second digit.
+// 88px is what the widest pair ("04/04 六", 66.1px) needs inside p-2 — remeasure
+// before shrinking it.
 let parts = $derived(splitDayDate(date));
 </script>
 

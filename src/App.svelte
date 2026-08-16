@@ -70,17 +70,14 @@ import {
     loadDailyWeather,
 } from "./lib/weather";
 
-// App State using Svelte 5 Runes
 let tripData = $state<TripData | null>(null);
 let currentDay = $state(1);
 let activeTab = $state("itinerary"); // itinerary | tools | ai
 let isLoading = $state(true);
 let loadError = $state<string | null>(null);
 
-// Countdown clock: the interval only ticks `clockNow`; the label re-derives
-// from it, so it also updates immediately when a new trip is saved (no manual
-// sync). Named to stay distinct from the perf-time `now` locals in the scroll
-// handlers — the two timebases must never mix.
+// Wall-clock time, deliberately not named `now`: the scroll handlers keep
+// perf-time locals under that name and the two timebases must never mix.
 let clockNow = $state(new Date());
 
 $effect(() => {
@@ -88,20 +85,18 @@ $effect(() => {
     return () => clearInterval(timer);
 });
 
-// PWA update flow: registerType "prompt" keeps the new service worker waiting
-// until the user accepts, so an in-use page is never reloaded under them. The
-// prompt is a persistent toast rather than its own banner — it stacks with
-// everything else instead of needing its own layer and offsets.
+// registerType "prompt": the new service worker waits until the user accepts, so
+// a page in use is never reloaded under them.
 let swRegistration: ServiceWorkerRegistration | undefined;
-// Shared between the hourly interval and the visibilitychange path — a single
-// timestamp, or a foreground check would be repeated by the next interval tick.
+// One timestamp shared with the visibilitychange path, or resuming the app would
+// re-check something the interval just checked.
 let lastSwUpdateCheck = 0;
 const SW_UPDATE_CHECK_MS = 60 * 60 * 1000;
 
-// A traveler may keep the app open for days; without polling, updates are only
-// detected on a fresh navigation. Background intervals are throttled or frozen
-// on phones, so the visibilitychange resume path calls this too. Offline (the
-// flagship scenario) update() rejects — swallow it and retry next check.
+// A traveler keeps the app open for days, and without polling an update is only
+// noticed on a fresh navigation. Phones throttle or freeze background intervals,
+// hence the visibilitychange caller too. Offline — the flagship scenario —
+// update() rejects; swallow it and retry on the next check.
 function checkForSwUpdate() {
     if (!swRegistration || swRegistration.installing || !navigator.onLine) return;
     if (Date.now() - lastSwUpdateCheck < SW_UPDATE_CHECK_MS) return;
@@ -117,8 +112,8 @@ const updateSW = registerSW({
             onAction: () => void updateSW(true),
             kind: "update",
             persist: true,
-            // Fires once per newly waiting service worker, so a second deploy
-            // during one long session would stack a second immortal notice.
+            // Fires once per newly waiting worker, so two deploys in one long
+            // session would otherwise stack two immortal notices.
             dedupeKey: "sw-update",
         });
     },
@@ -134,46 +129,40 @@ const updateSW = registerSW({
     },
 });
 
-// 工具 tab sub-page selection; App owns it so the overview's phase card /
-// tool entries and the load-error CTA can deep-link to a specific page.
+// App owns the 工具 sub-page so the overview's phase card and the load-error CTA
+// can deep-link into one.
 let toolsTab = $state<"prep" | "ledger" | "phrases" | "settings" | "prefs">("prep");
 
 function openTools(tab: typeof toolsTab) {
     toolsTab = tab;
     activeTab = "tools";
 }
-// Parked (inactive) trip profiles; the active trip lives in USER_YAML_KEY.
+// Parked profiles only — the active trip lives in USER_YAML_KEY.
 let profiles = $state<ProfileInfo[]>([]);
 
-// Enlarged card shown to a driver (local-language name / address) or to a
-// counter clerk (reservation confirmation code). Lives at the app level so all
-// panels share one overlay — opening it twice can never stack. `null` = closed.
-// Focus management and screen wake-lock are owned by EnlargedCardOverlay;
-// SettingsDialog handles its own Escape/focus.
+// One overlay for the whole app, so opening a second enlarged card can never
+// stack one on top of another. EnlargedCardOverlay owns focus and the wake lock;
+// only the Escape key is handled here.
 let enlargedCard = $state<EnlargedCard | null>(null);
 
 function handleWindowKeydown(e: KeyboardEvent) {
     if (e.key === "Escape" && enlargedCard) enlargedCard = null;
 }
 
-// Reflect the loaded trip name in the browser tab title (falls back to the default).
 $effect(() => {
     document.title = tripData?.trip.name ?? "下面一way";
 });
 
-// Resolve the built-in phrase set and driver-card labels from `trip.lang`,
-// falling back to English when unset/unsupported.
 let langConfig = $derived(getLanguageConfig(tripData?.trip.lang));
 
-// Checked / total across both checklists — the overview's pre-trip progress card.
 let prepDone = $derived(tripData ? [...tripData.todo, ...tripData.packing].filter(i => i.checked).length : 0);
 let prepTotal = $derived(tripData ? tripData.todo.length + tripData.packing.length : 0);
 
-// --- Daily weather (Open-Meteo), keyed by the exact city string from the YAML ---
+// Keyed by the exact city string out of the YAML, spelling and all.
 let weatherByCity = $state<Record<string, { byDate: DailyWeatherByDate; fetchedAt: number; }>>({});
 
-// City for one day's weather: day.city → trip.city → none. Blank/whitespace
-// (and non-string values from hand-written YAML) count as unset and fall back.
+// day.city → trip.city → none. Blank, whitespace and non-string values (from a
+// hand-written YAML) all count as unset and fall through.
 function resolveWeatherCity(day: DayItinerary, trip = tripData?.trip): string | null {
     for (const city of [day.city, trip?.city]) {
         if (typeof city === "string" && city.trim()) return city;
@@ -181,15 +170,14 @@ function resolveWeatherCity(day: DayItinerary, trip = tripData?.trip): string | 
     return null;
 }
 
-// Reset + fetch when the trip itself changes (load / YAML save).
+// For a different trip, where the previous trip's cities are no longer relevant.
 function loadTripWeather(data: TripData) {
     weatherByCity = {};
     refreshTripWeather(data);
 }
 
-// Fetch forecasts for every city the trip references, without clearing what's
-// already displayed. Cache-first (3h TTL in lib/weather.ts), so calling this
-// again is free until the data is actually stale.
+// Keeps what is already on screen. Cache-first (3h TTL in lib/weather.ts), so
+// calling it repeatedly costs nothing until the data is actually stale.
 function refreshTripWeather(data: TripData) {
     const cities: string[] = [];
     for (const day of data.days) {
@@ -197,8 +185,8 @@ function refreshTripWeather(data: TripData) {
         if (city && !cities.includes(city)) cities.push(city);
     }
     for (const city of cities) {
-        // Merge: a refresh starts at the city's local today, but past trip days
-        // already on screen must keep their badges from the previous payload.
+        // Merged, not replaced: a refresh starts at the city's local today, and
+        // past days on screen must keep the badges from the previous payload.
         loadDailyWeather(city, (byDate, fetchedAt) => {
             weatherByCity[city] = {
                 byDate: { ...weatherByCity[city]?.byDate, ...byDate },
@@ -208,25 +196,22 @@ function refreshTripWeather(data: TripData) {
     }
 }
 
-// Refresh stale forecasts when the PWA is resumed from the background — during
-// a trip the app stays alive in the switcher for days, and onMount never
-// re-fires, so without this the forecast would be pinned to day 1's fetch.
+// During a trip the app sits in the switcher for days and onMount never re-fires,
+// so resuming is the only chance to catch up on everything below.
 function handleVisibilityChange() {
     if (document.visibilityState !== "visible") return;
-    // Interval ticks are throttled/frozen in the background; bring the
-    // countdown clock current immediately on resume.
+    // Background interval ticks are throttled or frozen, so the clock is behind.
     clockNow = new Date();
     checkForSwUpdate();
     if (tripData) {
         refreshTripWeather(tripData);
-        // Cross-midnight resume: hop to the new today (ItineraryStrip repositions
-        // to it as a pure reaction to currentDay changing).
+        // Resumed across midnight: ItineraryStrip repositions as a pure reaction
+        // to currentDay changing.
         if (getTodayIsoString() !== lastSyncedDate) syncToToday(tripData);
     }
 }
 
-// Forecast for one day. Dates beyond the 16-day forecast horizon have no
-// entry, which hides the badge.
+// Null past the 16-day forecast horizon, which hides the badge.
 function weatherForDay(day: DayItinerary): DailyWeather | null {
     const city = resolveWeatherCity(day);
     if (!city) return null;
@@ -236,9 +221,8 @@ function weatherForDay(day: DayItinerary): DailyWeather | null {
 // Open-Meteo data is CC BY 4.0 — show the attribution whenever any badge does.
 let showWeatherAttribution = $derived(tripData?.days.some(d => weatherForDay(d)) ?? false);
 
-// Offline-staleness note on the attribution line. The 24h threshold must stay
-// above the 3h refresh TTL so routine background refreshes are never flagged.
-// Deriving from clockNow keeps the age current on ticks and foreground resume.
+// Must stay above weather.ts's 3h refresh TTL, or a routine refresh gets flagged
+// as stale. Derived from clockNow so the age advances on ticks and on resume.
 const STALE_WEATHER_MS = 1000 * 60 * 60 * 24;
 let staleWeatherHours = $derived.by(() => {
     if (!tripData) return null;
@@ -258,29 +242,25 @@ let staleWeatherHours = $derived.by(() => {
 onMount(async () => {
     initPwaInstallPrompt(() => openTools("prefs"));
 
-    // 0. If opened via a share link, offer to import it before loading.
+    // Before the load, so an imported trip is what gets loaded.
     await maybeImportSharedItinerary();
-
-    // 1. Fetch Trip Itinerary
     await loadTripData();
 });
 
-// If the URL hash carries a shared itinerary, decode it and ask before
-// importing. With profiles the import is non-destructive: it lands as a NEW
-// trip (the current one is parked, not overwritten). The hash is always
-// stripped afterwards so a refresh won't re-prompt.
+// Non-destructive: the shared trip lands as a NEW profile and the current one is
+// parked, not overwritten. The hash is always stripped afterwards, including on
+// decline or failure, so a refresh cannot re-prompt.
 async function maybeImportSharedItinerary() {
     const token = readShareTokenFromHash();
     if (!token) return;
     try {
         const yaml = await decodeShareToken(token);
-        const parsed = validateYaml(yaml); // throws on invalid structure/syntax
+        const parsed = validateYaml(yaml);
         const hasExisting = !!localStorage.getItem(USER_YAML_KEY);
         const message = "偵測到分享的行程，要匯入為新行程嗎？（目前行程會保留，可隨時切回）";
         if (!hasExisting || confirm(message)) {
-            // Park the current trip and switch to the imported one. Canonicalize
-            // first (strip runtime ids, re-add schema line). loadTripData runs
-            // right after in onMount, so the imported trip becomes active.
+            // Re-serialized rather than stored raw, so a hand-edited share link
+            // is canonicalized (runtime ids out, schema modeline back in).
             createProfile(serializeToYaml(parsed));
             showToast("已匯入分享的行程");
         }
@@ -292,20 +272,18 @@ async function maybeImportSharedItinerary() {
     }
 }
 
-// Local date `currentDay` was last auto-synced to. A resume on the SAME date
-// must never override the user's manual day browsing; only an actual rollover
-// (cross-midnight background → foreground) re-syncs.
+// Guards the user's manual day browsing: only an actual date rollover re-syncs,
+// never a resume on the same day.
 let lastSyncedDate = "";
 
-// Auto-jump to today's itinerary if the trip is active.
 function syncToToday(data: TripData) {
     if (!data.days || data.days.length === 0) return;
     const todayStr = getTodayIsoString();
     lastSyncedDate = todayStr;
     const matchingDay = data.days.find(d => d.date === todayStr);
 
-    // Outside the trip dates, land on the overview panel (day 0) — that's
-    // where the countdown / wrap-up label lives.
+    // Day 0 outside the trip dates: the overview is where the countdown and the
+    // wrap-up label live.
     currentDay = matchingDay ? matchingDay.day : 0;
 }
 
@@ -321,9 +299,6 @@ async function loadTripData() {
         profiles = listProfiles();
         loadTripWeather(data);
 
-        // Fold any legacy localStorage state (checklist checked-state, ledger
-        // expenses) into the itinerary, then write the unified data back so YAML
-        // becomes the single source of truth.
         let migrated = migrateLegacyChecklistState(data);
         if (migrateLegacyLedger(data)) migrated = true;
         if (migrated) persistTripData();
@@ -337,8 +312,6 @@ async function loadTripData() {
     }
 }
 
-// Persist the current in-memory trip data back into the user YAML so edits
-// (add / delete / toggle on checklists) survive a reload.
 function persistTripData() {
     if (!tripData) return;
     try {
@@ -349,9 +322,8 @@ function persistTripData() {
     }
 }
 
-// One-time migration: older versions kept checklist checked-state in separate
-// localStorage keys (todo_state / packing_state). Fold those values into the
-// itinerary data (single source of truth) and remove the legacy keys.
+// Older versions kept checked-state in its own localStorage keys. Runs once —
+// the keys are removed on the way out — and reports whether a save is owed.
 function migrateLegacyChecklistState(data: TripData): boolean {
     let migrated = false;
     const legacy: Array<["todo" | "packing", string]> = [
@@ -364,8 +336,8 @@ function migrateLegacyChecklistState(data: TripData): boolean {
         try {
             const map = JSON.parse(saved) as Record<string, boolean>;
             for (const item of data[listKey]) {
-                // Legacy YAML keyed checked-state by a persisted `id`, which is
-                // no longer part of the schema; read it off the raw parsed item.
+                // The old state was keyed by a persisted `id` that the schema no
+                // longer has, so it is read off the raw parsed item.
                 const legacyId = (item as { id?: string; }).id;
                 if (legacyId && legacyId in map) item.checked = map[legacyId];
             }
@@ -378,16 +350,15 @@ function migrateLegacyChecklistState(data: TripData): boolean {
     return migrated;
 }
 
-// One-time migration: older versions kept expense records in a standalone
-// `ledger_expenses` localStorage key. Fold them into the itinerary YAML (single
-// source of truth, so they now travel with the trip profile) and drop the key.
-// Only folds when the YAML has no expenses yet, so it can't double-import.
+// Older versions kept expense records in their own localStorage key; in the YAML
+// they travel with the trip profile instead. Runs once — the key is removed on
+// the way out — and reports whether a save is owed.
 function migrateLegacyLedger(data: TripData): boolean {
     const saved = localStorage.getItem("ledger_expenses");
     if (saved === null) return false;
     try {
         const parsed: unknown = JSON.parse(saved);
-        // Only fold when the YAML has no expenses yet, so it can't double-import.
+        // Guards against double-importing into a trip that already has records.
         if (data.expenses.length === 0) {
             data.expenses.push(...parseLegacyExpenses(parsed, toLocalIsoDate(new Date()), createExpenseId));
         }
@@ -398,7 +369,6 @@ function migrateLegacyLedger(data: TripData): boolean {
     return true;
 }
 
-// --- Checklist editing handlers (todo / packing) ---
 function toggleChecklistItem(list: "todo" | "packing", id: string) {
     if (!tripData) return;
     const item = tripData[list].find(i => i._id === id);
@@ -424,8 +394,8 @@ function deleteChecklistItem(list: "todo" | "packing", id: string) {
     const removed = { ...tripData[list][index] };
     tripData[list] = tripData[list].filter(i => i._id !== id);
     persistTripData();
-    // `text` is optional at the gate (an item without one renders a blank row),
-    // and this toast is the only thing that ever reads it back.
+    // `text` is optional at the gate, and this toast is the only place that ever
+    // reads it back.
     const text = removed.text ?? "";
     const label = text.length > 10 ? `${text.slice(0, 10)}…` : text;
     showToast({
@@ -433,16 +403,15 @@ function deleteChecklistItem(list: "todo" | "packing", id: string) {
         actionLabel: "復原",
         onAction: () => {
             if (!tripData) return;
-            // The list may have changed since the delete (e.g. another item
-            // removed) — reinsert the snapshot at its original position,
-            // clamped to the current length.
+            // `index` may be stale — another item could have gone while the toast
+            // was up — which is why the insert clamps.
             tripData[list] = insertAtClamped(tripData[list], index, removed);
             persistTripData();
         },
     });
 }
 
-// --- Timeline event check-in (done / skipped); `undefined` clears the mark ---
+/** `undefined` clears the check-in mark. */
 function setEventStatus(id: string, nextStatus: "done" | "skipped" | undefined) {
     if (!tripData) return;
     for (const day of tripData.days) {
@@ -466,16 +435,15 @@ function addTripWallet(name: string) {
     }
 }
 
-// --- Ledger expense handlers; records live in the itinerary YAML (TripData.expenses) ---
 function addExpense(name: string, amount: number, type: string) {
     if (!tripData) return;
-    // Newest first, matching the previous ledger ordering.
+    // Newest first — the ledger has always listed them that way.
     tripData.expenses.unshift({
         _id: createExpenseId(),
         name,
         amount,
         type,
-        // Local YYYY-MM-DD (project date convention) — sortable in CSV export.
+        // Local date, per the project convention, and sortable in the CSV export.
         date: toLocalIsoDate(new Date()),
     });
     persistTripData();
@@ -493,8 +461,6 @@ function deleteExpense(id: string) {
         actionLabel: "復原",
         onAction: () => {
             if (!tripData) return;
-            // Reinsert the snapshot at its original position, clamped to the
-            // current length (the list may have changed meanwhile).
             tripData.expenses = insertAtClamped(tripData.expenses, index, removed);
             persistTripData();
         },
@@ -507,12 +473,11 @@ function resetLedger() {
     persistTripData();
 }
 
-// --- AI conversational edit: apply a full itinerary YAML proposed by the chat ---
-// Validated again here (defense in depth — ChatPanel already validated before
-// offering the apply button) and the pre-edit YAML is snapshotted into the
-// backup ring so the change is undoable from Settings. Updates tripData in
-// place rather than going through loadTripData, so the AI tab (and its
-// in-memory conversation) is never unmounted mid-edit. Returns whether applied.
+/**
+ * Replace the whole trip with a YAML the AI chat proposed and the user accepted;
+ * false if it was rejected. Revalidates even though ChatPanel already did, and
+ * backs the old YAML up first — this is the only undo for an AI edit.
+ */
 function applyAiEdit(yaml: string): boolean {
     let parsed: TripData;
     try {
@@ -522,7 +487,9 @@ function applyAiEdit(yaml: string): boolean {
         showToast("AI 的修改內容無效，已略過");
         return false;
     }
-    backupCurrentYaml(); // snapshot the pre-edit YAML before overwriting
+    backupCurrentYaml();
+    // Assigned in place rather than via loadTripData, which would unmount the AI
+    // tab and take its in-memory conversation with it.
     tripData = parsed;
     persistTripData();
     loadTripWeather(parsed);
@@ -530,9 +497,7 @@ function applyAiEdit(yaml: string): boolean {
     return true;
 }
 
-// Generate a self-contained share link from the currently loaded trip and
-// offer it through the native share sheet (clipboard fallback). Triggered from
-// the overview panel, so feedback goes through toasts (no settings modal open).
+/** 分享行程: hand someone else a link to this trip. */
 async function shareCurrentTrip() {
     if (!tripData) return;
     if (!isShareSupported()) {
@@ -540,9 +505,8 @@ async function shareCurrentTrip() {
         return;
     }
     try {
-        // Strip personal expense records from the shared link — they're for the
-        // trip owner's own device / file backup only, not the people they share
-        // the itinerary with. (File export below keeps them; that's a local backup.)
+        // Expenses stripped: what the owner spent is not part of an itinerary
+        // shared with other people. `exportTripUrl` deliberately keeps them.
         const url = await buildShareUrl(serializeToYaml({ ...tripData, expenses: [] }));
         await shareOrCopy({ url }, url, "分享連結已複製！網址較長，可用短網址服務縮短");
     } catch (err) {
@@ -551,16 +515,15 @@ async function shareCurrentTrip() {
     }
 }
 
-// 今日報平安: share one day's plain-text report. Uses the same native share
-// sheet (with clipboard fallback) as the trip-link share above.
+/** 今日報平安: send one day's plain-text report to whoever is waiting at home. */
 async function shareDayReport(dayData: DayItinerary) {
     if (!tripData) return;
     const text = buildDayReport(dayData, tripData.trip.hotels, tripData.trip.name);
     await shareOrCopy({ text }, text, "已複製今日行程，可直接貼上分享");
 }
 
-// --- File export: the escape hatch for the localStorage single-point-of-loss
-// risk — gets the trip YAML and the ledger records off this device as files. ---
+// The file exports below are the escape hatch from localStorage being a single
+// point of loss: they get the trip and the ledger off this device.
 function exportDateStamp(): string {
     return toLocalIsoDate(new Date()).replaceAll("-", "");
 }
@@ -579,9 +542,7 @@ function exportTripYaml() {
     }
 }
 
-// Export the WHOLE trip (including expenses) as a share link, for moving your
-// own trip between your own devices — the inverse of `shareCurrentTrip`, which
-// strips expenses for sharing with other people.
+/** 含記帳: move your own trip to your own other device, expenses and all. */
 async function exportTripUrl() {
     if (!tripData) {
         showToast("目前沒有可匯出的行程");
@@ -615,10 +576,8 @@ function exportLedgerCsv() {
     }
 }
 
-// --- Trip profiles: swap the whole itinerary in/out (see lib/api) ---
-// Triggered from the day-0 overview. Each flow persists the live trip into
-// USER_YAML_KEY first so it is parked with its latest content, then reloads.
-
+// Every profile flow below saves the live trip before swapping, or the outgoing
+// trip is parked without whatever the user just changed.
 async function handleCreateProfile() {
     if (!tripData) return;
     let yaml: string;
@@ -629,14 +588,14 @@ async function handleCreateProfile() {
         showToast("無法建立新行程，請稍後再試");
         return;
     }
-    // Park the current trip, start the new one from the default template, then
-    // open the 行程管理 page so the user fills in its content right away. Any
-    // stale editor draft belongs to the previous trip — drop it.
     saveTripData(tripData);
     createProfile(yaml);
+    // A leftover draft belongs to the previous trip and outranks the persisted
+    // YAML in the editor, so it would be saved over the new one.
     settingsDraft.yaml = null;
     await loadTripData();
     showToast("已建立新行程，請填入行程內容");
+    // Straight to 行程管理: a template trip is useless until it is filled in.
     openTools("settings");
 }
 
@@ -651,11 +610,11 @@ async function handleSwitchProfile(id: string) {
         profiles = listProfiles();
         return;
     }
-    // The editor draft (if any) was written against the previous trip.
+    // Same hazard as in handleCreateProfile: the draft belongs to the old trip.
     settingsDraft.yaml = null;
     showToast("已切換行程");
     await loadTripData();
-    // Switching happens from the 行程管理 page — land on the trip you asked for.
+    // Switching is initiated from 工具, but what the user asked for is the trip.
     activeTab = "itinerary";
 }
 
@@ -665,17 +624,15 @@ function handleDeleteProfile(id: string) {
     showToast("已刪除行程");
 }
 
-// Share via the native share sheet when available, otherwise fall back to the
-// clipboard. Keeps every "分享" action consistent: a user-cancelled share sheet
-// stays silent, while a missing API or a real failure degrades to a copy.
+/** What every 分享 action goes through, so they all behave the same way. */
 async function shareOrCopy(data: { url?: string; text?: string; title?: string; }, copyText: string, copyMsg: string) {
     if (typeof navigator.share === "function") {
         try {
             await navigator.share(data);
             return;
         } catch (err) {
-            // User cancel (closed the sheet) is silent by design; real failures
-            // (busy sheet, permission) degrade to the clipboard path below.
+            // Closing the sheet is a decision, not a failure — stay silent. Only
+            // a real error (busy sheet, permission) falls through to the copy.
             if ((err as DOMException)?.name === "AbortError") return;
         }
     }
@@ -693,9 +650,8 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
      correction event until the viewport is exercised) while 100vh is exact
      because standalone mode has no dynamic chrome; browser tabs keep h-dvh. -->
 <div class="flex flex-col h-dvh standalone:h-screen overflow-hidden bg-bg-main text-text-primary animate-fade-in">
-    <!-- Main content area: fills the shell; each branch
-         owns its own scroll. The itinerary strip scrolls per-day internally; the
-         other tabs scroll as a whole. -->
+    <!-- Every branch below owns its own scrolling: the itinerary strip scrolls
+         per day, the other tabs scroll as a whole. -->
     <main class="flex-1 min-h-0 w-full">
         {#if isLoading}
             <div class="h-full flex flex-col items-center justify-center gap-3 pt-[var(--safe-top)]">
@@ -829,8 +785,7 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
         {/if}
     </main>
 
-    <!-- Bottom Tab Navigation: a flow child of the fixed-height shell (no longer
-         position:fixed — the shell doesn't scroll). -->
+    <!-- A flow child, not position:fixed: the shell above never scrolls. -->
     <nav class="shrink-0 h-[calc(64px+var(--safe-bottom))] bg-bg-main/90 backdrop-blur-2xl border-t border-line z-[100]">
         <div class="max-w-3xl mx-auto w-full h-full flex justify-around items-center pb-[var(--safe-bottom)]">
             <button
@@ -857,9 +812,7 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
         </div>
     </nav>
 
-    <!-- Global toast stack (reads the toast service directly; the PWA update
-         notice is one of its entries) and the fullscreen enlarged-card overlay —
-         each self-contained. -->
+    <!-- Reads the toast service directly, so it takes no props. -->
     <Toast />
 
     <EnlargedCardOverlay card={enlargedCard} onClose={() => (enlargedCard = null)} />

@@ -33,51 +33,43 @@ import WeatherBadge from "./WeatherBadge.svelte";
 interface Props {
     dayData: DayItinerary;
     hotels?: HotelInfo[];
-    /** Map service for this trip (e.g. 'naver'); defaults to Google Maps when unset. */
     mapProvider?: string;
-    /** This day's forecast; null/undefined (no city set, or beyond the 16-day horizon) hides the badge. */
+    /** Absent hides the badge, which is normal: no city set, or a day past the forecast horizon. */
     weather?: DailyWeather | null;
-    /** App's ticking clock; enables today's past/current/upcoming styling. Null disables. */
+    /** Null disables the past/current/upcoming styling entirely. */
     now?: Date | null;
-    /** Show a place's local-language name/address, or a confirmation code, enlarged; the overlay is a single app-level instance. */
+    /** Ask App to open the fullscreen card; this component never renders a layer of its own. */
     onEnlarge: (card: EnlargedCard) => void;
-    /** Set an event's manual check-in state; `undefined` clears it (tapping the active state again). */
+    /** `undefined` clears the mark, which is what re-tapping the active state does. */
     onSetEventStatus: (id: string, status: "done" | "skipped" | undefined) => void;
-    /** Share this day's plain-text 報平安 report (app-level handler: share sheet or clipboard fallback). */
     onShareDay: () => void;
 }
 
 let { dayData, hotels = [], mapProvider, weather = null, now = null, onEnlarge, onSetEventStatus, onShareDay }: Props = $props();
 
-// Per-event time status for today's panel only — classifyTimelineEvents
-// returns null for any other day, so non-today panels skip all styling.
 const eventStatuses = $derived(now ? classifyTimelineEvents(dayData.timeline, dayData.date, now) : null);
 
-// Hotel where this day is an actual overnight stay (checkout day excluded, see
-// isOvernightStay), so no "回飯店" entry shows on the departure day. Rendered as
-// a synthetic timeline entry — never persisted into the YAML.
+// Both hotel nodes below are synthesized per render and NEVER persisted into the
+// YAML — nothing dedupes, so an authored copy would show twice and the user could
+// not delete either. On a changeover day both appear: this day is the checkout of
+// one hotel and the first night of the next.
 const overnightHotel = $derived(
     hotels.find(h => isOvernightStay(h, dayData.date)),
 );
 
-// Hotel being checked out of today — a synthetic 退房 node at the top of the
-// day. On a changeover day this is the previous hotel, while overnightHotel is
-// the next one, so both nodes show. Also never persisted.
 const checkoutHotel = $derived(
     hotels.find(h => isCheckoutDay(h, dayData.date)),
 );
 
-// Per-event expanded state of the alternatives list, keyed by `_id`.
-// Default collapsed; resets naturally on reload (UI-only, never persisted).
+// UI-only, keyed by `_id`: which alternatives lists the user has opened.
 let expandedAlts = $state<Record<string, boolean>>({});
 </script>
 
-<!-- Day Overview Card -->
 <div class="panel rounded-2xl p-5 mb-6">
     <div class="flex justify-between items-center mb-3">
         <!-- min-w-0 + break-words: a title with no break opportunity (a URL, a
-             long latin run) would otherwise refuse to shrink and make the day
-             panel scroll sideways, which also fights TabPager's swipe paging. -->
+             long latin run) would refuse to shrink and make the day panel scroll
+             sideways, which also fights TabPager's swipe paging. -->
         <h3 class="text-xl font-extrabold tracking-tight min-w-0 break-words">{dayData.title}</h3>
         <button
             type="button"
@@ -100,16 +92,13 @@ let expandedAlts = $state<Record<string, boolean>>({});
     {/if}
 </div>
 
-<!-- Map link + "show enlarged" button for a place. A direct `mapLink` (e.g. a
-     naver.me short link) wins over a search built from `localName`. There is
-     deliberately no directions chip: the map app's own 前往 button is one tap
-     away and always knows the right travel mode. Emits bare chips so the
-     caller can group them in one row with any extra `links`.
+<!-- Bare chips, so the caller can group them in one row with any extra `links`.
+     No directions chip on purpose: the map app's own 前往 button is one tap away
+     and always knows the travel mode.
 
-     `mapLink` goes through `sanitizeLinkHref` for the same reason a Markdown link
-     does: a share link imports someone else's YAML, and this href would
-     otherwise reach the DOM verbatim. A rejected one falls back to the
-     `localName` search, so the chip still works. -->
+     `mapLink` is sanitized for the same reason a Markdown link is — a share link
+     imports someone else's YAML — and a rejected one falls back to the
+     `localName` search rather than losing the chip. -->
 {#snippet placeActions(localName: string | undefined, title: string, address?: string, mapLink?: string)}
     {@const safeMapLink = sanitizeLinkHref(mapLink)}
     {@const href = safeMapLink ?? (localName ? mapSearch(localName, mapProvider) : undefined)}
@@ -141,10 +130,8 @@ let expandedAlts = $state<Record<string, boolean>>({});
     {/if}
 {/snippet}
 
-<!-- A single labeled link chip; map URLs get a matching brand icon. The URL is
-     `links[].url` straight out of the YAML, so it gets the same sanitizing as
-     a Markdown link — an unusable target drops the chip entirely rather than
-     rendering a live `javascript:` href. -->
+<!-- `links[].url` is untrusted YAML like everything else, so an unusable target
+     drops the chip rather than rendering a live `javascript:` href. -->
 {#snippet linkChip(label: string, url: string)}
     {@const href = sanitizeLinkHref(url)}
     {#if href}
@@ -166,12 +153,10 @@ let expandedAlts = $state<Record<string, boolean>>({});
     {/if}
 {/snippet}
 
-<!-- Timeline List -->
 <div class="relative pl-6 before:content-[''] before:absolute before:top-2 before:left-[7px] before:w-[2px] before:h-[calc(100%-16px)] before:bg-tint-3">
     {#if checkoutHotel}
-        <!-- Auto-generated checkout entry at the top of the day (not persisted to
-             YAML). No `data-timeline-event` index, so it never affects the
-             time-based auto-scroll target. -->
+        <!-- Deliberately no `data-timeline-event`: ItineraryStrip's auto-scroll
+             counts those positionally, so one extra shifts every target. -->
         <div class="relative mb-6">
             <div class="absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 border-booked z-10"></div>
             <div class="panel rounded-2xl p-4 ml-2.5">
@@ -192,11 +177,10 @@ let expandedAlts = $state<Record<string, boolean>>({});
 
     {#each dayData.timeline as event, i (event._id ?? event.time + event.title)}
         {@const timeStatus = eventStatuses?.[i] ?? null}
-        <!-- A manual check-in (done/skipped) takes visual precedence over the
-             time-based styling: it reuses the same opacity-60 fade as "past"
-             and suppresses the "current" ring/badge, so the two never clash. -->
+        <!-- A manual check-in outranks the time-based styling: it reuses the same
+             fade as "past" and suppresses the "current" ring, so the two cannot
+             contradict each other on one card. -->
         <div class="relative mb-6 {event.status || timeStatus === 'past' ? 'opacity-60' : ''}" data-timeline-event={i}>
-            <!-- Timeline Node Badge -->
             <div
                 class="
                     absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 z-10 transition duration-200
@@ -208,7 +192,6 @@ let expandedAlts = $state<Record<string, boolean>>({});
             >
             </div>
 
-            <!-- Event Card -->
             <div class="panel rounded-2xl p-4 ml-2.5 transition-transform duration-200 active:scale-[0.98] {!event.status && timeStatus === 'current' ? 'ring-2 ring-accent/50' : ''}">
                 <div class="flex flex-wrap justify-between items-center gap-y-1 mb-2">
                     <span class="text-xs font-semibold px-2 py-0.5 rounded-lg bg-tint-2 text-text-secondary tabular-nums">
@@ -225,11 +208,10 @@ let expandedAlts = $state<Record<string, boolean>>({});
                         {:else if event.type === "option"}
                             <span class="inline-flex items-center gap-1 text-[11px] font-bold text-option"><ClipboardList size={11} aria-hidden="true" />備選</span>
                         {/if}
-                        <!-- Check-in buttons: 44px hot zones with a compact visible box;
-                             -my keeps the header row height unchanged, and -ml-1.5 on
-                             the second button cancels the container gap so the pair sits
-                             tight (44px targets keep a 16px min gap from the inner padding).
-                             Tapping the active state again clears it (status → undefined). -->
+                        <!-- 44px hot zones behind a compact visible box: the negative
+                             margins claw back the space that would otherwise grow the
+                             header row and split the pair apart. Tapping the active
+                             state again clears the mark. -->
                         <button
                             type="button"
                             onclick={() => onSetEventStatus(event._id!, event.status === "done" ? undefined : "done")}
@@ -297,10 +279,9 @@ let expandedAlts = $state<Record<string, boolean>>({});
                     </div>
                 {/if}
 
-                <!-- The places this event walks through. Always expanded, unlike
-                     `alternatives`: these are what the event IS, so hiding them
-                     behind a tap would bury the map action you want while standing
-                     at stop 1. One row each — a stop carries no note by design. -->
+                <!-- Always expanded, unlike `alternatives`: these are what the event
+                     IS, and hiding them behind a tap would bury the map action you
+                     want while standing at stop 1. -->
                 {#if event.stops && event.stops.length > 0}
                     <div class="mt-3 pt-3 border-t border-line">
                         <p class="flex items-center gap-1.5 text-xs font-bold text-text-secondary mb-1">
@@ -338,9 +319,8 @@ let expandedAlts = $state<Record<string, boolean>>({});
                         {#if expandedAlts[altKey]}
                             <ul class="space-y-2 pb-1">
                                 {#each event.alternatives as alt, k (`${k}-${alt.title}`)}
-                                    <!-- Stacked, not side-by-side: the action chips are a fixed ~100px
-                                         and would otherwise permanently squeeze `note` into a narrow
-                                         column. Mirrors the main event card's title / desc / chips order. -->
+                                    <!-- Stacked, not side-by-side: the action chips are a fixed
+                                         ~100px and would squeeze `note` into a narrow column. -->
                                     <li class="bg-tint-1 border border-line rounded-xl px-3 py-2">
                                         <div class="min-w-0">
                                             <span class="text-xs font-bold text-text-primary">{alt.title}</span>
@@ -364,7 +344,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
     {/each}
 
     {#if overnightHotel}
-        <!-- Auto-generated overnight stay entry (not persisted to YAML) -->
+        <!-- No `data-timeline-event` here either, for the same reason as 退房. -->
         <div class="relative mb-6">
             <div class="absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 border-line-emphasis z-10"></div>
             <div class="panel rounded-2xl p-4 ml-2.5">

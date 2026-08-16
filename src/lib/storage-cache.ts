@@ -1,26 +1,21 @@
-// Leaf-level localStorage cache helpers shared by `exchange.ts` and `weather.ts`.
-// Three concerns that were near-duplicated across both (and had drifted once):
-//   - read:  mem-mirror → parse → validate → drop-bad-entry
-//   - write: mem-mirror + guarded setItem (quota / private mode only warns)
-//   - fresh: clock-rollback-aware TTL check
-// Deliberately NOT a generic SWR engine — the two consumers' fetch/refresh
-// shapes differ enough that parameterising would cost more than it saves
-// (see tech-debt.md). These are plain leaf functions, nothing more.
+// Leaf helpers shared by `exchange.ts` and `weather.ts`, extracted after the two
+// near-identical copies drifted apart once. Deliberately NOT a generic SWR
+// engine: the consumers' fetch and refresh shapes differ enough that
+// parameterising them would cost more than it saves (see tech-debt.md).
 
-// Mirror of localStorage so a failed write (quota, private mode) degrades to
-// per-session caching instead of refetching on every foreground return.
+// Mirrors localStorage so a failed write (quota, private mode) degrades to
+// per-session caching instead of a refetch on every foreground return.
 const memCache = new Map<string, unknown>();
 
-/** Test-only: drop the in-memory mirror so cases don't leak cached values. */
+/** Test-only: without this, a cached value leaks into the next case. */
 export function clearStorageCacheMemory(): void {
     memCache.clear();
 }
 
 /**
- * Read a cached JSON value: serve the in-memory mirror if present, else parse
- * localStorage. A successful fetch is the only other write path, so an entry
- * that fails validation (corrupt or stale-shape) is dropped here — otherwise it
- * would shadow the cache forever.
+ * The cached value, or null. An entry that fails `isValid` — corrupt, or written
+ * by an older shape — is deleted rather than ignored: nothing else would ever
+ * clear it, and it would shadow the cache forever.
  */
 export function readCachedJson<T>(key: string, isValid: (value: unknown) => value is T): T | null {
     if (memCache.has(key)) {
@@ -43,11 +38,7 @@ export function readCachedJson<T>(key: string, isValid: (value: unknown) => valu
     return null;
 }
 
-/**
- * Write a cached JSON value. The mem-mirror is always updated; a failed
- * localStorage write (quota, private mode) only warns so the freshly-fetched
- * data is never discarded just because caching failed.
- */
+/** Never throws: freshly fetched data must not be lost just because caching it failed. */
 export function writeCachedJson(key: string, value: unknown): void {
     memCache.set(key, value);
     try {
@@ -57,11 +48,7 @@ export function writeCachedJson(key: string, value: unknown): void {
     }
 }
 
-/**
- * Keys currently in localStorage under `prefix`, as a snapshot — so a caller can
- * remove them while walking the result. Cache owners enumerate their own entries
- * through this instead of each hand-rolling the index loop.
- */
+/** A snapshot, so the caller can remove keys while walking the result. */
 export function cachedKeysWithPrefix(prefix: string): string[] {
     const keys: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -71,10 +58,7 @@ export function cachedKeysWithPrefix(prefix: string): string[] {
     return keys;
 }
 
-/**
- * Remove cached entries, mem-mirror included — dropping only the localStorage
- * side would leave the mirror serving what storage no longer has.
- */
+/** Clears the mirror too — remove only the localStorage side and it keeps serving what storage no longer has. */
 export function removeCachedKeys(keys: readonly string[]): void {
     for (const key of keys) {
         memCache.delete(key);
@@ -82,10 +66,7 @@ export function removeCachedKeys(keys: readonly string[]): void {
     }
 }
 
-/**
- * TTL freshness check that also rejects a future timestamp left behind by a
- * clock rollback (which would otherwise never expire by elapsed time).
- */
+/** A future timestamp counts as stale: after a clock rollback it would otherwise never expire. */
 export function isFresh(timestamp: number, ttl: number, now: number): boolean {
     return timestamp <= now && now - timestamp < ttl;
 }

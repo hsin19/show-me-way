@@ -1,12 +1,11 @@
-// App-wide light/dark theme. The preference is app-level (not part of a trip),
-// so it lives in its own localStorage key and never travels with a profile or
-// the itinerary YAML.
+// App-wide light/dark theme. The preference is a property of the device, not of a
+// trip, so it has its own key and never travels with a profile.
 //
-// Only `data-theme` on <html> matters to the CSS: `src/app.css` overrides the
-// design tokens under `:root[data-theme="light"]`, and every Tailwind utility
-// compiles to `var(--color-*)`, so flipping the attribute re-themes the app with
-// no rebuild. The same resolution runs in an inline <head> script in index.html
-// to set the attribute before first paint — keep the two in sync.
+// `data-theme` on <html> is the only switch the CSS sees — every Tailwind utility
+// compiles to a `var(--color-*)` that app.css redeclares under
+// `:root[data-theme="light"]`. index.html runs this same resolution inline before
+// first paint; keep the two in sync, and `e2e/tests/theme.spec.ts` catches it if
+// they drift.
 
 export const THEME_KEY = "showmeway_theme";
 
@@ -22,7 +21,7 @@ function isPref(value: unknown): value is ThemePref {
     return value === "system" || value === "dark" || value === "light";
 }
 
-/** Read the stored preference, defaulting to `system`. Private-mode reads can throw. */
+/** `system` for an unset or unreadable preference — a private-mode read can throw. */
 export function readThemePref(): ThemePref {
     try {
         const stored = localStorage.getItem(THEME_KEY);
@@ -32,7 +31,6 @@ export function readThemePref(): ThemePref {
     }
 }
 
-/** Resolve a preference against the OS setting. */
 export function resolveTheme(preference: ThemePref): ResolvedTheme {
     if (preference !== "system") return preference;
     return window.matchMedia(DARK_QUERY).matches ? "dark" : "light";
@@ -41,13 +39,13 @@ export function resolveTheme(preference: ThemePref): ResolvedTheme {
 let pref = $state<ThemePref>("system");
 let resolved = $state<ResolvedTheme>("dark");
 
-/** Read-only reactive view for components (same pattern as `toast`). */
+/** Read-only reactive view for components, same pattern as `toast`. */
 export const theme = {
-    /** The user's choice, including `system`. */
+    /** The user's choice, `system` included — what the picker binds to. */
     get pref() {
         return pref;
     },
-    /** The theme currently on screen. */
+    /** What is actually on screen right now. */
     get resolved() {
         return resolved;
     },
@@ -57,16 +55,13 @@ function apply(next: ResolvedTheme): void {
     resolved = next;
     document.documentElement.dataset.theme = next;
 
-    // Keep the OS chrome (Android address bar, iOS status area) in step with the
-    // page. The color is read back from the stylesheet rather than duplicated
-    // here, so `--color-bg-main` in app.css stays the single source of truth —
-    // read *after* setting data-theme, or this picks up the outgoing theme.
+    // Keeps the Android address bar and iOS status area in step. Read back from
+    // the stylesheet rather than restated here, and read *after* the attribute is
+    // set, or this picks up the outgoing theme.
     //
-    // There are TWO theme-color metas: index.html's plus one vite-plugin-pwa
-    // injects from `manifest.theme_color`. The spec says the first in tree order
-    // wins, but leaving the second on a stale value is a trap, so update every
-    // one. (The manifest file itself keeps the dark value — it is baked at build
-    // time and only feeds the install/splash screen.)
+    // Every matching meta is updated, not just the first: index.html has one and
+    // vite-plugin-pwa injects another from `manifest.theme_color`. Tree order
+    // decides which wins, but a second one left on a stale value is a trap.
     const chrome = getComputedStyle(document.documentElement).getPropertyValue("--color-bg-main").trim();
     if (!chrome) return;
     for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
@@ -74,21 +69,21 @@ function apply(next: ResolvedTheme): void {
     }
 }
 
-/** Change the preference and persist it. Writes can throw in private mode. */
+/** Applies immediately; persisting is best-effort, so the switch works even in private mode. */
 export function setThemePref(next: ThemePref): void {
     pref = next;
     try {
         localStorage.setItem(THEME_KEY, next);
     } catch {
-        // Preference just won't survive a reload; the live switch still works.
+        // Only costs the user the preference surviving a reload.
     }
     apply(resolveTheme(next));
 }
 
 /**
- * Adopt the stored preference and start following the OS while it is `system`.
- * Called once from `main.ts` before mount. The inline boot script has already
- * set the attribute, so this only re-syncs module state and the live listener.
+ * Call once from `main.ts` before mount. The boot script has already set the
+ * attribute, so this is about module state and about following the OS from here
+ * on while the preference is `system`.
  */
 export function initTheme(): void {
     pref = readThemePref();

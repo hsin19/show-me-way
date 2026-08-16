@@ -6,13 +6,17 @@ import Trash2 from "@lucide/svelte/icons/trash-2";
 import type { ProfileInfo } from "../api";
 import ConfirmBar from "./ConfirmBar.svelte";
 
+// Rendered by two hosts, so an edit here changes both: collapsed at the top of
+// 行程管理, where it owns `expanded`, and forced open in TripOverview's drawer,
+// where the host owns it via `onToggleExpand`.
 interface Props {
     activeTripName: string;
     profiles: ProfileInfo[];
-    /** Whether the profile list drawer is open. Can be bound. */
+    /** Bindable, or driven by the host together with `onToggleExpand`. */
     expanded?: boolean;
     onSwitchProfile: (id: string) => void;
     onCreateProfile: () => void;
+    /** Called only after the inline confirm — this is the app's only guard on a profile delete. */
     onDeleteProfile: (id: string, name: string) => void;
     onToggleExpand?: () => void;
 }
@@ -49,7 +53,6 @@ function handleCreate() {
 </script>
 
 <div class="w-full">
-    <!-- Active trip header card -->
     <button
         type="button"
         onclick={handleToggle}
@@ -67,8 +70,6 @@ function handleCreate() {
             aria-hidden="true"
         />
     </button>
-
-    <!-- Expanded profile list & actions -->
     {#if expanded}
         <div class="mt-2 space-y-1.5 animate-fade-in">
             {#each profiles as profile (profile.id)}
@@ -103,8 +104,6 @@ function handleCreate() {
                     </div>
                 {/if}
             {/each}
-
-            <!-- Create new profile button -->
             <button
                 type="button"
                 onclick={handleCreate}

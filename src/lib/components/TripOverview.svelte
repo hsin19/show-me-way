@@ -33,28 +33,23 @@ import WeatherBadge from "./WeatherBadge.svelte";
 interface Props {
     trip: TripData["trip"];
     days: DayItinerary[];
-    /** Pre-derived status label: countdown before the trip, next/in-progress event during it. */
+    /** Already worded by the caller — a countdown, or what is happening now. */
     countdownText: string;
-    /** Local YYYY-MM-DD "today"; drives the phase card and the 今晚入住 highlight. */
+    /** Local YYYY-MM-DD; the whole panel's notion of "today" comes from here, not from the clock. */
     todayIso: string;
-    /** Checked / total across todo + packing, for the pre-trip progress card. */
     prepDone: number;
     prepTotal: number;
-    /** Expense records, for the post-trip spend summary card. */
     expenses: ExpenseItem[];
-    /** Parked profiles list for quick profile switching from overview hero. */
     profiles?: ProfileInfo[];
-    /** This day's forecast; null hides the badge (same contract as Timeline). */
+    /** Null hides the badge, same contract as Timeline. */
     weatherFor: (day: DayItinerary) => DailyWeather | null;
     onSelectDay: (day: number) => void;
-    /** Show a hotel's address/confirmation enlarged; the overlay is a single app-level instance. */
+    /** Ask App to open the fullscreen card; this component never renders a layer of its own. */
     onEnlarge: (card: EnlargedCard) => void;
-    /** Phase-card deep-links into the 工具 tab (準備 / 記帳 pages). */
+    /** Deep-links out of the phase card into a 工具 sub-page. */
     onOpenPrepare: () => void;
     onOpenLedger: () => void;
-    /** Share the whole trip (expenses stripped) — the hero-card counterpart of 分享今日行程. */
     onShare: () => void;
-    /** Profile switcher callbacks from App.svelte. */
     onSwitchProfile?: (id: string) => void;
     onCreateProfile?: () => void;
     onDeleteProfile?: (id: string) => void;
@@ -86,23 +81,18 @@ function toggleSwitcher() {
     isSwitcherOpen = !isSwitcherOpen;
 }
 
-// Trip phase drives which single helper card shows under the hero: prep
-// progress before the trip, tonight's hotel during it, spend summary after.
-// Plain string compare is safe for local-time YYYY-MM-DD dates.
+// A plain string compare is safe here: these are all local-time YYYY-MM-DD.
 let phase = $derived(todayIso < trip.start ? "before" : todayIso > trip.end ? "after" : "during");
 
 let hotelList = $derived(trip.hotels ?? []);
-// Same overnight semantics as Timeline (checkout day belongs to the next hotel).
 let tonightHotel = $derived(hotelList.find(h => isOvernightStay(h, todayIso)) ?? null);
 
-// Driver-card prompt resolved from trip.lang (English fallback).
 let langConfig = $derived(getLanguageConfig(trip.lang));
 
 let ledgerTotals = $derived(computeLedgerTotals(expenses));
 let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpperCase()).currencySymbol);
 </script>
 
-<!-- Trip hero card -->
 <div class="panel rounded-2xl p-6 mb-6">
     <div class="flex justify-between items-start gap-2">
         <h2 class="text-2xl font-extrabold text-text-primary tracking-tight min-w-0 break-words">
@@ -123,17 +113,13 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
         {formatDateRange(trip.start, trip.end)}・共 {days.length} 天
     </p>
 
-    <!-- Bottom utility row: Status Badge on Left + Profile Switcher Button on Right.
-         Deliberately NOT flex-wrap: wrapping is decided from each item's full
+    <!-- Deliberately NOT flex-wrap: wrapping is decided from each item's full
          content width BEFORE any shrinking, so a long capsule label would drop to
-         a second row untouched instead of ellipsing. One row + a shrinkable
-         capsule is what keeps the switcher beside it. -->
+         a second row untouched instead of ellipsing. -->
     <div class="mt-4 flex items-center justify-between gap-2">
-        <!-- `min-w-0` is what makes the inner `truncate` work: without it this
-             flex item cannot shrink below its content, so a long in-progress
-             event label ("進行中：…") pushes the whole capsule onto a second row
-             instead of ellipsing. Truncating beats wrapping here — the switcher
-             next to it must stay on the same line. -->
+        <!-- `min-w-0` is what lets the inner `truncate` work at all: without it
+             this flex item cannot shrink below its content, and a long 進行中 label
+             pushes the switcher off the row. -->
         <div data-countdown class="inline-flex min-w-0 items-center bg-accent/12 text-accent text-xs font-bold px-3.5 py-2 rounded-full">
             <span class="truncate">{countdownText}</span>
         </div>
@@ -152,8 +138,6 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
             </button>
         {/if}
     </div>
-
-    <!-- Inline Profile Switcher Drawer (reusing shared ProfileManager component) -->
     {#if isSwitcherOpen && onSwitchProfile && onCreateProfile}
         <div class="mt-4 pt-3.5 border-t border-line-faint">
             <ProfileManager
@@ -169,8 +153,8 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
     {/if}
 </div>
 
-<!-- Phase-aware helper card: exactly one of prep progress (before the trip),
-     tonight's hotel (during), or the spend summary (after). -->
+<!-- Exactly one helper card, chosen by trip phase — what matters before, during
+     and after a trip is not the same thing. -->
 {#if phase === "before" && prepTotal > 0}
     <button
         onclick={onOpenPrepare}
@@ -213,7 +197,6 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
     </button>
 {/if}
 
-<!-- Per-day jump list -->
 <div class="space-y-2">
     {#each days as day (day.day)}
         {@const weather = weatherFor(day)}
@@ -222,8 +205,8 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
             onclick={() => onSelectDay(day.day)}
             class="w-full panel rounded-xl p-3.5 flex items-center gap-3 text-left hover:bg-tint-2 transition cursor-pointer"
         >
-            <!-- Same two lines as the day chip (DayChip.svelte), so the list and
-                 the strip read as one thing. -->
+            <!-- Same two lines as DayChip, so the list and the strip read as one
+                 thing; keep them in step. -->
             <div class="shrink-0 w-[68px] flex flex-col items-center">
                 <span class="text-[11px] font-bold text-accent">DAY {String(day.day).padStart(2, "0")}</span>
                 <span class="text-sm font-bold text-text-primary mt-0.5 whitespace-nowrap">
@@ -243,9 +226,8 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
     {/each}
 </div>
 
-<!-- Hotels: during the trip you're on this panel anyway, so the driver card
-     is one tap away. Management actions (profiles/share/settings) live on the
-     工具 tab's 行程管理 page — the overview stays pure trip content. -->
+<!-- Hotels live here rather than in 工具: mid-trip this is the panel you are
+     already on, so the driver card stays one tap away. -->
 {#if hotelList.length > 0}
     <div class="mt-6">
         <h3 class="text-[11px] font-bold text-text-muted mb-2 px-1">住宿</h3>

@@ -21,18 +21,15 @@ export interface ExchangeRatesMeta {
 const CACHE_KEY = "showmeway_exchange_rates";
 export const EXCHANGE_CACHE_TTL = 1000 * 60 * 60 * 12; // 12 hours
 
-/**
- * localStorage keys this module currently occupies, so the storage panel in
- * App 設定 can size them without knowing the key shape.
- */
+/** The keys this cache occupies right now, so App 設定 can size it without knowing their shape. */
 export function exchangeCacheKeys(): string[] {
     return cachedKeysWithPrefix(`${CACHE_KEY}_`);
 }
 
 /**
- * Drop every cached rate table and return how many keys went. Safe at any time:
- * the next `loadExchangeRates` refetches. The user's manual override rate is a
- * separate key owned by Ledger and is untouched.
+ * Drop every cached rate table; returns how many keys went. Safe at any time —
+ * the next load refetches — and it leaves the user's manual rate alone, which is
+ * Ledger's key, not this cache's.
  */
 export function clearExchangeCache(): number {
     const keys = exchangeCacheKeys();

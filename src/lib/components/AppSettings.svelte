@@ -51,8 +51,8 @@ import {
 import ConfirmBar from "./ConfirmBar.svelte";
 import GitHubIcon from "./icons/GitHubIcon.svelte";
 
-// App-level preferences, as opposed to the trip-level 行程管理 page. Nothing
-// here travels with a trip profile or the itinerary YAML.
+// Everything here is a property of the device, not of a trip: nothing on this
+// page travels with a profile. Trip-level settings are 行程管理.
 
 const THEMES: { id: ThemePref; label: string; icon: typeof Sun; hint: string; }[] = [
     { id: "system", label: "跟隨系統", icon: Monitor, hint: "依裝置的深淺色設定自動切換" },
@@ -62,12 +62,11 @@ const THEMES: { id: ThemePref; label: string; icon: typeof Sun; hint: string; }[
 
 let activeHint = $derived(THEMES.find(t => t.id === theme.pref)?.hint ?? "");
 
-// Gemini API Key & Model management
 let apiKey = $state<string | null>(loadGeminiApiKey());
 let keyInput = $state(loadGeminiApiKey() ?? "");
 let filterMode = $state<GeminiModelFilterMode>(loadGeminiModelFilter());
-// Same helper ChatPanel's header select runs on, so the two cannot disagree
-// about which model is default. Refetches when the filter scope changes.
+// The same helper ChatPanel's header select runs on, so the two cannot disagree
+// about which model is default.
 const modelPicker = createModelPicker(() => apiKey, () => filterMode);
 
 function handleSaveKey(e: SubmitEvent) {
@@ -93,10 +92,10 @@ function handleFilterModeChange(newMode: GeminiModelFilterMode) {
     saveGeminiModelFilter(newMode);
 }
 
-// Read once per mount: TabPager renders only the current panel, so revisiting
-// this page remounts it and re-reads storage.
+// Read once per mount, which is enough because TabPager rebuilds this page every
+// time it is visited.
 let storageSummary = $state(getStorageSummary());
-// One at a time — opening any confirmation closes the others.
+// A single slot, so opening one confirmation closes any other.
 let confirming = $state<"backups" | "reset" | "apiKey" | null>(null);
 
 function refreshSummary() {
@@ -121,8 +120,8 @@ function handleFullReset() {
     confirming = null;
     refreshSummary();
     showToast("已重置本 App 的所有資料，即將重新載入…");
-    // Reload rather than re-render: components still hold the cleared trip in
-    // memory and would write parts of it back on the next save.
+    // A reload, not a re-render: components still hold the cleared trip in memory
+    // and would write parts of it straight back on the next save.
     setTimeout(() => {
         window.location.reload();
     }, 1000);
@@ -316,9 +315,8 @@ function handleFullReset() {
     </form>
 </section>
 
-<!-- Storage tile: name, what it holds, how much of it there is, and one action.
-     The clear button carries a 44px hit area pulled back with negative margins
-     so the tile stays compact. -->
+<!-- The clear button's 44px hit area is pulled back with negative margins, so the
+     tile stays compact without shrinking the target. -->
 {#snippet storageTile(
     label: string,
     hint: string,

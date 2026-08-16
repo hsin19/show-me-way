@@ -37,17 +37,16 @@ function submitNew(e: SubmitEvent) {
     <ul class="space-y-1">
         {#each items as item (item._id ?? item.text)}
             <li class="flex items-start gap-3 py-3 border-b border-line last:border-b-0 group">
-                <!-- A real <input> inside a <label>, not the <button role="checkbox">
-                     this used to be: an item's text can contain links (RichText), and
-                     an <a> nested in a <button> is invalid HTML. A <label> may hold
-                     phrasing content, so the whole row stays one tap target while a
-                     link inside it still works — the spec says a label's activation
-                     behavior does nothing for a tap on an interactive descendant.
+                <!-- A real <input> inside a <label>, not a <button role="checkbox">:
+                     item text can contain links, and an <a> nested in a <button> is
+                     invalid HTML. The label is what keeps the whole row a tap target
+                     while a link inside it still works — do not shrink it back to
+                     the 20px box.
 
-                     The handler reverts the DOM to `item.checked` before calling up:
-                     the box is otherwise the one piece of state the browser owns, so
-                     a toggle the parent declines (unknown `_id`, no trip loaded)
-                     would leave it ticked with nothing to re-render it. -->
+                     The handler reverts the DOM to `item.checked` before calling up.
+                     The box is the one piece of state the browser owns, so a toggle
+                     the parent declines would otherwise stay ticked with nothing left
+                     to re-render it. -->
                 <label class="flex items-start gap-3 flex-1 min-w-0 cursor-pointer">
                     <span class="relative flex-shrink-0 mt-0.5">
                         <input

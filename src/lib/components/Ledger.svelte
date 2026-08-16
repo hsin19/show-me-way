@@ -29,25 +29,24 @@ import ConfirmBar from "./ConfirmBar.svelte";
 interface Props {
     currency?: string;
     wallets?: string[];
-    /** Expense records, owned by the parent (persisted in the itinerary YAML). */
+    /** Owned by the parent and persisted in the itinerary YAML; this component only reads them. */
     expenses: ExpenseItem[];
     onAddWallet?: (name: string) => void;
     onAddExpense: (name: string, amount: number, type: string) => void;
     onDeleteExpense: (id: string) => void;
     onReset: () => void;
-    /** Export the expense records as CSV (download handled by App). */
     onExportCsv: () => void;
 }
 
 let { currency, wallets = [], expenses, onAddWallet, onAddExpense, onDeleteExpense, onReset, onExportCsv }: Props = $props();
 
-// Resolve active currency code, defaulting directly to TWD if not specified
 const activeCurrency = $derived.by(() => {
     if (currency) return currency.toUpperCase();
     return "TWD";
 });
 
-// Resolve default wallets based on active currency
+// What a trip in this currency almost certainly uses, so a new trip has usable
+// wallets before the user configures any.
 const defaultWallets = $derived.by(() => {
     switch (activeCurrency) {
         case "JPY":
@@ -61,26 +60,20 @@ const defaultWallets = $derived.by(() => {
     }
 });
 
-// Final wallets list is the combination of prop wallets or defaults
 const activeWallets = $derived(wallets.length > 0 ? wallets : defaultWallets);
 
-// Localized config based on active currency
 const localConfig = $derived(getCurrencyConfig(activeCurrency));
 
-// Currency States
 let exchangeRate = $state(1.0);
 let foreignValue = $state("1000");
 let twdValue = $state("");
 let rateInfo = $state<{ date: string; offline: boolean; } | null>(null);
 
-// Ledger input states (the records themselves are the `expenses` prop, owned by
-// the parent and persisted into the itinerary YAML).
 let expenseName = $state("");
 let expenseAmount = $state("");
 let expenseType = $state("Cash");
 let newWalletName = $state("");
 
-// Derived values (pure math lives in src/lib/ledger.ts)
 const totals = $derived(computeLedgerTotals(expenses));
 const totalDeposited = $derived(totals.totalDeposited);
 const totalSpent = $derived(totals.totalSpent);
@@ -96,7 +89,8 @@ function formatQuickAmount(amount: number): string {
     return `${symbol}${amount.toLocaleString()}`;
 }
 
-// Sync default expenseType when activeWallets changes
+// A wallet that no longer exists must not stay selected — switching currency
+// replaces the whole set.
 $effect(() => {
     if (activeWallets.length > 0) {
         if (!activeWallets.includes(expenseType) && !expenseType.startsWith("Deposit-") && expenseType !== "Cash") {
@@ -107,12 +101,10 @@ $effect(() => {
     }
 });
 
-// Keep exchange rate and initial values updated when activeCurrency changes.
-// `untrack` keeps `activeCurrency` as this effect's ONLY dependency: the body
-// reads `exchangeRate` and (via `convert`) the bound input values, which would
-// otherwise re-run it on every keystroke — re-reading localStorage and rounding
-// the user's typed value away. (A writable-$derived rewrite reintroduces that
-// overwrite bug; don't switch to it.)
+// `untrack` leaves `activeCurrency` as this effect's ONLY dependency. The body
+// reads `exchangeRate` and, through `convert`, the bound inputs — tracked, it
+// would re-run on every keystroke, re-read localStorage and round the number the
+// user is still typing. A writable-`$derived` rewrite brings that bug back.
 let lastCurrency = "";
 $effect(() => {
     const currency = activeCurrency;
@@ -131,9 +123,8 @@ $effect(() => {
         }
         convert("foreign");
 
-        // Fetch live rate from network/cache (TWD as base currency). The
-        // callback sticks to the captured `currency` so a rate that resolves
-        // after another currency switch can't be written under the wrong key.
+        // The callback closes over the captured `currency`, so a rate resolving
+        // after another switch cannot be written under the wrong key.
         if (currency !== "TWD") {
             rateInfo = null;
             loadExchangeRates("TWD", (data, meta) => {
@@ -153,7 +144,8 @@ $effect(() => {
                 };
                 const prevRate = exchangeRate;
                 exchangeRate = fetchedRate;
-                // If the previous rate was unset, reinitialize the default input value
+                // The "100" placeholder was only there because no rate was known
+                // yet; now there is one, give it a meaningful default instead.
                 if (prevRate === 0 && foreignValue === "100") {
                     foreignValue = Math.round(100 * exchangeRate).toString();
                     convert("foreign");
@@ -169,7 +161,7 @@ $effect(() => {
     });
 });
 
-// Currency Conversion (math in src/lib/ledger.ts; persistence stays here)
+/** `source` is the field the user just touched; the other one is recomputed. */
 function convert(source: "foreign" | "twd" | "rate") {
     if (source === "rate") {
         localStorage.setItem(`${MANUAL_RATE_KEY_PREFIX}${activeCurrency}`, exchangeRate.toString());
@@ -194,9 +186,8 @@ function swapCurrency() {
     showToast("已切換數值");
 }
 
-// Ledger Actions — records are owned by the parent (persisted into the YAML);
-// this component only validates input and delegates. Add/delete/reset and the
-// undo toast all live in App.svelte.
+// The handlers below only validate and delegate: the records, their persistence
+// and the undo toast all belong to App.svelte.
 function addExpense() {
     const name = expenseName.trim();
     const amount = parseInt(expenseAmount) || 0;
@@ -231,15 +222,13 @@ function handleAddWallet() {
         onAddWallet(name);
         newWalletName = "";
         showToast(`已新增錢包：${name}`);
-        // Auto select the newly added wallet
+        // You add a wallet because you are about to record against it.
         expenseType = name;
     } else {
         showToast("無法在目前行程儲存自訂錢包");
     }
 }
 </script>
-
-<!-- Currency Converter -->
 <div class="panel rounded-2xl p-5 mb-5">
     <h3 class="text-base font-bold text-text-primary mb-4 flex items-center gap-2">
         <Calculator size={18} class="text-accent" aria-hidden="true" />
@@ -290,8 +279,6 @@ function handleAddWallet() {
             </div>
         {/if}
     </div>
-
-    <!-- Exchange Rate Setting -->
     {#if activeCurrency !== "TWD"}
         <div class="flex items-center justify-end gap-2 text-[11px] text-text-muted mt-4">
             <span>匯率設定：1 TWD = </span>
@@ -329,8 +316,6 @@ function handleAddWallet() {
         {/each}
     </div>
 </div>
-
-<!-- Ledger Management -->
 <div class="panel rounded-2xl p-5 mb-5">
     <div class="flex justify-between items-center mb-4">
         <h3 class="text-base font-bold text-text-primary flex items-center gap-2">
@@ -357,8 +342,6 @@ function handleAddWallet() {
             />
         </div>
     {/if}
-
-    <!-- Stats Dashboard -->
     <div class="grid grid-cols-3 gap-2 mb-2">
         <div class="bg-well border border-line-faint rounded-xl p-2.5 flex flex-col items-center gap-0.5">
             <span class="text-[11px] text-text-secondary font-medium">儲值總額</span>
@@ -373,8 +356,6 @@ function handleAddWallet() {
             <span class="text-xs font-extrabold text-accent tabular-nums">{localConfig.currencySymbol}{balance.toLocaleString()}</span>
         </div>
     </div>
-
-    <!-- Per-wallet Balances -->
     <div class="flex flex-wrap gap-2 mb-5">
         {#each walletBalances as wb (wb.wallet)}
             <div class="flex-1 basis-[30%] bg-well border border-line-faint rounded-xl p-2.5 flex flex-col items-center gap-0.5">
@@ -385,8 +366,6 @@ function handleAddWallet() {
             </div>
         {/each}
     </div>
-
-    <!-- Quick Add Form -->
     <div class="grid grid-cols-3 gap-2 mb-5">
         <input
             type="text"
@@ -422,8 +401,6 @@ function handleAddWallet() {
                 <option value="Deposit-Cash">現金 兌換 ＋</option>
             </optgroup>
         </select>
-
-        <!-- Add Custom Wallet Sub-row -->
         <div class="col-span-3 flex items-center gap-1.5 mt-1">
             <input
                 type="text"
@@ -450,8 +427,6 @@ function handleAddWallet() {
             記一筆
         </button>
     </div>
-
-    <!-- History List -->
     <div>
         <div class="flex justify-between items-center border-b border-line pb-2 mb-2">
             <h4 class="text-xs text-text-secondary font-semibold">消費紀錄</h4>

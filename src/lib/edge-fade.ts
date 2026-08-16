@@ -1,22 +1,16 @@
 import type { Attachment } from "svelte/attachments";
 
-/**
- * Width of the mask ramp at each end. Wide enough that a half-scrolled chip is
- * visibly fading rather than merely dim — see the ramp shape in `.edge-fade`.
- */
+/** Wide enough that a half-scrolled chip reads as fading rather than merely dim. */
 const FADE_PX = 40;
 
 /**
- * Drive `.edge-fade`'s mask on a horizontally scrolling row: fade whichever end
- * still has content past it, and collapse that end's ramp once it is reached —
- * a permanently dimmed end chip reads as broken rather than as scrollable.
+ * Attach to any horizontally scrolling `.edge-fade` row: the end with content
+ * past it fades, the end that has been reached does not — a permanently dimmed
+ * last chip reads as broken rather than as scrollable.
  *
- * An attachment rather than an `$effect` per caller: this is pure DOM
- * bookkeeping with no reactive inputs, and every row that scrolls horizontally
- * (TabPager's chip header, PhraseDeck's category filter) should behave
- * identically. The ResizeObserver watches the content as well as the scrollport,
- * so a changing chip set AND a rotation/resize both re-check — a hand-listed
- * reactive dependency covered only the first.
+ * An attachment rather than an `$effect` per caller, since this is pure DOM
+ * bookkeeping with no reactive inputs and every scrolling row should behave
+ * identically.
  */
 export const edgeFade: Attachment<HTMLElement> = node => {
     const update = () => {
@@ -29,8 +23,8 @@ export const edgeFade: Attachment<HTMLElement> = node => {
     node.addEventListener("scroll", update, { passive: true });
     const observer = new ResizeObserver(update);
     observer.observe(node);
-    // The row inside the scrollport: chips can be added or removed (工具 drops
-    // pages without a trip) without the scrollport itself changing size.
+    // The content too, not just the scrollport: chips come and go (工具 drops
+    // pages without a trip) while the scrollport keeps its size.
     if (node.firstElementChild) observer.observe(node.firstElementChild);
     return () => {
         node.removeEventListener("scroll", update);

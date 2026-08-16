@@ -1,26 +1,22 @@
-/** Situational category for a survival phrase; used by the PhraseDeck filter chips. */
 export type PhraseCategory = "basic" | "transport" | "dining" | "shopping" | "help";
 
 export interface PhraseInfo {
     zh: string;
     text: string;
     rom: string;
-    /** Optional category; uncategorized phrases only show under the 全部 filter. */
+    /** Uncategorized phrases only ever show under the 全部 filter. */
     cat?: PhraseCategory;
 }
 
 /**
- * Built-in, hard-coded survival phrases keyed by language code (`trip.lang`).
- * Phrases are no longer authored in the itinerary YAML — the trip only picks a
- * language, and the matching set (plus the localized taxi-driver prompt) is
- * resolved from here. Add a new language by adding an entry below.
+ * Phrases are code, not itinerary data: a trip only picks a `lang` and the deck
+ * is resolved from here, so adding one means editing this file. A new language
+ * also needs its code in the `lang` enum of `public/showmeway-schema.json`.
  */
 export interface LanguageConfig {
-    /** Human-readable language name (zh-TW), e.g. used in labels. */
     label: string;
-    /** Prompt shown on the fullscreen "show this to the driver" card. */
+    /** Heading on the fullscreen card held up to a taxi driver. */
     driverPrompt: string;
-    /** The survival phrase deck for this language. */
     phrases: PhraseInfo[];
 }
 
@@ -150,14 +146,9 @@ export const LANGUAGES: Record<string, LanguageConfig> = {
     },
 };
 
-/** Default language used when `trip.lang` is unset or not a supported code. */
 export const DEFAULT_LANG = "en";
 
-/**
- * Resolve a language config from a `trip.lang` code. Falls back to English
- * (`DEFAULT_LANG`) when the code is missing or unsupported, so the phrase deck
- * and taxi-driver prompt are always available.
- */
+/** Always returns a config — an unset or unknown `trip.lang` falls back to English rather than leaving the deck empty. */
 export function getLanguageConfig(lang: string | undefined): LanguageConfig {
     return (lang && LANGUAGES[lang]) || LANGUAGES[DEFAULT_LANG];
 }
