@@ -74,7 +74,7 @@ test("清單：勾選與新增項目並於重新載入後保留", async ({ page 
     await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await expect(page.getByRole("heading", { name: "行前準備與打包" })).toBeVisible();
 
-    // 勾選既有項目（<button role="checkbox">，非 <input>）
+    // 勾選既有項目（<label> 包住的 <input type="checkbox">；可及名稱來自 label 文字）
     const seededItem = page.getByRole("checkbox", { name: "測試待辦項目" });
     await expect(seededItem).not.toBeChecked();
     await seededItem.click();

@@ -37,7 +37,7 @@ days:
       - time: '08:00'
         title: 出發前往東京
         type: booked
-        desc: 桃園機場第一航廈出發，記得提早 2.5 小時到機場。
+        desc: 桃園機場第一航廈出發，記得**提早 2.5 小時**到機場。
         status: done
         confirmation:
           code: 'ABC123'
@@ -75,7 +75,7 @@ days:
         localName: チームラボプラネッツ TOKYO
         mapLink: 'https://maps.app.goo.gl/example-teamlab'
         bullets:
-          - 穿短褲或可捲起的褲子（部分展區會踩水）
+          - '**穿短褲**或可捲起的褲子（部分展區會踩水）'
           - 提早 15 分鐘到場排隊
         confirmation:
           code: 'TL-0099123'
@@ -90,7 +90,7 @@ days:
       - time: '15:00'
         title: 下午茶時光
         type: option
-        desc: 網紅咖啡廳點杯咖啡與招牌甜點，稍作休息。
+        desc: '網紅咖啡廳點杯咖啡與招牌甜點，稍作休息。看到的貼文在這 [Instagram 貼文](https://example.com/cafe/matcha-tiramisu)'
         status: skipped
       - time: '19:00'
         title: 忠犬八公像 ➔ PARCO ➔ 唐吉訶德
@@ -118,7 +118,7 @@ days:
         type: booked
         desc: 東京站搭乘東海道新幹線「のぞみ」前往京都，約 2 小時 15 分。
         bullets:
-          - 提前用 EX 預約 App 劃位
+          - '提前用 [EX 預約 App](https://www.example.com/ex-reserve) 劃位'
           - 月台便當（駅弁）可當早餐
         confirmation:
           code: 'EX-778812'
@@ -139,7 +139,7 @@ days:
         alternatives:
           - title: 湯豆腐套餐
             localName: 南禅寺 順正
-            note: 想吃正式一點選這間，建議先訂位
+            note: '想吃正式一點選這間，建議[先訂位](https://example.com/kyoto-yudofu/reserve)'
       - time: '18:30'
         title: 返回東京
         type: booked
@@ -165,14 +165,14 @@ days:
 todo:
   - text: 確認護照效期距回國日仍大於 6 個月
     checked: true
-  - text: 辦妥簽證 / 免簽電子許可（如 Visit Japan Web、K-ETA、ESTA）
+  - text: '辦妥簽證 / 免簽電子許可（如 Visit Japan Web、K-ETA、ESTA），[申請入口](https://example.com/visit-japan-web)'
   - text: 線上辦理登機手續並選位
   - text: 再次確認去回程航班時間與行李額度
   - text: 兌換當地現金、確認可海外提款的金融卡
   - text: 開通信用卡海外交易，記下掛失電話
   - text: 購買網卡 / eSIM 或租借 WiFi 機
   - text: 投保旅遊平安險與不便險
-  - text: 預訂或確認交通票券（JR Pass、機場接送等）
+  - text: '預訂或確認交通票券（JR Pass、機場接送等），[官網](https://www.example.com/jr-pass)'
   - text: 下載離線地圖、翻譯與訂票 App
   - text: 證件備份（護照、簽證、保單）拍照存雲端
   - text: 確認所有飯店訂房與入住時間

@@ -5,6 +5,7 @@ import Trash2 from "@lucide/svelte/icons/trash-2";
 import type { Component } from "svelte";
 
 import type { ChecklistItem } from "../api";
+import RichText from "./RichText.svelte";
 
 interface Props {
     title: string;
@@ -36,22 +37,33 @@ function submitNew(e: SubmitEvent) {
     <ul class="space-y-1">
         {#each items as item (item._id ?? item.text)}
             <li class="flex items-start gap-3 py-3 border-b border-line last:border-b-0 group">
-                <button
-                    type="button"
-                    role="checkbox"
-                    aria-checked={item.checked}
-                    onclick={() => onToggle(item._id!)}
-                    class="flex items-start gap-3 flex-1 min-w-0 cursor-pointer text-left bg-transparent border-0 p-0"
-                >
-                    <span
-                        aria-hidden="true"
-                        class="
-                            w-5 h-5 rounded-md border-2 border-text-muted bg-tint-1 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors duration-200
-                            {item.checked ? 'border-positive bg-positive/15' : 'group-hover:border-accent'}
-                        "
-                    >
+                <!-- A real <input> inside a <label>, not the <button role="checkbox">
+                     this used to be: an item's text can contain links (RichText), and
+                     an <a> nested in a <button> is invalid HTML. A <label> may hold
+                     phrasing content, so the whole row stays one tap target while a
+                     link inside it still works — the spec says a label's activation
+                     behavior does nothing for a tap on an interactive descendant.
+
+                     The handler reverts the DOM to `item.checked` before calling up:
+                     the box is otherwise the one piece of state the browser owns, so
+                     a toggle the parent declines (unknown `_id`, no trip loaded)
+                     would leave it ticked with nothing to re-render it. -->
+                <label class="flex items-start gap-3 flex-1 min-w-0 cursor-pointer">
+                    <span class="relative flex-shrink-0 mt-0.5">
+                        <input
+                            type="checkbox"
+                            checked={item.checked}
+                            onchange={e => {
+                                e.currentTarget.checked = item.checked ?? false;
+                                onToggle(item._id!);
+                            }}
+                            class="
+                                appearance-none w-5 h-5 rounded-md border-2 border-text-muted bg-tint-1 cursor-pointer transition-colors duration-200
+                                {item.checked ? 'border-positive bg-positive/15' : 'group-hover:border-accent'}
+                            "
+                        />
                         {#if item.checked}
-                            <Check size={12} class="stroke-positive stroke-[4]" aria-hidden="true" />
+                            <Check size={12} class="stroke-positive stroke-[4] absolute inset-0 m-auto pointer-events-none" aria-hidden="true" />
                         {/if}
                     </span>
                     <span
@@ -60,9 +72,9 @@ function submitNew(e: SubmitEvent) {
                             {item.checked ? 'text-text-muted line-through' : 'text-text-primary group-hover:text-accent'}
                         "
                     >
-                        {item.text}
+                        <RichText text={item.text} />
                     </span>
-                </button>
+                </label>
                 <button
                     onclick={() => onDelete(item._id!)}
                     aria-label="刪除項目"

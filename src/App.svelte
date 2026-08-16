@@ -424,7 +424,10 @@ function deleteChecklistItem(list: "todo" | "packing", id: string) {
     const removed = { ...tripData[list][index] };
     tripData[list] = tripData[list].filter(i => i._id !== id);
     persistTripData();
-    const label = removed.text.length > 10 ? `${removed.text.slice(0, 10)}…` : removed.text;
+    // `text` is optional at the gate (an item without one renders a blank row),
+    // and this toast is the only thing that ever reads it back.
+    const text = removed.text ?? "";
+    const label = text.length > 10 ? `${text.slice(0, 10)}…` : text;
     showToast({
         message: `已刪除「${label}」`,
         actionLabel: "復原",

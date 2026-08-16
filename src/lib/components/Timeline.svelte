@@ -16,6 +16,7 @@ import Zap from "@lucide/svelte/icons/zap";
 import type { DayItinerary } from "../api";
 import type { HotelInfo } from "../api";
 import type { EnlargedCard } from "../enlarge";
+import { sanitizeLinkHref } from "../markdown";
 import {
     classifyTimelineEvents,
     isCheckoutDay,
@@ -26,6 +27,7 @@ import type { DailyWeather } from "../weather";
 import ConfirmationChips from "./ConfirmationChips.svelte";
 import GoogleMapsIcon from "./icons/GoogleMapsIcon.svelte";
 import NaverIcon from "./icons/NaverIcon.svelte";
+import RichText from "./RichText.svelte";
 import WeatherBadge from "./WeatherBadge.svelte";
 
 interface Props {
@@ -102,10 +104,16 @@ let expandedAlts = $state<Record<string, boolean>>({});
      naver.me short link) wins over a search built from `localName`. There is
      deliberately no directions chip: the map app's own 前往 button is one tap
      away and always knows the right travel mode. Emits bare chips so the
-     caller can group them in one row with any extra `links`. -->
+     caller can group them in one row with any extra `links`.
+
+     `mapLink` goes through `sanitizeLinkHref` for the same reason a Markdown link
+     does: a share link imports someone else's YAML, and this href would
+     otherwise reach the DOM verbatim. A rejected one falls back to the
+     `localName` search, so the chip still works. -->
 {#snippet placeActions(localName: string | undefined, title: string, address?: string, mapLink?: string)}
-    {@const href = mapLink ?? (localName ? mapSearch(localName, mapProvider) : undefined)}
-    {@const isNaver = mapLink ? mapLink.includes("naver") : mapProvider === "naver"}
+    {@const safeMapLink = sanitizeLinkHref(mapLink)}
+    {@const href = safeMapLink ?? (localName ? mapSearch(localName, mapProvider) : undefined)}
+    {@const isNaver = safeMapLink ? safeMapLink.includes("naver") : mapProvider === "naver"}
     {#if href}
         <a
             {href}
@@ -133,23 +141,29 @@ let expandedAlts = $state<Record<string, boolean>>({});
     {/if}
 {/snippet}
 
-<!-- A single labeled link chip; map URLs get a matching brand icon. -->
+<!-- A single labeled link chip; map URLs get a matching brand icon. The URL is
+     `links[].url` straight out of the YAML, so it gets the same sanitizing as
+     a Markdown link — an unusable target drops the chip entirely rather than
+     rendering a live `javascript:` href. -->
 {#snippet linkChip(label: string, url: string)}
-    <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        class="inline-flex items-center gap-1.5 min-h-[44px] bg-accent/10 text-accent text-xs font-bold px-3 py-1.5 rounded-lg transition duration-200 hover:bg-accent/20"
-    >
-        {#if url.includes("naver")}
-            <NaverIcon size={13} class="shrink-0" aria-hidden="true" />
-        {:else if /maps\.app\.goo\.gl|google\.[^/]+\/maps|goo\.gl\/maps/.test(url)}
-            <GoogleMapsIcon size={13} class="shrink-0" aria-hidden="true" />
-        {:else}
-            <Link size={12} class="shrink-0" aria-hidden="true" />
-        {/if}
-        {label}
-    </a>
+    {@const href = sanitizeLinkHref(url)}
+    {#if href}
+        <a
+            {href}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-1.5 min-h-[44px] bg-accent/10 text-accent text-xs font-bold px-3 py-1.5 rounded-lg transition duration-200 hover:bg-accent/20"
+        >
+            {#if href.includes("naver")}
+                <NaverIcon size={13} class="shrink-0" aria-hidden="true" />
+            {:else if /maps\.app\.goo\.gl|google\.[^/]+\/maps|goo\.gl\/maps/.test(href)}
+                <GoogleMapsIcon size={13} class="shrink-0" aria-hidden="true" />
+            {:else}
+                <Link size={12} class="shrink-0" aria-hidden="true" />
+            {/if}
+            {label}
+        </a>
+    {/if}
 {/snippet}
 
 <!-- Timeline List -->
@@ -261,12 +275,12 @@ let expandedAlts = $state<Record<string, boolean>>({});
                     <span class="text-[15px] font-bold {event.status ? 'text-text-muted line-through' : 'text-text-primary'}">{event.title}</span>
                 </div>
 
-                <p class="text-xs text-text-secondary leading-relaxed">{event.desc}</p>
+                <p class="text-xs text-text-secondary leading-relaxed"><RichText text={event.desc} /></p>
 
                 {#if event.bullets && event.bullets.length > 0}
                     <ul class="list-disc list-inside mt-2.5 pl-2 text-xs text-text-secondary space-y-1">
                         {#each event.bullets as bullet (bullet)}
-                            <li>{bullet}</li>
+                            <li><RichText text={bullet} /></li>
                         {/each}
                     </ul>
                 {/if}
@@ -331,7 +345,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
                                         <div class="min-w-0">
                                             <span class="text-xs font-bold text-text-primary">{alt.title}</span>
                                             {#if alt.note}
-                                                <p class="text-[11px] text-text-muted leading-relaxed">{alt.note}</p>
+                                                <p class="text-[11px] text-text-muted leading-relaxed"><RichText text={alt.note} /></p>
                                             {/if}
                                         </div>
                                         {#if alt.localName || alt.mapLink}

@@ -21,7 +21,8 @@ export interface TimelineEvent {
     time: string;
     title: string;
     type: "booked" | "must-go" | "option" | "standard";
-    desc: string;
+    /** Optional on purpose: `normalizeTripData` accepts an event without one, and it has always rendered as an empty line rather than failing the load. */
+    desc?: string;
     bullets?: string[];
     /** Place name in the destination's local language, used as the map-search query. */
     localName?: string;
@@ -113,7 +114,8 @@ export interface TripData {
 }
 
 export interface ChecklistItem {
-    text: string;
+    /** Optional for the same reason as `TimelineEvent.desc`: the gate accepts an item without one. */
+    text?: string;
     checked?: boolean;
     /**
      * Ephemeral, runtime-only identity used as a stable `{#each}` key and as the
@@ -181,16 +183,30 @@ function validateConfirmation(value: unknown, where: string): void {
 }
 
 /**
- * Validate an optional list of place entries (`alternatives`, `stops`): each
- * entry needs its identity field as a string, and every other field is an
- * optional string. The two lists differ only in that identity field's name
- * (`title` vs `name`) and which extras they carry, so they share this loop.
+ * Guards an optional text field. Absent is allowed — every caller's field has
+ * been optional in practice — but a number or a list is rejected: `desc` and
+ * friends render through `markdown.ts` and an href through `sanitizeLinkHref`,
+ * and both drop a non-string without a word, so this is where the author hears
+ * about it. `field` is a phrase, not just a key, so a list element can name its
+ * own position (`bullets 第 2 項`).
  */
-function validatePlaceList(
+function validateOptionalString(value: unknown, where: string, field: string): void {
+    if (value != null && typeof value !== "string") {
+        throw new Error(`${where}的 ${field} 必須是文字`);
+    }
+}
+
+/**
+ * Validate an optional list of object entries (`alternatives`, `stops`,
+ * `links`): every `required` field must be present, and both those and the
+ * optional ones must be strings. The lists differ only in which fields they
+ * carry, so they share this loop.
+ */
+function validateEntryList(
     value: unknown,
     where: string,
-    listName: "alternatives" | "stops",
-    required: string,
+    listName: "alternatives" | "stops" | "links",
+    required: readonly string[],
     optional: readonly string[],
 ): void {
     if (value == null) return;
@@ -202,13 +218,13 @@ function validatePlaceList(
             throw new Error(`${where}的 ${listName} 第 ${k + 1} 項必須是物件 (不可為空白列表項)`);
         }
         const fields = entry as Record<string, unknown>;
-        if (fields[required] == null) {
-            throw new Error(`${where}的 ${listName} 第 ${k + 1} 項缺少 ${required} 屬性`);
-        }
-        for (const field of [required, ...optional]) {
-            if (fields[field] != null && typeof fields[field] !== "string") {
-                throw new Error(`${where}的 ${listName} 第 ${k + 1} 項的 ${field} 必須是文字`);
+        for (const field of required) {
+            if (fields[field] == null) {
+                throw new Error(`${where}的 ${listName} 第 ${k + 1} 項缺少 ${field} 屬性`);
             }
+        }
+        for (const field of [...required, ...optional]) {
+            validateOptionalString(fields[field], `${where}的 ${listName} 第 ${k + 1} 項`, field);
         }
     }
 }
@@ -272,6 +288,9 @@ function normalizeTripData(raw: unknown): TripData {
                 throw new Error(`hotels 第 ${i + 1} 項的 ${field} 必須是文字`);
             }
         }
+        for (const field of ["localName", "mapLink"] as const) {
+            validateOptionalString((hotel as unknown as Record<string, unknown>)[field], `hotels 第 ${i + 1} 項`, field);
+        }
         validateConfirmation((hotel as { confirmation?: unknown; }).confirmation, `hotels 第 ${i + 1} 項`);
     }
     // A bare-number city (e.g. `city: 123`) would crash weather lookups later;
@@ -306,9 +325,33 @@ function normalizeTripData(raw: unknown): TripData {
                 throw new Error(`days 第 ${i + 1} 項的 timeline 第 ${j + 1} 項的 status 必須是 'done' 或 'skipped'`);
             }
             const evWhere = `days 第 ${i + 1} 項的 timeline 第 ${j + 1} 項`;
+            // `desc` renders through `markdown.ts` and `mapLink` through
+            // `sanitizeLinkHref`; both degrade a non-string to nothing rather
+            // than throwing, so without this the author's `desc: 2024` would
+            // silently disappear off the card. Absent stays legal: it has
+            // always rendered as an empty line, and this same gate runs on an
+            // AI edit and on a share-link import.
+            for (const field of ["desc", "localName", "mapLink"] as const) {
+                validateOptionalString((ev as unknown as Record<string, unknown>)[field], evWhere, field);
+            }
+            const evBullets: unknown = (ev as { bullets?: unknown; }).bullets;
+            if (evBullets != null) {
+                if (!Array.isArray(evBullets)) {
+                    throw new Error(`${evWhere}的 bullets 必須是列表`);
+                }
+                for (const [k, bullet] of evBullets.entries()) {
+                    if (bullet == null) {
+                        throw new Error(`${evWhere}的 bullets 第 ${k + 1} 項必須是文字 (不可為空白列表項)`);
+                    }
+                    validateOptionalString(bullet, evWhere, `bullets 第 ${k + 1} 項`);
+                }
+            }
             validateConfirmation((ev as { confirmation?: unknown; }).confirmation, evWhere);
-            validatePlaceList((ev as { alternatives?: unknown; }).alternatives, evWhere, "alternatives", "title", ["localName", "mapLink", "note"]);
-            validatePlaceList((ev as { stops?: unknown; }).stops, evWhere, "stops", "name", ["localName", "mapLink"]);
+            validateEntryList((ev as { alternatives?: unknown; }).alternatives, evWhere, "alternatives", ["title"], ["localName", "mapLink", "note"]);
+            validateEntryList((ev as { stops?: unknown; }).stops, evWhere, "stops", ["name"], ["localName", "mapLink"]);
+            // `links` had no shape check at all, so a `- label: 官網` with no
+            // `url` reached the render as `undefined`.
+            validateEntryList((ev as { links?: unknown; }).links, evWhere, "links", ["label", "url"], []);
         }
         if (day.city != null && typeof day.city !== "string") {
             throw new Error(`days 第 ${i + 1} 項的 city 必須是文字 (例如 'Tokyo')`);
@@ -322,6 +365,7 @@ function normalizeTripData(raw: unknown): TripData {
             if (!item || typeof item !== "object" || Array.isArray(item)) {
                 throw new Error(`${listName} 第 ${j + 1} 項必須是物件 (例如 - text: '項目內容')`);
             }
+            validateOptionalString((item as { text?: unknown; }).text, `${listName} 第 ${j + 1} 項`, "text");
         }
     }
     // Expense records get `_id`s too; a null / non-object entry would crash

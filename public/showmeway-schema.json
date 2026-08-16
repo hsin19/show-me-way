@@ -116,7 +116,7 @@
         "properties": {
           "text": {
             "type": "string",
-            "description": "待辦事項文字"
+            "description": "待辦事項文字，支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`"
           },
           "checked": {
             "type": "boolean",
@@ -134,7 +134,7 @@
         "properties": {
           "text": {
             "type": "string",
-            "description": "打包物品描述"
+            "description": "打包物品描述，支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`"
           },
           "checked": {
             "type": "boolean",
@@ -225,7 +225,7 @@
                 },
                 "desc": {
                   "type": "string",
-                  "description": "詳細說明描述"
+                  "description": "詳細說明描述，支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`"
                 },
                 "status": {
                   "type": "string",
@@ -237,7 +237,7 @@
                   "items": {
                     "type": "string"
                   },
-                  "description": "備註條列式項目 (支援 HTML 標籤如 <i>)"
+                  "description": "備註條列式項目，支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`（不支援 HTML）"
                 },
                 "localName": {
                   "type": "string",
@@ -301,7 +301,7 @@
                       },
                       "url": {
                         "type": "string",
-                        "description": "連結網址"
+                        "description": "連結網址：http(s)、mailto:、tel:、sms:、geo: 或裸網域 (會自動補 https://)。其他 scheme 不會顯示連結"
                       }
                     }
                   }
@@ -327,7 +327,7 @@
                       },
                       "note": {
                         "type": "string",
-                        "description": "換點決策備註 (選填)，例如「排隊超過 30 分鐘就換」。"
+                        "description": "換點決策備註 (選填)，例如「排隊超過 30 分鐘就換」。支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`"
                       }
                     }
                   }

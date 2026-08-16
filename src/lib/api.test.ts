@@ -391,6 +391,82 @@ describe("validateYaml — stops 形狀", () => {
     });
 });
 
+describe("validateYaml — 行內 Markdown 欄位的形狀", () => {
+    // 這些欄位交給 markdown.ts 渲染，非文字會被靜靜丟掉而不是報錯，
+    // 所以驗證這一關要替作者攔下來。缺欄位仍然合法：一直都只是少一行字。
+    const plainEvent = [
+        "",
+        "      - time: '08:00'",
+        "        title: '✈️ 班機'",
+        "        type: booked",
+    ].join("\n");
+
+    it("接受缺少 desc 的事件", () => {
+        const data = validateYaml(timelineYaml(plainEvent));
+        expect(data.days[0].timeline[0].desc).toBeUndefined();
+    });
+
+    it("拒絕非文字的 desc", () => {
+        expect(() => validateYaml(timelineYaml(`${plainEvent}\n        desc: 2024`)))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 desc 必須是文字");
+    });
+
+    it("拒絕非列表的 bullets", () => {
+        expect(() => validateYaml(timelineYaml(`${bookedEvent}\n        bullets: '提早 15 分鐘'`)))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 bullets 必須是列表");
+    });
+
+    it("拒絕非文字的 bullets 項目並指出項次", () => {
+        expect(() => validateYaml(timelineYaml(`${bookedEvent}\n        bullets:\n          - '提早 15 分鐘'\n          - 42`)))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 bullets 第 2 項 必須是文字");
+    });
+
+    it("拒絕空白的 bullets 列表項", () => {
+        expect(() => validateYaml(timelineYaml(`${bookedEvent}\n        bullets:\n          - '提早 15 分鐘'\n          -`)))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 bullets 第 2 項必須是文字 (不可為空白列表項)");
+    });
+
+    it("拒絕非文字的 localName 與 mapLink (渲染時會被靜靜丟掉)", () => {
+        expect(() => validateYaml(timelineYaml(`${bookedEvent}\n        mapLink: 20240101`)))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 mapLink 必須是文字");
+        expect(() => validateYaml(timelineYaml(`${bookedEvent}\n        localName: 123`)))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 localName 必須是文字");
+    });
+
+    it("拒絕非文字的 todo / packing text", () => {
+        expect(() => validateYaml(`${timelineYaml(bookedEvent)}\ntodo:\n  - text: 123`))
+            .toThrow("todo 第 1 項的 text 必須是文字");
+        expect(() => validateYaml(`${timelineYaml(bookedEvent)}\npacking:\n  - text: [a, b]`))
+            .toThrow("packing 第 1 項的 text 必須是文字");
+    });
+});
+
+describe("validateYaml — links 形狀", () => {
+    // `links` had no shape check at all until the hrefs started being
+    // sanitized: a missing `url` reached the renderer as `undefined`.
+    it("接受完整的連結清單", () => {
+        const data = validateYaml(timelineYaml(`${bookedEvent}\n        links:\n          - label: '官網'\n            url: 'https://example.com'`));
+        expect(data.days[0].timeline[0].links).toEqual([{ label: "官網", url: "https://example.com" }]);
+    });
+
+    it("拒絕非列表的 links", () => {
+        expect(() => validateYaml(timelineYaml(`${bookedEvent}\n        links: 'https://example.com'`)))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 links 必須是列表");
+    });
+
+    it("拒絕缺少 url 或 label 的項目", () => {
+        expect(() => validateYaml(timelineYaml(`${bookedEvent}\n        links:\n          - label: '官網'`)))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 links 第 1 項缺少 url 屬性");
+        expect(() => validateYaml(timelineYaml(`${bookedEvent}\n        links:\n          - url: 'https://example.com'`)))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 links 第 1 項缺少 label 屬性");
+    });
+
+    it("拒絕非文字的 url", () => {
+        expect(() => validateYaml(timelineYaml(`${bookedEvent}\n        links:\n          - label: '官網'\n            url: 20240101`)))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 links 第 1 項的 url 必須是文字");
+    });
+});
+
 describe("serializeToYaml 與 round-trip", () => {
     const richEvent = [
         "",
