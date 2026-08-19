@@ -44,13 +44,37 @@ export function getTodayIsoString(): string {
     return toLocalIsoDate(new Date());
 }
 
+/**
+ * The UTC calendar day of a `Date` as YYYY-MM-DD -- for a Date that already
+ * *means* a bare date, which is how js-yaml hands back an unquoted `2026-10-01`
+ * (UTC midnight). `toLocalIsoDate` is for a Date meaning a local instant; west of
+ * UTC the two disagree by a day, so the wrong one silently shifts every date.
+ */
+export function toUtcIsoDate(date: Date): string {
+    const yyyy = date.getUTCFullYear();
+    const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(date.getUTCDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+/** Shift a plain YYYY-MM-DD by whole days; plain date in, plain date out. */
+export function addDaysIso(dateStr: string, days: number): string {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return toUtcIsoDate(new Date(Date.UTC(y, m - 1, d + days)));
+}
+
 export interface CountdownTrip {
     start: string; // YYYY-MM-DD
     end: string; // YYYY-MM-DD
-    departure: string; // ISO date-time
+    /** Local date-time without an offset; derived from day 1's first event, never authored. */
+    departure: string;
 }
 
-/** The hero's phase label: 進行中 / 已結束, or a countdown to the flight before departure. */
+/**
+ * The hero's phase label: 進行中 / 已結束, or a countdown to the trip's first event.
+ * There is deliberately no "already left" case: `departure` is derived to sit on
+ * `start`, so it cannot be in the past while the trip has not begun.
+ */
 export function getCountdownText(trip: CountdownTrip, now: Date = new Date()): string {
     const departureDate = new Date(trip.departure);
     const startDate = parseLocalDate(trip.start);
@@ -60,8 +84,6 @@ export function getCountdownText(trip: CountdownTrip, now: Date = new Date()): s
     if (now > endDate) return "🗺️ 旅程圓滿結束";
 
     const diff = departureDate.getTime() - now.getTime();
-    if (diff <= 0) return "✈️ 飛機已起飛！";
-
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     if (days > 0) return `⏳ 倒數 ${days} 天 ${hours} 小時`;

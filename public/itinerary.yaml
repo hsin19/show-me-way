@@ -1,9 +1,6 @@
 # yaml-language-server: $schema=https://hsin19.github.io/show-me-way/showmeway-schema.json
 trip:
   name: 下面一way-我的探索之旅
-  start: '2026-10-01'
-  end: '2026-10-04'
-  departure: '2026-10-01T08:00:00+08:00'
   lang: ja
   currency: JPY
   city: Tokyo
@@ -29,8 +26,7 @@ trip:
       checkOut: '2026-10-04'
       localName: お台場ベイビューホテル
 days:
-  - day: 1
-    date: '2026-10-01'
+  - date: '2026-10-01'
     title: 抵達 · 新宿
     pace: 輕鬆漫遊，當天以休息與覓食為主
     timeline:
@@ -63,8 +59,7 @@ days:
             note: 排隊超過 30 分鐘就換這間
           - title: 商場美食街
             note: 雨天 / 太累的備案，免排隊
-  - day: 2
-    date: '2026-10-02'
+  - date: '2026-10-02'
     title: 經典景點 · 澀谷
     pace: 腳步略快，行程豐富
     timeline:
@@ -107,8 +102,7 @@ days:
         links:
           - label: 免稅須知
             url: 'https://example.com/tax-free'
-  - day: 3
-    date: '2026-10-03'
+  - date: '2026-10-03'
     title: 京都一日遊
     city: Kyoto
     pace: 早出晚歸，當天移動到京都
@@ -146,8 +140,7 @@ days:
         desc: 京都站搭新幹線返回東京，回飯店休息。
         confirmation:
           code: 'EX-778890'
-  - day: 4
-    date: '2026-10-04'
+  - date: '2026-10-04'
     title: 採購 · 回程
     pace: 收尾行程，不排太滿
     timeline:

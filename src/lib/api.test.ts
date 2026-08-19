@@ -215,6 +215,15 @@ describe("validateYaml — 結構與其餘 zh-TW 驗證", () => {
             .toThrow("YAML 缺少必要的結構 (trip 或 days 區塊)");
     });
 
+    it("拒絕缺少 name / hotels 或 name 非文字的 trip 區塊", () => {
+        expect(() => validateYaml(`trip:\n  hotels:${validHotel}\n${validDaysBlock}`))
+            .toThrow("trip 區塊缺少 name (文字) 或 hotels 屬性");
+        expect(() => validateYaml(`trip:\n  name: 123\n  hotels:${validHotel}\n${validDaysBlock}`))
+            .toThrow("trip 區塊缺少 name (文字) 或 hotels 屬性");
+        expect(() => validateYaml(`trip:\n  name: '測試行程'\n${validDaysBlock}`))
+            .toThrow("trip 區塊缺少 name (文字) 或 hotels 屬性");
+    });
+
     it("只剩註解 / modeline 的內容視為空，仍回報 zh-TW 訊息", () => {
         expect(() => validateYaml("# yaml-language-server: $schema=./showmeway-schema.json\n"))
             .toThrow("YAML 內容為空或格式不正確");
@@ -287,6 +296,111 @@ describe("validateYaml — 結構與其餘 zh-TW 驗證", () => {
             .toThrow("trip.city 必須是文字 (例如 'Tokyo')");
         expect(() => validateYaml([validTripBlock, validDaysBlock, "    city: 123"].join("\n")))
             .toThrow("days 第 1 項的 city 必須是文字 (例如 'Tokyo')");
+    });
+
+    it("拒絕缺少 date 屬性或格式錯誤的 day", () => {
+        const dayWithoutDate = [
+            "days:",
+            "  - title: '市區'",
+            "    pace: '輕鬆'",
+            "    timeline: []",
+        ].join("\n");
+        expect(() => validateYaml(`${validTripBlock}\n${dayWithoutDate}`))
+            .toThrow("days 第 1 項缺少 date 屬性");
+
+        const dayWithInvalidDate = [
+            "days:",
+            "  - date: 'not-a-date'",
+            "    title: '市區'",
+            "    pace: '輕鬆'",
+            "    timeline: []",
+        ].join("\n");
+        expect(() => validateYaml(`${validTripBlock}\n${dayWithInvalidDate}`))
+            .toThrow("days 第 1 項的 date 必須是 YYYY-MM-DD 日期格式");
+    });
+
+    it("pace 選填：省略時回退預設，非文字則拒絕", () => {
+        const dayWithoutPace = [
+            "days:",
+            "  - date: '2026-06-11'",
+            "    title: '市區'",
+            "    timeline: []",
+        ].join("\n");
+        expect(validateYaml(`${validTripBlock}\n${dayWithoutPace}`).days[0].pace).toBe("自由安排行程");
+        expect(() => validateYaml(`${validTripBlock}\n${dayWithoutPace.replace("    timeline: []", "    pace: 123\n    timeline: []")}`))
+            .toThrow("days 第 1 項的 pace 必須是文字");
+    });
+
+    it("接受未加引號的 date (js-yaml 會給出 Date 物件)", () => {
+        const unquoted = [
+            "days:",
+            "  - date: 2026-06-11",
+            "    title: '市區'",
+            "    timeline: []",
+        ].join("\n");
+        expect(validateYaml(`${validTripBlock}\n${unquoted}`).days[0].date).toBe("2026-06-11");
+    });
+
+    it("自動推算 trip.start 與 trip.end，並依日期自動升冪排序與推算 day", () => {
+        const unorderedYaml = [
+            "trip:",
+            "  name: '自動推算測試'",
+            "  departure: '2026-10-01T08:00:00+08:00'",
+            `  hotels:${validHotel}`,
+            "days:",
+            "  - date: '2026-10-03'",
+            "    title: '第三天行程'",
+            "    timeline: []",
+            "  - date: '2026-10-01'",
+            "    title: '第一天行程'",
+            "    timeline: []",
+        ].join("\n");
+        const parsed = validateYaml(unorderedYaml);
+        expect(parsed.trip.start).toBe("2026-10-01");
+        expect(parsed.trip.end).toBe("2026-10-03");
+        expect(parsed.days).toHaveLength(3);
+        // Day 1
+        expect(parsed.days[0].day).toBe(1);
+        expect(parsed.days[0].date).toBe("2026-10-01");
+        expect(parsed.days[0].title).toBe("第一天行程");
+        // Day 2 (自動補齊)
+        expect(parsed.days[1].day).toBe(2);
+        expect(parsed.days[1].date).toBe("2026-10-02");
+        expect(parsed.days[1].title).toBe("自由活動");
+        expect(parsed.days[1].timeline).toEqual([]);
+        // Day 3
+        expect(parsed.days[2].day).toBe(3);
+        expect(parsed.days[2].date).toBe("2026-10-03");
+        expect(parsed.days[2].title).toBe("第三天行程");
+    });
+
+    it("自動由第一天的第一個事件時間推算 trip.departure，若無時間則回退至 00:00:00", () => {
+        const withTimedEvent = [
+            "trip:",
+            "  name: '出發時間推算測試'",
+            `  hotels:${validHotel}`,
+            "days:",
+            "  - date: '2026-10-01'",
+            "    title: '第一天'",
+            "    timeline:",
+            "      - time: '08:30 - 10:00'",
+            "        title: '集合出發'",
+            "        type: booked",
+        ].join("\n");
+        const parsedTimed = validateYaml(withTimedEvent);
+        expect(parsedTimed.trip.departure).toBe("2026-10-01T08:30:00");
+
+        const withoutTimeEvent = [
+            "trip:",
+            "  name: '出發時間回退測試'",
+            `  hotels:${validHotel}`,
+            "days:",
+            "  - date: '2026-10-01'",
+            "    title: '第一天'",
+            "    timeline: []",
+        ].join("\n");
+        const parsedUntimed = validateYaml(withoutTimeEvent);
+        expect(parsedUntimed.trip.departure).toBe("2026-10-01T00:00:00");
     });
 });
 
@@ -487,13 +601,22 @@ describe("serializeToYaml 與 round-trip", () => {
         "  - text: '充電器'",
     ].join("\n");
 
-    it("剝除 runtime _id 與 legacy checklist id", () => {
+    it("剝除 runtime _id 與 legacy checklist id，且不輸出 trip.start、trip.end、trip.departure 與 day.day", () => {
         const data = validateYaml(richYaml);
         expect(data.days[0].timeline[0]._id).toBeTruthy();
         expect(data.todo[0]._id).toBeTruthy();
+        expect(data.trip.start).toBe("2026-06-11");
+        expect(data.trip.end).toBe("2026-06-11");
+        expect(data.trip.departure).toBe("2026-06-11T08:00:00");
+        expect(data.days[0].day).toBe(1);
+
         const yaml = serializeToYaml(data);
         expect(yaml).not.toContain("_id");
         expect(yaml).not.toContain("legacy-1");
+        expect(yaml).not.toMatch(/^\s+start:/m);
+        expect(yaml).not.toMatch(/^\s+end:/m);
+        expect(yaml).not.toMatch(/^\s+departure:/m);
+        expect(yaml).not.toMatch(/^\s+day:\s*\d+/m);
     });
 
     it("輸出以 schema modeline 開頭", () => {

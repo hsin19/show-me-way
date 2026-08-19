@@ -6,7 +6,7 @@
   "properties": {
     "trip": {
       "type": "object",
-      "required": ["name", "start", "end", "departure", "hotels"],
+      "required": ["name", "hotels"],
       "properties": {
         "name": {
           "type": "string",
@@ -14,17 +14,20 @@
         },
         "start": {
           "type": "string",
+          "deprecated": true,
           "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-          "description": "出發日期 (YYYY-MM-DD 格式，例如: 2026-06-11)"
+          "description": "[已過時 / Deprecated] 不需填寫。App 會自動取 days 中最早的 date 作為出發日期。"
         },
         "end": {
           "type": "string",
+          "deprecated": true,
           "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-          "description": "回程日期 (YYYY-MM-DD 格式，例如: 2026-06-16)"
+          "description": "[已過時 / Deprecated] 不需填寫。App 會自動取 days 中最晚的 date 作為回程日期。"
         },
         "departure": {
           "type": "string",
-          "description": "去程班機起飛時間，ISO 8601 格式，例如: 2026-06-11T14:00:00+08:00 (用於首頁倒數計時)"
+          "deprecated": true,
+          "description": "[已過時 / Deprecated] 不需填寫。App 會自動以第一天的第一個行程時間作為首頁倒數計時的目標。"
         },
         "lang": {
           "type": "string",
@@ -171,14 +174,15 @@
     },
     "days": {
       "type": "array",
-      "description": "每日行程細節列表",
+      "description": "每日行程細節列表 (順序不敏感，系統會自動按日期排序並補齊中間空白天)",
       "items": {
         "type": "object",
-        "required": ["day", "date", "title", "pace", "timeline"],
+        "required": ["date", "title", "timeline"],
         "properties": {
           "day": {
             "type": "integer",
-            "description": "第幾天，例如 1"
+            "deprecated": true,
+            "description": "[已過時 / Deprecated] 不需填寫。App 會依 date 排序後自動編號。"
           },
           "date": {
             "type": "string",
@@ -190,6 +194,11 @@
             "maxLength": 24,
             "description": "當日行程大標題/主題，例如: 抵達 · 新宿、京都一日遊。建議 14 個全形字以內 (約 23 個半形字)：在 390px 寬的手機上，日程卡大標題超過就會折成兩行；總覽日期清單則會在 15 個全形字處截字。"
           },
+          "pace": {
+            "type": "string",
+            "maxLength": 30,
+            "description": "今日行程節奏描述 (選填，預設為「自由安排行程」)，例如: 慢活、需要早起。建議 15 個全形字以內 (約 27 個半形字)。"
+          },
           "region": {
             "type": "string",
             "deprecated": true,
@@ -198,11 +207,6 @@
           "city": {
             "type": "string",
             "description": "當日所在城市，覆蓋 trip.city 的天氣查詢 (選填，多城市行程用)。建議使用英文名稱 (例如: Kyoto)，可加兩碼國碼後綴消歧 (例如: 'Springfield, US')。留空字串視同未設定，回退至 trip.city。"
-          },
-          "pace": {
-            "type": "string",
-            "maxLength": 30,
-            "description": "今日行程節奏描述，例如: 慢活、需要早起。建議 15 個全形字以內 (約 27 個半形字)：「今日節奏：」前綴會佔掉同一行的寬度，超過就會折行。"
           },
           "timeline": {
             "type": "array",

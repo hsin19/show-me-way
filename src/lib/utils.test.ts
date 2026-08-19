@@ -6,6 +6,7 @@ import {
     vi,
 } from "vitest";
 import {
+    addDaysIso,
     buildDayReport,
     classifyTimelineEvents,
     findCurrentEventIndex,
@@ -24,6 +25,7 @@ import {
     parseLocalDate,
     splitDayDate,
     toLocalIsoDate,
+    toUtcIsoDate,
 } from "./utils";
 
 describe("parseLocalDate", () => {
@@ -427,6 +429,31 @@ describe("formatDateRange", () => {
 
     it("falls back gracefully on invalid dates", () => {
         expect(formatDateRange("bad", "worse")).toBe("bad – worse");
+    });
+});
+
+describe("toUtcIsoDate", () => {
+    it("reads the UTC calendar day, which is what js-yaml gives a bare date", () => {
+        expect(toUtcIsoDate(new Date("2026-06-11T00:00:00Z"))).toBe("2026-06-11");
+    });
+
+    it("pads single-digit months and days", () => {
+        expect(toUtcIsoDate(new Date("2026-01-02T00:00:00Z"))).toBe("2026-01-02");
+    });
+});
+
+describe("addDaysIso", () => {
+    it("steps forward and backward by whole days", () => {
+        expect(addDaysIso("2026-06-11", 1)).toBe("2026-06-12");
+        expect(addDaysIso("2026-06-11", 0)).toBe("2026-06-11");
+        expect(addDaysIso("2026-06-11", -1)).toBe("2026-06-10");
+    });
+
+    it("rolls over months, years and leap days", () => {
+        expect(addDaysIso("2026-06-30", 1)).toBe("2026-07-01");
+        expect(addDaysIso("2026-12-31", 1)).toBe("2027-01-01");
+        expect(addDaysIso("2024-02-28", 1)).toBe("2024-02-29");
+        expect(addDaysIso("2026-02-28", 1)).toBe("2026-03-01");
     });
 });
 

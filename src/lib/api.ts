@@ -6,6 +6,11 @@ import {
     type ExpenseItem,
     ledgerTypeLabel,
 } from "./ledger";
+import {
+    addDaysIso,
+    parseEventStartMinutes,
+    toUtcIsoDate,
+} from "./utils";
 
 export interface ConfirmationInfo {
     /** Numeric codes must be quoted in YAML, or leading zeros are lost to number parsing. */
@@ -47,6 +52,7 @@ export interface TimelineEvent {
 }
 
 export interface DayItinerary {
+    /** Derived: 1-based position after `normalizeTripData` sorts and gap-fills by date. Never authored, never serialized. */
     day: number;
     date: string;
     title: string;
@@ -71,9 +77,14 @@ export interface HotelInfo {
 export interface TripData {
     trip: {
         name: string;
+        /**
+         * Derived from `days`, not authored: the first and last dates present, and
+         * day 1's first event as the countdown target. Always set on a loaded trip
+         * and always absent from saved YAML -- see `normalizeTripData`.
+         */
         start: string; // YYYY-MM-DD
         end: string; // YYYY-MM-DD
-        departure: string; // ISO date-time string, e.g., 2026-06-11T14:00:00+08:00
+        departure: string; // local date-time, e.g. 2026-06-11T14:00:00
         /** Selects the built-in phrase set: 'ko', 'ja', 'en' — see `lib/phrases.ts`. */
         lang?: string;
         /** Ledger currency, e.g. 'KRW', 'JPY', 'USD'. */
@@ -207,6 +218,25 @@ function parseYaml(yaml: string): unknown {
     return docs[0];
 }
 
+/** Title and pace of a gap day the author skipped, and the pace fallback for a day that omits it. */
+const DEFAULT_DAY_TITLE = "自由活動";
+const DEFAULT_PACE = "自由安排行程";
+
+/**
+ * The countdown target, replacing the `trip.departure` authors used to hand-write:
+ * day 1's first event, at local midnight when that event carries no usable time.
+ * Deliberately offset-free -- the trip's own timezone is where the user reads it.
+ */
+function deriveDeparture(firstDay: DayItinerary): string {
+    const minutes = parseEventStartMinutes(firstDay.timeline[0]?.time ?? "") ?? 0;
+    // `parseEventStartMinutes` accepts the after-midnight timetable notation
+    // ("25:30"), which is not a wall-clock hour any Date can hold.
+    const wrapped = minutes % (24 * 60);
+    const hh = String(Math.floor(wrapped / 60)).padStart(2, "0");
+    const mm = String(wrapped % 60).padStart(2, "0");
+    return `${firstDay.date}T${hh}:${mm}:00`;
+}
+
 /** The only real gate on itinerary data; its zh-TW messages are shown to the user verbatim. */
 function normalizeTripData(raw: unknown): TripData {
     if (!raw || typeof raw !== "object") {
@@ -221,8 +251,8 @@ function normalizeTripData(raw: unknown): TripData {
     if (data.days.length === 0) {
         throw new Error("days 至少需要一天的行程");
     }
-    if (!data.trip.start || !data.trip.end || !data.trip.departure || !Array.isArray(data.trip.hotels)) {
-        throw new Error("trip 區塊缺少 start, end, departure 或 hotels 屬性");
+    if (typeof data.trip.name !== "string" || !data.trip.name || !Array.isArray(data.trip.hotels)) {
+        throw new Error("trip 區塊缺少 name (文字) 或 hotels 屬性");
     }
     for (const [i, hotel] of data.trip.hotels.entries()) {
         if (!hotel || typeof hotel !== "object" || Array.isArray(hotel)) {
@@ -260,13 +290,28 @@ function normalizeTripData(raw: unknown): TripData {
         if (!day || typeof day !== "object" || Array.isArray(day)) {
             throw new Error(`days 第 ${i + 1} 項必須是物件 (不可為空白列表項)`);
         }
-        const dayObj = day as { title?: unknown; region?: unknown; city?: unknown; timeline?: unknown; };
+        const dayObj = day as { date?: unknown; title?: unknown; region?: unknown; city?: unknown; pace?: unknown; timeline?: unknown; };
+        let dateVal = dayObj.date;
+        if (dateVal == null) {
+            throw new Error(`days 第 ${i + 1} 項缺少 date 屬性`);
+        }
+        // An unquoted `2026-10-01` reaches us as a Date, and the dates below drive
+        // the whole sort/gap/day-number derivation, so coerce rather than reject.
+        if (dateVal instanceof Date) {
+            dateVal = toUtcIsoDate(dateVal);
+        }
+        if (typeof dateVal !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
+            throw new Error(`days 第 ${i + 1} 項的 date 必須是 YYYY-MM-DD 日期格式`);
+        }
+        day.date = dateVal;
         const dayTitle = dayObj.title ?? dayObj.region;
         if (dayTitle == null || typeof dayTitle !== "string") {
             throw new Error(`days 第 ${i + 1} 項缺少 title 屬性 (或 title 必須是文字)`);
         }
         day.title = dayTitle;
         delete dayObj.region;
+        validateOptionalString(dayObj.pace, `days 第 ${i + 1} 項`, "pace");
+        day.pace = typeof dayObj.pace === "string" ? dayObj.pace : DEFAULT_PACE;
         if (!Array.isArray(day.timeline)) {
             throw new Error(`days 第 ${i + 1} 項缺少 timeline 列表`);
         }
@@ -324,11 +369,35 @@ function normalizeTripData(raw: unknown): TripData {
         }
     }
 
+    // `trip.start`/`trip.end`/`trip.departure` and `days[].day` are derived, never
+    // authored: one date per day is the only thing the user has to keep consistent.
+    // Sorting by date means `days` can be written in any order, and a skipped date
+    // becomes a free day rather than a hole in the day numbering.
+    const sortedDays = [...data.days].sort((a, b) => a.date.localeCompare(b.date));
+    const filledDays: DayItinerary[] = [];
+    let cursor = sortedDays[0].date;
+    for (const day of sortedDays) {
+        while (cursor < day.date) {
+            filledDays.push({ day: 0, date: cursor, title: DEFAULT_DAY_TITLE, pace: DEFAULT_PACE, timeline: [] });
+            cursor = addDaysIso(cursor, 1);
+        }
+        filledDays.push(day);
+        cursor = addDaysIso(day.date, 1);
+    }
+    filledDays.forEach((day, index) => day.day = index + 1);
+
+    const trip: TripData["trip"] = {
+        ...data.trip,
+        start: filledDays[0].date,
+        end: filledDays[filledDays.length - 1].date,
+        departure: deriveDeparture(filledDays[0]),
+    };
+
     // Rebuilt field by field, which is what drops a legacy top-level `phrases`
     // (now hard-coded per `trip.lang`) instead of round-tripping it back out.
     const normalized: TripData = {
-        trip: data.trip,
-        days: data.days,
+        trip,
+        days: filledDays,
         todo: Array.isArray(data.todo) ? data.todo : [],
         packing: Array.isArray(data.packing) ? data.packing : [],
         expenses: Array.isArray(data.expenses) ? data.expenses : [],
@@ -347,8 +416,15 @@ export function serializeToYaml(data: TripData): string {
     // proxy, which structuredClone throws on. Unit tests pass plain objects and
     // would not catch the swap.
     const clean = JSON.parse(JSON.stringify(data)) as TripData;
+    // Derived on every load (see `normalizeTripData`), so writing them back would
+    // freeze a stale copy the next edit silently contradicts.
+    const trip = clean.trip as Partial<TripData["trip"]>;
+    delete trip.start;
+    delete trip.end;
+    delete trip.departure;
     for (const day of clean.days) {
         delete (day as { region?: string; }).region;
+        delete (day as { day?: number; }).day;
         for (const ev of day.timeline) {
             delete ev._id;
         }

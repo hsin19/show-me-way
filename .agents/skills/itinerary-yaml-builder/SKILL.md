@@ -13,7 +13,7 @@ The source of truth for structure is `public/showmeway-schema.json`. The quick r
 
 1. **Ask for the output path first.** Inquire where the user wants to save the generated YAML file. Suggest `public/itinerary.local.yaml` as the default destination, but allow them to specify a custom target path (e.g. in `Downloads/` or another local path).
 2. **Read existing data if applicable.** If the target output file already exists, read it. Decide with the user whether you are **merging** into the current trip or **replacing** it. Never silently discard existing days/hotels.
-3. **Extract structured facts from the notes.** Pull out: trip name, start/end dates, departure flight time, hotels, and a per-day timeline. Ask the user only for missing fields that are *required* (see below) and cannot be inferred. Don't over-ask — infer sensible values for optional fields.
+3. **Extract structured facts from the notes.** Pull out: trip name, hotels, and a per-day timeline (each day carries its own `date`). Trip start/end dates and the countdown target are derived from those dates — do not record them separately. Ask the user only for missing fields that are *required* (see below) and cannot be inferred. Don't over-ask — infer sensible values for optional fields.
 4. **Normalize.** Apply the conventions below (dates, ids, event `type`, time ranges, `localName`/`mapLink`).
 5. **Write the YAML** to the chosen target path, with the schema modeline on line 1 (see Output rules).
 6. **Verify** with the checks in the Verification section before reporting done.
@@ -22,11 +22,9 @@ The source of truth for structure is `public/showmeway-schema.json`. The quick r
 
 Top-level keys: `trip` (required), `days` (required), and optional `todo`, `packing`.
 
-### trip (required: name, start, end, departure, hotels)
+### trip (required: name, hotels)
 
 - `name` — string, trip title.
-- `start` / `end` — `YYYY-MM-DD`.
-- `departure` — outbound flight time, ISO 8601 **with timezone offset**, e.g. `2026-06-11T14:00:00+08:00` (drives the home-screen countdown).
 - `lang` — optional language code (`ko` / `ja` / `en`). Selects the app's built-in survival phrases and taxi-driver prompt. Defaults to English (`en`) when omitted or unsupported. Phrases are no longer authored in YAML.
 - `city` — optional destination city for the daily weather badge. **Prefer an English name** (e.g. `Tokyo`, `Seoul`) — only some Chinese names resolve (東京/京都 work; 首爾/大阪/釜山 miss or hit the wrong country). Ambiguous names take a two-letter country suffix (e.g. `Springfield, US`). Weather is simply hidden when unset (or an empty string). Preserve an existing `city` when merging/updating.
 - `currency` — optional currency code (e.g. `JPY`, `KRW`, `USD`) driving the ledger's converter, default wallets and quick amounts. Defaults to TWD when omitted.
@@ -34,13 +32,12 @@ Top-level keys: `trip` (required), `days` (required), and optional `todo`, `pack
 - `wallets[]` — optional custom wallet/card names for the ledger (e.g. `Suica`, `WOWPASS`); omit to use the currency's defaults.
 - `hotels[]` — each requires `name`, `address` (local-language address for taxi drivers), `checkIn`, `checkOut` (both `YYYY-MM-DD`); optional `localName` (local-language hotel name, used as the map-search query), `mapLink` (direct map URL, preferred over searching `localName`) and `confirmation` (see timeline `confirmation` below — same shape).
 
-### days[] (required: day, date, title, pace, timeline)
+### days[] (required: date, title, timeline)
 
-- `day` — integer, 1-based.
-- `date` — `YYYY-MM-DD`.
+- `date` — `YYYY-MM-DD`. Order-insensitive: the app automatically sorts entries by date and fills in missing intermediate gap days as free days.
 - `title` — day headline / main area, e.g. `明洞 · 乙支路` or `京都一日遊`.
 - `city` — optional; overrides `trip.city` for this day's weather lookup (multi-city trips), e.g. `Kyoto`. Prefer English names; a `, XX` country suffix disambiguates.
-- `pace` — pace description, e.g. `慢活、需要早起`.
+- `pace` — optional pace description, e.g. `慢活、需要早起` (defaults to `自由安排行程`).
 - `timeline[]` — each requires `time`, `title`, `type`, `desc`; optional `bullets`, `localName`, `mapLink`, `stops`, `links`, `alternatives`, `status`, `confirmation`.
   - `time` — `HH:MM` or a range `14:00 - 15:30`.
   - `title` — short label; emoji prefix is idiomatic (✈️ 🏨 🍜 🛍️ ☕ 🎁).
@@ -62,8 +59,8 @@ Top-level keys: `trip` (required), `days` (required), and optional `todo`, `pack
 
 ## Conventions
 
-- **Dates are plain `YYYY-MM-DD`** and are parsed in local time by the app — never add a time or `Z` to date fields. Only `trip.departure` carries a time + offset.
-- **`days[].date` must fall within `trip.start`..`trip.end`** and `day` numbers should be sequential.
+- **Dates are plain `YYYY-MM-DD`** and are parsed in local time by the app — never add a time or `Z` to any date field, and quote them so YAML keeps them as text. Times of day live in `timeline[].time` as `HH:MM`.
+- **`trip.start` / `trip.end` / `trip.departure` and `day` numbers are derived — never write them.** The app sorts `days` by `date`, numbers them, fills any skipped date in as a free day, takes the first and last dates as the trip range, and uses day 1's first event time as the home-screen countdown target. They are stripped on every save, so a hand-written value silently disappears. Entries in `days` may be listed in any order.
 - **Never emit `_id`** on timeline events — it is a runtime-only field stripped on export.
 - **Language:** keep all user-facing copy (titles, desc, pace) in Traditional Chinese to match the app.
 - **Event type defaults:** flights/tickets/reservations → `booked`; the day's headline attraction → `must-go`; routine moves/meals → `standard`; tentative or backup ideas → `option`.
