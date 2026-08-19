@@ -20,7 +20,7 @@ export interface LanguageConfig {
     phrases: PhraseInfo[];
 }
 
-export const LANGUAGES: Record<string, LanguageConfig> = {
+const LANGUAGES: Record<string, LanguageConfig> = {
     ko: {
         label: "韓文",
         driverPrompt: "기사님, 여기로 가주세요 (司機先生，請載我去這)：",
@@ -146,7 +146,7 @@ export const LANGUAGES: Record<string, LanguageConfig> = {
     },
 };
 
-export const DEFAULT_LANG = "en";
+const DEFAULT_LANG = "en";
 
 /** Always returns a config — an unset or unknown `trip.lang` falls back to English rather than leaving the deck empty. */
 export function getLanguageConfig(lang: string | undefined): LanguageConfig {

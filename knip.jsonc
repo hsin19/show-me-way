@@ -1,0 +1,21 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // Catches what ESLint structurally cannot: `no-unused-vars` treats every
+  // `export` as a public API and goes silent, so a symbol nothing imports stays
+  // invisible to it. The two chain, which is why `check` runs `knip:fix` BEFORE
+  // `lint:fix` -- knip strips the dead `export` keyword, and ESLint then sees a
+  // file-local symbol and reports it if it really is unused, in the same run.
+  //
+  // `knip:fix` is pinned to `--fix-type exports,types`: it must never edit
+  // package.json or delete a file as a side effect of running `check`.
+  // To keep an export knip would strip, tag it `/** @public */`.
+  //
+  // `check:ci` runs `knip:ci` instead -- no fixing (CI must not write) and no
+  // dependency checks, since those flip when an upstream package restructures
+  // its own dependencies and must not gate a Dependabot bump.
+  //
+  // `svelte-eslint-parser` only reaches ESLint transitively, through
+  // eslint-plugin-svelte's own dependencies. It stays listed explicitly so an
+  // upstream dependency change cannot silently swap the parser version out.
+  "ignoreDependencies": ["svelte-eslint-parser"]
+}

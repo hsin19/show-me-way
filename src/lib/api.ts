@@ -21,7 +21,7 @@ export interface ConfirmationInfo {
     note?: string;
 }
 
-export interface TimelineEvent {
+interface TimelineEvent {
     time: string;
     title: string;
     type: "booked" | "must-go" | "option" | "standard";

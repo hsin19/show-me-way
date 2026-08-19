@@ -18,8 +18,11 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "check": "pnpm run format && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
-    "check:ci": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
+    "knip": "knip",
+    "knip:fix": "knip --fix --fix-type exports,types --format",
+    "knip:ci": "knip --exclude dependencies,devDependencies --no-config-hints",
+    "check": "pnpm run format && pnpm run knip:fix && pnpm run lint:fix && pnpm run typecheck && pnpm run test && pnpm run build && E2E_SKIP_BUILD=1 pnpm run test:e2e",
+    "check:ci": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run knip:ci && pnpm run test && pnpm run build",
     "prepare": "simple-git-hooks"
   },
   "simple-git-hooks": {
@@ -44,6 +47,7 @@
     "eslint-plugin-svelte": "^3.22.0",
     "globals": "^17.9.0",
     "js-yaml": "^5.2.3",
+    "knip": "^6.32.2",
     "lint-staged": "^17.3.0",
     "simple-git-hooks": "^2.13.1",
     "svelte": "^5.56.8",

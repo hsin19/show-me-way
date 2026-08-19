@@ -35,7 +35,13 @@ export default defineConfig({
         { name: "mobile-chromium", use: { ...devices["Pixel 7"] } },
     ],
     webServer: {
-        command: "pnpm exec vite build && pnpm exec vite preview",
+        // Builds by default so `pnpm run test:e2e` is self-contained. `check` sets
+        // E2E_SKIP_BUILD because it runs `build` on the line immediately before —
+        // that adjacency is the ONLY thing making a stale dist/ impossible, so do
+        // not set the flag anywhere the build is not guaranteed to have just run.
+        command: process.env.E2E_SKIP_BUILD
+            ? "pnpm exec vite preview"
+            : "pnpm exec vite build && pnpm exec vite preview",
         url: BASE_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

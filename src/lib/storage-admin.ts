@@ -32,7 +32,7 @@ const APP_KEY_PREFIX = "showmeway_";
 /** Swept too, so a copy that outlived a failed migration cannot sit there with nothing left to read it. */
 const LEGACY_KEYS = ["todo_state", "packing_state", "ledger_expenses"];
 
-export interface CategoryStorageStats {
+interface CategoryStorageStats {
     keyCount: number;
     sizeBytes: number;
 }

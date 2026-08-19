@@ -2,7 +2,7 @@
 // same `serializeToYaml` — there is no formatting noise for a word diff to see
 // through, and this needs no dependency.
 
-export type DiffLineType = "equal" | "added" | "removed";
+type DiffLineType = "equal" | "added" | "removed";
 
 export interface DiffLine {
     type: DiffLineType;

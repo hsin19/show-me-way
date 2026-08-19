@@ -5,7 +5,7 @@ import {
 
 export const GEMINI_API_KEY_STORAGE = "showmeway_gemini_api_key";
 export const GEMINI_MODEL_STORAGE = "showmeway_gemini_model";
-export const GEMINI_MODEL_FILTER_STORAGE = "showmeway_gemini_model_filter";
+const GEMINI_MODEL_FILTER_STORAGE = "showmeway_gemini_model_filter";
 
 export type GeminiModelFilterMode = "default" | "all";
 
@@ -104,7 +104,7 @@ export function buildItineraryContext(tripData: TripData): string {
     return serializeToYaml(tripData);
 }
 
-export function buildSystemInstruction(itineraryYaml: string, currentDateTime: string): string {
+function buildSystemInstruction(itineraryYaml: string, currentDateTime: string): string {
     return [
         "你是「ShowMeWay」旅遊行程 App 的 AI 助手。請依據以下使用者的行程資料（YAML 格式）協助查詢與編輯行程。",
         `現在時間：${currentDateTime}`,
@@ -137,7 +137,7 @@ export function buildSystemInstruction(itineraryYaml: string, currentDateTime: s
 // A tool call rather than a YAML block in prose, so nothing has to be scraped out
 // of the reply. Every call is intercepted client-side, validated and confirmed —
 // see ChatPanel — so the model never edits the trip on its own.
-export const UPDATE_ITINERARY_TOOL_NAME = "update_itinerary";
+const UPDATE_ITINERARY_TOOL_NAME = "update_itinerary";
 
 const UPDATE_ITINERARY_TOOL = {
     type: "function",
@@ -159,7 +159,7 @@ const UPDATE_ITINERARY_TOOL = {
     },
 } as const;
 
-export interface ProposedEdit {
+interface ProposedEdit {
     /** The complete updated itinerary, NOT yet validated — that is the caller's job. */
     yaml: string;
     /** zh-TW one-liner describing the change, for the chat bubble. */

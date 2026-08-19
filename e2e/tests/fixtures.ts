@@ -4,7 +4,7 @@ import {
     test as base,
 } from "@playwright/test";
 
-export const BASE_ORIGIN = "http://localhost:8046";
+const BASE_ORIGIN = "http://localhost:8046";
 
 // Minimal itinerary that passes normalizeTripData (src/lib/api.ts). Dates are
 // far-future on purpose: no day ever equals "today", so the app always lands on
