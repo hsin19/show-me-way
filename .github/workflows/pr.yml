@@ -1,116 +1,28 @@
-name: CI
+name: Pull Request
 
+# Everything a PR gets: the shared gate in check.yml, plus the policy that only
+# makes sense on a PR -- dependency review, and the Dependabot auto-merge /
+# auto-repair pair. Not named `ci.yml` because CI is not what distinguishes it:
+# deploy.yml calls the same gate. The trigger is what distinguishes it.
 on:
   pull_request:
-  workflow_dispatch:
 
 permissions:
   contents: read
 
 # Cancel superseded runs of the same PR, but never interfere with the 'pages' deploy queue
 concurrency:
-  group: ci-${{ github.ref }}
+  group: pr-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   check:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      # pnpm version comes from package.json's packageManager field
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node
-        uses: actions/setup-node@v7.0.0
-        with:
-          node-version-file: '.node-version'
-          cache: 'pnpm'
-
-      - name: Cache dprint plugins
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/dprint
-          key: dprint-${{ runner.os }}-${{ hashFiles('.dprint.jsonc') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run checks and build
-        run: pnpm run check:ci
-
-      # The report these are compared against is uploaded by deploy.yml, which is the
-      # only thing that runs check:ci on main -- see .github/workflows/README.md.
-      # Dependabot PRs cannot read Actions secrets, so the token is empty there and
-      # the upload is skipped rather than failing the job -- hence fail_ci_if_error.
-      # !cancelled() so a `build` failure after the tests passed still uploads the
-      # coverage the tests already produced.
-      - name: Upload coverage to Codecov
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v7
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: coverage
-          fail_ci_if_error: false
-
-      - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v7
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          report_type: test_results
-          files: test-report.junit.xml
-          fail_ci_if_error: false
-
-  e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node
-        uses: actions/setup-node@v7.0.0
-        with:
-          node-version-file: '.node-version'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Run E2E tests
-        run: pnpm run test:e2e
-
-      - name: Upload Playwright report
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: playwright-report
-          path: |
-            e2e/playwright-report
-            e2e/test-results
-          retention-days: 7
+    uses: ./.github/workflows/check.yml
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   dependency-review:
     name: Dependency Review
-    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -132,7 +44,7 @@ jobs:
   # See .github/workflows/README.md for the token setup.
   auto-merge:
     name: Auto-merge Dependabot
-    needs: [check, e2e, dependency-review]
+    needs: [check, dependency-review]
     if: ${{ success() && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -148,7 +60,7 @@ jobs:
 
   jules-fix:
     name: Jules fix on failure
-    needs: [check, e2e, dependency-review]
+    needs: [check, dependency-review]
     if: ${{ failure() && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 15

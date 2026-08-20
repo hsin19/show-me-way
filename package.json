@@ -15,7 +15,7 @@
     "typecheck": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
     "typecheck:fast": "node -e \"fs.rmSync('.svelte-check',{recursive:true,force:true})\" && svelte-check --tsgo --tsconfig ./tsconfig.app.json && tsgo -p tsconfig.node.json",
     "test": "vitest run",
-    "test:ci": "vitest run --coverage --reporter=default --reporter=junit --outputFile.junit=test-report.junit.xml",
+    "test:ci": "vitest run --coverage --reporter=default --reporter=github-actions --reporter=junit --outputFile.junit=test-report.junit.xml",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
@@ -23,7 +23,7 @@
     "knip:fix": "knip --fix --fix-type exports,types --format",
     "knip:ci": "knip --exclude dependencies,devDependencies --no-config-hints",
     "check": "pnpm run format && pnpm run knip:fix && pnpm run lint:fix && pnpm run typecheck && pnpm run test && pnpm run build && E2E_SKIP_BUILD=1 pnpm run test:e2e",
-    "check:ci": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run knip:ci && pnpm run test:ci && pnpm run build",
+    "ci": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run knip:ci && pnpm run test && pnpm run build",
     "prepare": "simple-git-hooks"
   },
   "simple-git-hooks": {

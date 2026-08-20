@@ -1,0 +1,143 @@
+name: Check
+
+# The single definition of "did this tree pass" -- the same set `pnpm run check`
+# covers locally. Called by pr.yml for a pull request and by deploy.yml before it
+# ships, so the two cannot drift, which they did when each spelled the list out for
+# itself. workflow_dispatch lives here rather than on a caller: "run every check
+# against this ref" is this workflow's job, not the PR pipeline's.
+on:
+  workflow_call:
+    secrets:
+      CODECOV_TOKEN:
+        # Absent on a Dependabot PR, which reads the Dependabot secret store rather
+        # than the Actions one. The Codecov uploads no-op instead of failing.
+        required: false
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # pnpm version comes from package.json's packageManager field
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: '.node-version'
+          cache: 'pnpm'
+
+      - name: Cache dprint plugins
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/dprint
+          key: dprint-${{ runner.os }}-${{ hashFiles('.dprint.jsonc') }}
+
+      - name: Install dependencies
+        id: install
+        run: pnpm install --frozen-lockfile
+
+      # One step per check rather than one chained command: a single step could only
+      # say "something failed", while the red step here names it. `!cancelled()` so
+      # a single run reports ALL the failures instead of stopping at the first --
+      # the jules-fix job repairing a Dependabot PR needs the whole picture, not one
+      # symptom per round. Gated on the install too, or a bad lockfile (a common
+      # Dependabot failure) reds every step below it for want of node_modules and
+      # buries the one real cause.
+      - name: Format
+        run: pnpm run format:check
+
+      - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run lint
+
+      - name: Typecheck
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run typecheck
+
+      - name: Knip
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run knip:ci
+
+      - name: Unit tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run test:ci
+
+      - name: Build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run build
+
+      # !cancelled() so a `build` failure still ships the coverage the tests already
+      # produced -- on a main run that report is the baseline every later PR is
+      # diffed against, so dropping it would skew the next PR's status.
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: coverage
+          fail_ci_if_error: false
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          report_type: test_results
+          files: test-report.junit.xml
+          fail_ci_if_error: false
+
+  # A job, not more steps on `check`: e2e runs in parallel with the rest instead of
+  # after it, and a failure still says "e2e" rather than hiding inside a long step
+  # list. It builds its own dist -- a separate runner has none to reuse, which is
+  # why `E2E_SKIP_BUILD` (the local `check` chain's trick) has no counterpart here.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: '.node-version'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: pnpm run test:e2e
+
+      - name: Upload Playwright report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7

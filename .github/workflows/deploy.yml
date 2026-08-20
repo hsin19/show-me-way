@@ -17,7 +17,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Same definition pr.yml gates a PR with, so a direct push to `main` is held to
+  # the same bar -- and its Codecov upload is the baseline every later PR is diffed
+  # against, since this is the only place the suite runs on the default branch.
+  check:
+    uses: ./.github/workflows/check.yml
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
   build:
+    needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -35,17 +44,13 @@ jobs:
           node-version-file: '.node-version'
           cache: 'pnpm'
 
-      - name: Cache dprint plugins
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/dprint
-          key: dprint-${{ runner.os }}-${{ hashFiles('.dprint.jsonc') }}
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run checks and build
-        run: pnpm run check:ci
+      # Build only: `check` above already verified this tree. This one exists because
+      # what ships needs BASE_PATH, which the check build has no reason to carry.
+      - name: Build
+        run: pnpm run build
         env:
           # GitHub Pages serves project sites under /<repo-name>/
           BASE_PATH: ${{ github.event.repository.name }}
@@ -53,27 +58,6 @@ jobs:
           # vite.config.ts's `git rev-parse` fallback, so the version on the
           # deployed site is the commit Actions actually built.
           VITE_GIT_SHA: ${{ github.sha }}
-
-      # Codecov's PR statuses diff against the newest report on the default branch,
-      # and this is the only job that runs check:ci on main -- so the baseline is
-      # uploaded from here rather than by giving ci.yml a second, duplicate run on
-      # every push. !cancelled() so a later failure still ships what the tests made.
-      - name: Upload coverage to Codecov
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v7
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: coverage
-          fail_ci_if_error: false
-
-      - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v7
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          report_type: test_results
-          files: test-report.junit.xml
-          fail_ci_if_error: false
 
       - name: Upload Artifact
         uses: actions/upload-pages-artifact@v5

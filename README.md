@@ -24,7 +24,7 @@ pnpm install
 pnpm dev       # 啟動開發伺服器
 pnpm build     # 打包到 dist/
 pnpm preview   # 預覽打包結果
-pnpm check     # svelte-check + tsc 型別檢查
+pnpm check     # 完整檢查鏈（format、lint、型別、單元測試、build、e2e，會自動修復可修復項）
 ```
 
 ## 設定你的行程

@@ -10,7 +10,7 @@
   // package.json or delete a file as a side effect of running `check`.
   // To keep an export knip would strip, tag it `/** @public */`.
   //
-  // `check:ci` runs `knip:ci` instead -- no fixing (CI must not write) and no
+  // CI runs `knip:ci` instead -- no fixing (CI must not write) and no
   // dependency checks, since those flip when an upstream package restructures
   // its own dependencies and must not gate a Dependabot bump.
   //
