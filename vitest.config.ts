@@ -8,5 +8,18 @@ export default defineConfig({
     test: {
         include: ["src/**/*.test.ts"],
         environment: "node",
+        coverage: {
+            provider: "v8",
+            // `lcovonly`, not `lcov`: the latter also writes a few hundred HTML files
+            // that neither CI nor `pnpm run check` reads. Pass `--coverage.reporter=html`
+            // when you actually want to browse it.
+            reporter: ["text-summary", "lcovonly"],
+            // Only what this layer can actually reach. `environment: "node"` means
+            // there is no component-test layer at all, so including `.svelte` (or
+            // `App.svelte`'s helpers) would report every one of them at 0% and bury
+            // the number this is here to track -- Playwright is their coverage.
+            include: ["src/lib/**/*.ts"],
+            exclude: ["src/lib/**/*.test.ts"],
+        },
     },
 });

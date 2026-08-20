@@ -54,6 +54,27 @@ jobs:
           # deployed site is the commit Actions actually built.
           VITE_GIT_SHA: ${{ github.sha }}
 
+      # Codecov's PR statuses diff against the newest report on the default branch,
+      # and this is the only job that runs check:ci on main -- so the baseline is
+      # uploaded from here rather than by giving ci.yml a second, duplicate run on
+      # every push. !cancelled() so a later failure still ships what the tests made.
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: coverage
+          fail_ci_if_error: false
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          report_type: test_results
+          files: test-report.junit.xml
+          fail_ci_if_error: false
+
       - name: Upload Artifact
         uses: actions/upload-pages-artifact@v5
         with:

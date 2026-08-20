@@ -43,6 +43,29 @@ jobs:
       - name: Run checks and build
         run: pnpm run check:ci
 
+      # The report these are compared against is uploaded by deploy.yml, which is the
+      # only thing that runs check:ci on main -- see .github/workflows/README.md.
+      # Dependabot PRs cannot read Actions secrets, so the token is empty there and
+      # the upload is skipped rather than failing the job -- hence fail_ci_if_error.
+      # !cancelled() so a `build` failure after the tests passed still uploads the
+      # coverage the tests already produced.
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: coverage
+          fail_ci_if_error: false
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          report_type: test_results
+          files: test-report.junit.xml
+          fail_ci_if_error: false
+
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20

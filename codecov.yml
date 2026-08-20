@@ -1,0 +1,29 @@
+# Only `src/lib/**/*.ts` is measured: `vitest.config.ts` runs in a node
+# environment with no component-test layer, so every `.svelte` file is covered by
+# Playwright instead and is deliberately absent from the report rather than
+# sitting in it at 0%.
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        target: auto
+
+# `require_changes: true` because most PRs here move no covered line at all: a
+# Dependabot bump touches only the lockfile, and a UI change touches only
+# `.svelte` files, which are not in the report. An empty comment on a PR that
+# auto-merges is pure noise -- the status check still runs either way.
+comment:
+  layout: 'condensed_header, files'
+  require_changes: true
+
+# Redundant with the include glob in `vitest.config.ts` and kept as the second
+# half of that decision: should the glob ever be widened to `src/**`, this is
+# what still keeps components out of the number instead of burying it at 0%.
+ignore:
+  - 'src/**/*.svelte'
+  - 'src/main.ts'
+  - 'e2e/**'

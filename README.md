@@ -1,5 +1,7 @@
 # 下面一way (ShowMeWay) 行程小助手
 
+[![codecov](https://codecov.io/gh/hsin19/show-me-way/branch/main/graph/badge.svg)](https://codecov.io/gh/hsin19/show-me-way)
+
 一個用 YAML 驅動的旅行行程隨身 PWA。把行程寫成一份 YAML，就能在手機上得到每日時間軸、行前清單、乘車助手與記帳換算，並可離線使用。
 
 ## 功能
