@@ -16,6 +16,7 @@ import type { EnlargedCard } from "../enlarge";
 import {
     computeLedgerTotals,
     type ExpenseItem,
+    formatAmount,
     getCurrencyConfig,
 } from "../ledger";
 import { getLanguageConfig } from "../phrases";
@@ -191,7 +192,7 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
         <Wallet size={16} class="shrink-0 text-accent" aria-hidden="true" />
         <span class="flex-1 min-w-0">
             <span class="block text-[11px] font-bold text-text-muted">旅程消費總結</span>
-            <span class="block text-sm font-bold text-text-primary">共 {expenses.length} 筆・花費 {currencySymbol}{ledgerTotals.totalSpent.toLocaleString()}</span>
+            <span class="block text-sm font-bold text-text-primary">共 {expenses.length} 筆・花費 {formatAmount(currencySymbol, ledgerTotals.totalSpent)}</span>
         </span>
         <ChevronRight size={16} class="text-text-muted shrink-0" aria-hidden="true" />
     </button>

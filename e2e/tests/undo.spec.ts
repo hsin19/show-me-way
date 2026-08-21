@@ -60,8 +60,8 @@ test("消費紀錄刪除後可復原並於重新載入後保留", async ({ page 
     await page.getByLabel("金額", { exact: true }).fill("100");
     await page.getByRole("button", { name: "記一筆" }).click();
 
-    // fixture 無 currency → 台幣模式；金額出現在「已花費」統計磚與紀錄列
-    await expect(page.getByText("-NT$100")).toHaveCount(2);
+    // fixture 無 currency → 台幣模式；金額出現在紀錄列、現金餘額磚與剩餘餘額磚
+    await expect(page.getByText("-NT$100")).toHaveCount(3);
 
     // 刪除該筆紀錄（紀錄列按鈕 aria-label 是「刪除紀錄」）
     await page.getByRole("button", { name: "刪除紀錄" }).click();
@@ -70,10 +70,10 @@ test("消費紀錄刪除後可復原並於重新載入後保留", async ({ page 
     const toast = page.getByRole("status");
     await expect(toast).toContainText("紀錄已刪除");
     await toast.getByRole("button", { name: "復原" }).click();
-    await expect(page.getByText("-NT$100")).toHaveCount(2);
+    await expect(page.getByText("-NT$100")).toHaveCount(3);
 
     await page.reload();
     await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await page.getByRole("button", { name: "記帳", exact: true }).click();
-    await expect(page.getByText("-NT$100")).toHaveCount(2);
+    await expect(page.getByText("-NT$100")).toHaveCount(3);
 });

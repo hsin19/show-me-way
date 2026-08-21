@@ -9,7 +9,9 @@ import {
     computeWalletBalances,
     type ExpenseItem,
     foreignToTwd,
+    formatAmount,
     getCurrencyConfig,
+    isDeposit,
     ledgerTypeLabel,
     parseLegacyExpenses,
     roundQuickAmount,
@@ -42,6 +44,12 @@ describe("computeLedgerTotals", () => {
         expect(totals.totalSpent).toBe(200);
     });
 
+    it("treats a wallet merely named Deposit-something-less as spending", () => {
+        const totals = computeLedgerTotals([entry("Deposital", 50)]);
+        expect(totals.totalDeposited).toBe(0);
+        expect(totals.totalSpent).toBe(50);
+    });
+
     it("returns zeros for an empty history", () => {
         expect(computeLedgerTotals([])).toEqual({
             totalDeposited: 0,
@@ -56,6 +64,27 @@ describe("computeLedgerTotals", () => {
             entry("Cash", 350),
         ]);
         expect(totals.balance).toBe(-250);
+    });
+});
+
+describe("isDeposit", () => {
+    it("matches only the Deposit- prefix", () => {
+        expect(isDeposit("Deposit-Cash")).toBe(true);
+        expect(isDeposit("Deposit-WOWPASS")).toBe(true);
+        expect(isDeposit("Cash")).toBe(false);
+        // A wallet whose own name starts with "Deposit" is spending, not a top-up.
+        expect(isDeposit("Deposital")).toBe(false);
+    });
+});
+
+describe("formatAmount", () => {
+    it("prefixes the symbol and adds thousands separators", () => {
+        expect(formatAmount("NT$", 1200)).toBe("NT$1,200");
+        expect(formatAmount("¥", 0)).toBe("¥0");
+    });
+
+    it("puts the minus sign before the symbol", () => {
+        expect(formatAmount("NT$", -1200)).toBe("-NT$1,200");
     });
 });
 

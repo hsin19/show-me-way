@@ -18,7 +18,9 @@ import {
     computeWalletBalances,
     type ExpenseItem,
     foreignToTwd,
+    formatAmount,
     getCurrencyConfig,
+    isDeposit,
     ledgerTypeLabel,
     MANUAL_RATE_KEY_PREFIX,
     twdToForeign,
@@ -84,16 +86,16 @@ const walletBalances = $derived(computeWalletBalances(expenses, activeWallets));
 const quickAmounts = $derived(computeQuickAmounts(activeCurrency, exchangeRate));
 
 function formatQuickAmount(amount: number): string {
-    const symbol = localConfig.currencySymbol;
+    // TWD quick chips keep the short `$100` form — `NT$` on six chips is noise.
     if (activeCurrency === "TWD") return `$${amount}`;
-    return `${symbol}${amount.toLocaleString()}`;
+    return formatAmount(localConfig.currencySymbol, amount);
 }
 
 // A wallet that no longer exists must not stay selected — switching currency
 // replaces the whole set.
 $effect(() => {
     if (activeWallets.length > 0) {
-        if (!activeWallets.includes(expenseType) && !expenseType.startsWith("Deposit-") && expenseType !== "Cash") {
+        if (!activeWallets.includes(expenseType) && !isDeposit(expenseType) && expenseType !== "Cash") {
             expenseType = activeWallets[0];
         }
     } else {
@@ -345,15 +347,15 @@ function handleAddWallet() {
     <div class="grid grid-cols-3 gap-2 mb-2">
         <div class="bg-well border border-line-faint rounded-xl p-2.5 flex flex-col items-center gap-0.5">
             <span class="text-[11px] text-text-secondary font-medium">儲值總額</span>
-            <span class="text-xs font-extrabold text-positive tabular-nums">{localConfig.currencySymbol}{totalDeposited.toLocaleString()}</span>
+            <span class="text-xs font-extrabold text-positive tabular-nums">{formatAmount(localConfig.currencySymbol, totalDeposited)}</span>
         </div>
         <div class="bg-well border border-line-faint rounded-xl p-2.5 flex flex-col items-center gap-0.5">
             <span class="text-[11px] text-text-secondary font-medium">已花費</span>
-            <span class="text-xs font-extrabold text-danger tabular-nums">{localConfig.currencySymbol}{totalSpent.toLocaleString()}</span>
+            <span class="text-xs font-extrabold text-danger tabular-nums">{formatAmount(localConfig.currencySymbol, totalSpent)}</span>
         </div>
         <div class="bg-well border border-line-faint rounded-xl p-2.5 flex flex-col items-center gap-0.5">
             <span class="text-[11px] text-text-secondary font-medium">剩餘餘額</span>
-            <span class="text-xs font-extrabold text-accent tabular-nums">{localConfig.currencySymbol}{balance.toLocaleString()}</span>
+            <span class="text-xs font-extrabold text-accent tabular-nums">{formatAmount(localConfig.currencySymbol, balance)}</span>
         </div>
     </div>
     <div class="flex flex-wrap gap-2 mb-5">
@@ -361,7 +363,7 @@ function handleAddWallet() {
             <div class="flex-1 basis-[30%] bg-well border border-line-faint rounded-xl p-2.5 flex flex-col items-center gap-0.5">
                 <span class="text-[11px] text-text-secondary font-medium">{wb.wallet === "Cash" ? "現金" : wb.wallet} 餘額</span>
                 <span class="text-xs font-extrabold tabular-nums {wb.balance < 0 ? 'text-danger' : 'text-accent'}">
-                    {wb.balance < 0 ? "-" : ""}{localConfig.currencySymbol}{Math.abs(wb.balance).toLocaleString()}
+                    {formatAmount(localConfig.currencySymbol, wb.balance)}
                 </span>
             </div>
         {/each}
@@ -452,8 +454,8 @@ function handleAddWallet() {
                         </span>
                     </div>
                     <div class="flex items-center gap-3">
-                        <span class="font-bold tabular-nums {item.type.startsWith('Deposit') ? 'text-positive' : 'text-text-primary'}">
-                            {item.type.startsWith("Deposit") ? "+" : "-"}{localConfig.currencySymbol}{item.amount.toLocaleString()}
+                        <span class="font-bold tabular-nums {isDeposit(item.type) ? 'text-positive' : 'text-text-primary'}">
+                            {isDeposit(item.type) ? "+" : "-"}{formatAmount(localConfig.currencySymbol, item.amount)}
                         </span>
                         <button
                             onclick={() => onDeleteExpense(item._id ?? "")}

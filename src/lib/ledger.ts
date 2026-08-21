@@ -34,13 +34,21 @@ export interface CurrencyConfig {
     currencySymbol: string;
 }
 
-// `Deposit-` prefix marks top-ups; everything else is spending.
+/**
+ * `Deposit-<wallet>` marks a top-up; everything else is spending. The one place
+ * the prefix is matched — a wallet named "Deposital" must count as spending
+ * everywhere, not split between callers matching "Deposit" and "Deposit-".
+ */
+export function isDeposit(type: string): boolean {
+    return type.startsWith("Deposit-");
+}
+
 export function computeLedgerTotals(items: ExpenseItem[]): LedgerTotals {
     const totalDeposited = items
-        .filter(item => item.type.startsWith("Deposit"))
+        .filter(item => isDeposit(item.type))
         .reduce((sum, item) => sum + item.amount, 0);
     const totalSpent = items
-        .filter(item => !item.type.startsWith("Deposit"))
+        .filter(item => !isDeposit(item.type))
         .reduce((sum, item) => sum + item.amount, 0);
     return { totalDeposited, totalSpent, balance: totalDeposited - totalSpent };
 }
@@ -151,6 +159,11 @@ export function parseLegacyExpenses(raw: unknown, today: string, makeId: () => s
         });
     }
     return out;
+}
+
+/** `-` goes before the symbol (`-NT$1,200`), the way the wallet rows have always shown negatives. */
+export function formatAmount(symbol: string, amount: number): string {
+    return `${amount < 0 ? "-" : ""}${symbol}${Math.abs(amount).toLocaleString()}`;
 }
 
 /** The one place a type is worded, so the history list and the CSV export cannot drift. */

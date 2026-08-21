@@ -105,14 +105,14 @@ test("記帳：新增一筆消費並於重新載入後保留", async ({ page }) 
     await page.getByLabel("金額", { exact: true }).fill("100");
     await page.getByRole("button", { name: "記一筆" }).click();
 
-    // fixture 無 currency → 台幣模式（NT$）；金額同時出現在「已花費」統計磚與紀錄列
+    // fixture 無 currency → 台幣模式（NT$）；金額出現在紀錄列、現金餘額磚與剩餘餘額磚
     await expect(page.getByText("測試消費")).toBeVisible();
-    await expect(page.getByText("-NT$100")).toHaveCount(2);
+    await expect(page.getByText("-NT$100")).toHaveCount(3);
 
     await page.reload();
     await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await page.getByRole("button", { name: "記帳", exact: true }).click();
-    await expect(page.getByText("-NT$100")).toHaveCount(2);
+    await expect(page.getByText("-NT$100")).toHaveCount(3);
 });
 
 test("工具分頁：常用語頁可開啟並返回行程", async ({ page }) => {
