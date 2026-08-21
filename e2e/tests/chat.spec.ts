@@ -149,7 +149,15 @@ test("AI 聊天：Gemini 無法連線時顯示錯誤並保留提問", async ({ p
                 ],
             },
         }));
-    await page.route(INTERACTIONS_URL, route => route.abort());
+    // 第一次送出失敗，重試後成功。
+    let interactionCalls = 0;
+    await page.route(INTERACTIONS_URL, route => {
+        interactionCalls++;
+        if (interactionCalls === 1) return route.abort();
+        return route.fulfill({
+            json: { steps: [{ type: "model_output", content: [{ type: "text", text: "第二天去明洞。" }] }] },
+        });
+    });
     await seedItinerary(page);
     await page.goto("/");
 
@@ -157,9 +165,17 @@ test("AI 聊天：Gemini 無法連線時顯示錯誤並保留提問", async ({ p
     await page.getByLabel("輸入問題").fill("第二天去哪？");
     await page.getByRole("button", { name: "送出" }).click();
 
-    await expect(page.getByText("無法連線到 Gemini")).toBeVisible();
-    // 提問保留在對話中，方便重試
+    await expect(page.getByRole("alert")).toContainText("無法連線到 Gemini");
+    // 失敗的提問退回輸入框（不留在對話串，否則會被當成沒有回覆的歷史輪次重播）
+    await expect(page.getByLabel("輸入問題")).toHaveValue("第二天去哪？");
+    await expect(page.getByText("第二天去哪？")).toHaveCount(0);
+
+    // 一鍵重試：成功後錯誤消失、提問回到對話串、回覆出現
+    await page.getByRole("button", { name: "重試" }).click();
+    await expect(page.getByText("第二天去明洞。")).toBeVisible();
     await expect(page.getByText("第二天去哪？")).toBeVisible();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.getByLabel("輸入問題")).toHaveValue("");
 });
 
 test("AI 聊天：金鑰被拒時擋住整個分頁，不讓使用者送出注定失敗的提問", async ({ page }) => {

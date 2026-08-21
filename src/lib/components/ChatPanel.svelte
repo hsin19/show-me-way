@@ -112,7 +112,11 @@ async function triggerSend(promptText: string) {
         }
         messages = [...messages, next];
     } catch (err) {
-        // The question stays in the thread, so a retry costs nothing to compose.
+        // Pop the failed user turn and hand the text back to the composer: left
+        // in the thread it would be replayed to the model as an unanswered turn,
+        // and the retry would render the same bubble twice.
+        messages = history;
+        input = text;
         errorText = err instanceof Error ? err.message : "發生未知錯誤，請再試一次。";
     } finally {
         isSending = false;
@@ -331,9 +335,19 @@ function applyEdit(message: UiMessage) {
                     </div>
                 {/if}
                 {#if errorText}
-                    <div class="flex items-start gap-1.5 text-xs text-danger bg-danger/10 border border-danger/20 p-2.5 rounded-lg">
-                        <TriangleAlert size={14} class="shrink-0 mt-px" aria-hidden="true" />
-                        <span class="whitespace-pre-line">{errorText}</span>
+                    <div role="alert" class="text-xs text-danger bg-danger/10 border border-danger/20 p-2.5 rounded-lg space-y-2">
+                        <div class="flex items-start gap-1.5">
+                            <TriangleAlert size={14} class="shrink-0 mt-px" aria-hidden="true" />
+                            <span class="whitespace-pre-line">{errorText}</span>
+                        </div>
+                        <button
+                            type="button"
+                            disabled={!input.trim() || isSending}
+                            onclick={() => triggerSend(input)}
+                            class="flex items-center gap-1.5 font-bold text-danger hover:opacity-80 transition cursor-pointer disabled:opacity-40"
+                        >
+                            <RefreshCw size={12} aria-hidden="true" />重試
+                        </button>
                     </div>
                 {/if}
             </div>
