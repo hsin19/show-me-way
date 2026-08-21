@@ -439,7 +439,7 @@ function addTripWallet(name: string) {
     }
 }
 
-function addExpense(name: string, amount: number, type: string) {
+function addExpense(name: string, amount: number, type: string, date?: string) {
     if (!tripData) return;
     // Newest first — the ledger has always listed them that way.
     tripData.expenses.unshift({
@@ -447,8 +447,9 @@ function addExpense(name: string, amount: number, type: string) {
         name,
         amount,
         type,
-        // Local date, per the project convention, and sortable in the CSV export.
-        date: toLocalIsoDate(new Date()),
+        // Caller-picked day for backfilled records; otherwise the local date,
+        // per the project convention, and sortable in the CSV export.
+        date: date || toLocalIsoDate(new Date()),
     });
     persistTripData();
 }

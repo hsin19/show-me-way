@@ -115,6 +115,29 @@ test("記帳：新增一筆消費並於重新載入後保留", async ({ page }) 
     await expect(page.getByText("-NT$100")).toHaveCount(3);
 });
 
+test("記帳可指定日期補記，日期顯示在紀錄列", async ({ page }) => {
+    await seedItinerary(page);
+    await page.goto("/");
+
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    await page.getByRole("button", { name: "記帳", exact: true }).click();
+
+    await page.getByLabel("消費項目名稱").fill("補記晚餐");
+    await page.getByLabel("金額", { exact: true }).fill("250");
+    await page.getByLabel("消費日期").fill("2099-01-02");
+    await page.getByRole("button", { name: "記一筆" }).click();
+
+    // 紀錄列顯示補記的日期（MM/DD），不會悄悄變成今天
+    const row = page.locator("li", { hasText: "補記晚餐" });
+    await expect(row).toContainText("01/02");
+
+    // 重新載入後日期仍在（寫進 YAML 的是指定日）
+    await page.reload();
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    await page.getByRole("button", { name: "記帳", exact: true }).click();
+    await expect(page.locator("li", { hasText: "補記晚餐" })).toContainText("01/02");
+});
+
 test("工具分頁：常用語頁可開啟並返回行程", async ({ page }) => {
     await seedItinerary(page);
     await page.goto("/");

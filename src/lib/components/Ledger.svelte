@@ -26,6 +26,7 @@ import {
     twdToForeign,
 } from "../ledger";
 import { showToast } from "../toast.svelte";
+import { toLocalIsoDate } from "../utils";
 import ConfirmBar from "./ConfirmBar.svelte";
 
 interface Props {
@@ -34,7 +35,7 @@ interface Props {
     /** Owned by the parent and persisted in the itinerary YAML; this component only reads them. */
     expenses: ExpenseItem[];
     onAddWallet?: (name: string) => void;
-    onAddExpense: (name: string, amount: number, type: string) => void;
+    onAddExpense: (name: string, amount: number, type: string, date?: string) => void;
     onDeleteExpense: (id: string) => void;
     onReset: () => void;
     onExportCsv: () => void;
@@ -74,6 +75,7 @@ let rateInfo = $state<{ date: string; offline: boolean; } | null>(null);
 let expenseName = $state("");
 let expenseAmount = $state("");
 let expenseType = $state("Cash");
+let expenseDate = $state(toLocalIsoDate(new Date()));
 let newWalletName = $state("");
 
 const totals = $derived(computeLedgerTotals(expenses));
@@ -199,9 +201,12 @@ function addExpense() {
         return;
     }
 
-    onAddExpense(name, amount, expenseType);
+    onAddExpense(name, amount, expenseType, expenseDate || undefined);
     expenseName = "";
     expenseAmount = "";
+    // Back to today rather than keeping the picked day: a forgotten backfill
+    // date would otherwise stamp every later record silently.
+    expenseDate = toLocalIsoDate(new Date());
     showToast("記帳成功");
 }
 
@@ -377,6 +382,14 @@ function handleAddWallet() {
             placeholder="項目 (如: {activeCurrency === 'TWD' ? '午餐' : '拉麵'})"
             class="col-span-3 bg-well border border-card-border rounded-xl p-2.5 text-xs text-text-primary font-semibold outline-none focus:border-accent"
         >
+        <!-- Editable so yesterday's forgotten expense can be backfilled with the
+             right day instead of silently landing on today. -->
+        <input
+            type="date"
+            bind:value={expenseDate}
+            aria-label="消費日期"
+            class="col-span-3 bg-well border border-card-border rounded-xl p-2.5 text-xs text-text-primary font-semibold outline-none focus:border-accent"
+        >
         <input
             type="number"
             inputmode="numeric"
@@ -450,7 +463,9 @@ function handleAddWallet() {
                             {:else}
                                 <CreditCard size={11} class="shrink-0" aria-hidden="true" />
                             {/if}
-                            {ledgerTypeLabel(item.type)}
+                            <!-- Visible date is what makes a wrong backfill day noticeable
+                                 at all — it otherwise only surfaces in the CSV export. -->
+                            {#if item.date}{item.date.slice(5).replace("-", "/")}・{/if}{ledgerTypeLabel(item.type)}
                         </span>
                     </div>
                     <div class="flex items-center gap-3">
