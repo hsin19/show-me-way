@@ -81,6 +81,60 @@ test("AI 聊天：儲存金鑰、AI 建議修改行程、套用後保留至重�
     await expect(page.getByRole("checkbox", { name: "換日幣" })).toBeVisible();
 });
 
+test("AI 聊天：行程變動後套用過期建議需要二次確認，且確認後以 AI 版本覆蓋", async ({ page }) => {
+    const EDIT_1 = `${FIXTURE_YAML}  - text: 換日幣\n`;
+    const EDIT_2 = `${FIXTURE_YAML}  - text: 買轉接頭\n`;
+    await page.addInitScript(() => {
+        window.localStorage.setItem("showmeway_gemini_api_key", "test-key");
+    });
+    await page.route(url => url.href.startsWith(MODELS_URL_PREFIX), route =>
+        route.fulfill({
+            json: {
+                models: [
+                    { name: "models/gemini-2.5-flash", displayName: "Gemini 2.5 Flash", supportedGenerationMethods: ["generateContent"] },
+                ],
+            },
+        }));
+    let call = 0;
+    await page.route(INTERACTIONS_URL, route => {
+        call++;
+        return route.fulfill({
+            json: {
+                steps: [
+                    { type: "function_call", id: `c${call}`, name: "update_itinerary", arguments: { yaml: call === 1 ? EDIT_1 : EDIT_2, summary: `建議 ${call}` } },
+                ],
+            },
+        });
+    });
+    await seedItinerary(page);
+    await page.goto("/");
+
+    // 連續送出兩個編輯請求：兩張卡的 baseYaml 都是原始行程。
+    await page.locator("nav").getByRole("button", { name: "AI", exact: true }).click();
+    await page.getByLabel("輸入問題").fill("加換日幣");
+    await page.getByRole("button", { name: "送出" }).click();
+    await expect(page.getByRole("button", { name: "套用變更" })).toBeVisible();
+    await page.getByLabel("輸入問題").fill("加買轉接頭");
+    await page.getByRole("button", { name: "送出" }).click();
+    await expect(page.getByRole("button", { name: "套用變更" })).toHaveCount(2);
+
+    // 套用第一張 → 行程改變，第二張的快照隨之過期。
+    await page.getByRole("button", { name: "套用變更" }).first().click();
+    await expect(page.getByText("已套用變更")).toBeVisible();
+
+    // 過期的卡不能一按就套用：先出現覆蓋警告，確認後才套用。
+    await page.getByRole("button", { name: "套用變更" }).click();
+    await expect(page.getByText("套用會以 AI 版本覆蓋那些修改")).toBeVisible();
+    await page.getByRole("button", { name: "仍要套用" }).click();
+    await expect(page.getByText("已套用變更")).toHaveCount(2);
+
+    // 第二張卡的 base 是套用前的行程，所以第一張加的待辦被覆蓋掉。
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    await page.getByRole("button", { name: "準備", exact: true }).click();
+    await expect(page.getByRole("checkbox", { name: "買轉接頭" })).toBeVisible();
+    await expect(page.getByRole("checkbox", { name: "換日幣" })).toHaveCount(0);
+});
+
 test("AI 聊天：Gemini 無法連線時顯示錯誤並保留提問", async ({ page }) => {
     // 金鑰已存在且模型清單抓得到 → 直接進入聊天畫面，只有送出會失敗。
     // 模型清單必須 mock：抓不到會被當成金鑰不可用而擋掉整個分頁（見下一個測試）。

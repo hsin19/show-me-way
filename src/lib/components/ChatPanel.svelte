@@ -21,6 +21,7 @@ import {
     sendChatMessage,
 } from "../gemini";
 import { createModelPicker } from "../gemini-models.svelte";
+import ConfirmBar from "./ConfirmBar.svelte";
 import DiffView from "./DiffView.svelte";
 
 interface Props {
@@ -137,9 +138,21 @@ async function scrollToBottom() {
     scrollEl?.scrollTo({ top: scrollEl.scrollHeight, behavior: "smooth" });
 }
 
+// One slot, so tapping 套用 on another stale card closes the previous confirm.
+let confirmingStaleApply = $state<UiMessage | null>(null);
+
 // The card only turns 已套用 on App's `true` — it revalidates, and can refuse.
 function applyEdit(message: UiMessage) {
     if (!message.editYaml || message.editApplied) return;
+    // The trip may have moved since this suggestion's snapshot was taken —
+    // applying replaces the WHOLE document, silently rolling back everything
+    // done in between (manual edits, check-ins, new expenses). The card's diff
+    // is against the snapshot, so the user cannot see that rollback in it.
+    if (confirmingStaleApply !== message && buildItineraryContext(tripData) !== message.baseYaml) {
+        confirmingStaleApply = message;
+        return;
+    }
+    confirmingStaleApply = null;
     if (onApplyEdit(message.editYaml)) message.editApplied = true;
 }
 </script>
@@ -288,6 +301,13 @@ function applyEdit(message: UiMessage) {
                                     <div class="flex items-center gap-1.5 text-xs font-semibold text-positive">
                                         <Check size={14} aria-hidden="true" />已套用變更
                                     </div>
+                                {:else if confirmingStaleApply === message}
+                                    <ConfirmBar
+                                        message="這則建議之後行程已有變動，套用會以 AI 版本覆蓋那些修改。"
+                                        confirmLabel="仍要套用"
+                                        onconfirm={() => applyEdit(message)}
+                                        oncancel={() => (confirmingStaleApply = null)}
+                                    />
                                 {:else}
                                     <button
                                         onclick={() => applyEdit(message)}
