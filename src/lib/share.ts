@@ -19,17 +19,45 @@ export function isShareSupported(): boolean {
         && typeof DecompressionStream !== "undefined";
 }
 
+// A real trip compresses to a few KB. The caps below exist because decoding is
+// zero-click (App decodes a share link in onMount, before any confirm) and
+// deflate reaches ~1000:1 — without them a crafted link is a client-side OOM.
+const MAX_TOKEN_CHARS = 100_000;
+const MAX_DECOMPRESSED_BYTES = 4 * 1024 * 1024;
+
 async function pipeThrough(
     data: Uint8Array,
     stream: CompressionStream | DecompressionStream,
+    maxBytes = Infinity,
 ): Promise<Uint8Array> {
     const writer = stream.writable.getWriter();
     // The cast is a lib.dom quirk: it wants an `ArrayBuffer`-backed view, while a
-    // plain Uint8Array is `ArrayBufferLike` and works fine at runtime.
-    void writer.write(data as BufferSource);
-    void writer.close();
-    const buffer = await new Response(stream.readable).arrayBuffer();
-    return new Uint8Array(buffer);
+    // plain Uint8Array is `ArrayBufferLike` and works fine at runtime. Rejections
+    // are swallowed here because they re-surface on the reader side.
+    writer.write(data as BufferSource).catch(() => {});
+    writer.close().catch(() => {});
+    // Read chunk by chunk instead of Response.arrayBuffer(), so an oversized
+    // payload is cancelled at the cap rather than buffered whole.
+    const reader = stream.readable.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.length;
+        if (total > maxBytes) {
+            await reader.cancel();
+            throw new Error("分享連結的內容過大，已停止解析");
+        }
+        chunks.push(value);
+    }
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+        out.set(chunk, offset);
+        offset += chunk.length;
+    }
+    return out;
 }
 
 function bytesToBase64url(bytes: Uint8Array): string {
@@ -61,10 +89,13 @@ export async function encodeShareToken(yaml: string): Promise<string> {
     return bytesToBase64url(compressed);
 }
 
-/** Rejects on a corrupt token, so callers must be ready for a link that was truncated in transit. */
+/** Rejects on a corrupt or oversized token, so callers must be ready for a link that was truncated in transit. */
 export async function decodeShareToken(token: string): Promise<string> {
+    if (token.length > MAX_TOKEN_CHARS) {
+        throw new Error("分享連結的內容過大，已停止解析");
+    }
     const bytes = base64urlToBytes(token);
-    const decompressed = await pipeThrough(bytes, new DecompressionStream("deflate-raw"));
+    const decompressed = await pipeThrough(bytes, new DecompressionStream("deflate-raw"), MAX_DECOMPRESSED_BYTES);
     return new TextDecoder().decode(decompressed);
 }
 
@@ -88,8 +119,8 @@ export function parseShareToken(input: string): string | null {
     const token = new URLSearchParams(fragment).get(SHARE_HASH_PARAM);
     // The base64url check rejects a false sniff: a pasted export YAML carries a
     // `#` modeline, and an `&s=` inside some mapLink would otherwise read as a
-    // share link and refuse to save.
-    return token && /^[A-Za-z0-9_-]+$/.test(token) ? token : null;
+    // share link and refuse to save. The length cap matches decodeShareToken's.
+    return token && token.length <= MAX_TOKEN_CHARS && /^[A-Za-z0-9_-]+$/.test(token) ? token : null;
 }
 
 export function readShareTokenFromHash(): string | null {

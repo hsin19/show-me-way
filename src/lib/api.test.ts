@@ -797,3 +797,17 @@ describe("buildLedgerCsv", () => {
         expect(lines.slice(1).map(l => l.split(",")[0])).toEqual(["2026-06-11", "2026-06-12", "2026-06-13"]);
     });
 });
+
+describe("YAML alias bomb", () => {
+    it("rejects excessive aliasing instead of expanding it (share links carry other people's YAML)", () => {
+        const bomb = "anchor: &x '爆'\nlist: [" + Array(150).fill("*x").join(",") + "]";
+        expect(() => validateYaml(bomb)).toThrow(/alias/i);
+    });
+
+    it("still allows a document with a few aliases", () => {
+        // Not a trip shape, so it fails structure validation — the point is it
+        // must get PAST the alias guard and fail on structure instead.
+        const fewAliases = "anchor: &x 'ok'\nlist: [*x,*x,*x]";
+        expect(() => validateYaml(fewAliases)).toThrow("YAML 缺少必要的結構");
+    });
+});

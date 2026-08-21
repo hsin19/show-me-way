@@ -213,7 +213,11 @@ function validateEntryList(
  * wording stays this module's.
  */
 export function parseYaml(yaml: string): unknown {
-    const docs = loadYamlDocuments(yaml);
+    // js-yaml's default maxAliases is unlimited, and share links feed this parser
+    // other people's YAML — without a cap a few-KB billion-laughs document
+    // explodes at parse time, past the size limits share.ts enforces on the
+    // compressed payload. Serialized trips carry no aliases at all (noRefs).
+    const docs = loadYamlDocuments(yaml, null, { maxAliases: 100 });
     if (docs.length > 1) throw new Error("YAML 只能包含一份行程 (請移除多餘的 --- 文件分隔)");
     return docs[0];
 }

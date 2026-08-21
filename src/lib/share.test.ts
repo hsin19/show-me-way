@@ -51,6 +51,17 @@ describe("encodeShareToken / decodeShareToken", () => {
         // Valid base64url chars, but not a valid deflate-raw stream.
         await expect(decodeShareToken("not-a-real-deflate-stream")).rejects.toThrow();
     });
+
+    it("rejects a zip bomb before buffering it whole", async () => {
+        // 6MB of one repeated character compresses to a tiny token; decoding it
+        // must stop at the decompressed-size cap instead of materializing 6MB.
+        const token = await encodeShareToken("a".repeat(6 * 1024 * 1024));
+        await expect(decodeShareToken(token)).rejects.toThrow("內容過大");
+    });
+
+    it("rejects an absurdly long token without attempting to decode it", async () => {
+        await expect(decodeShareToken("A".repeat(100_001))).rejects.toThrow("內容過大");
+    });
 });
 
 describe("isShareSupported", () => {
@@ -71,6 +82,10 @@ describe("parseShareToken", () => {
     it("returns null for plain YAML or a hash without the token", () => {
         expect(parseShareToken("trip:\n  name: 東京\n")).toBeNull();
         expect(parseShareToken("https://example.com/#other=1")).toBeNull();
+    });
+
+    it("ignores a token past the length cap", () => {
+        expect(parseShareToken(`#s=${"A".repeat(100_001)}`)).toBeNull();
     });
 
     it("rejects false sniffs from export YAML carrying &s= inside a URL field", () => {
