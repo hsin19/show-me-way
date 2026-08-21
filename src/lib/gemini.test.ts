@@ -18,6 +18,7 @@ import {
     pickDefaultModel,
     saveGeminiApiKey,
     saveGeminiModel,
+    saveGeminiModelFilter,
     sendChatMessage,
 } from "./gemini";
 
@@ -238,6 +239,50 @@ describe("listGeminiModels", () => {
 
         expect(fetchMock).toHaveBeenCalledTimes(1);
         expect(models1).toEqual(models2);
+    });
+
+    // The three writers below each call clearGeminiModelsMemory — one dropped
+    // call and the picker keeps showing the previous key's models.
+    it("drops the memo when the key is saved, even to the same value", async () => {
+        const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(modelsPayload()) }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await listGeminiModels("key-a");
+        saveGeminiApiKey("key-a");
+        await listGeminiModels("key-a");
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("drops the memo when the key is cleared", async () => {
+        const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(modelsPayload()) }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await listGeminiModels("key-a");
+        clearGeminiApiKey();
+        await listGeminiModels("key-a");
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("drops the memo when the filter mode is saved", async () => {
+        const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(modelsPayload()) }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await listGeminiModels("key-a");
+        saveGeminiModelFilter("all");
+        await listGeminiModels("key-a");
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("keys the memo by filter mode — switching mode misses, repeating it hits", async () => {
+        const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(modelsPayload()) }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        await listGeminiModels("key-a", "default");
+        await listGeminiModels("key-a", "all");
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+
+        await listGeminiModels("key-a", "all");
+        expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 });
 
