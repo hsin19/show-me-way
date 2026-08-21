@@ -56,7 +56,16 @@ test("AI 聊天：儲存金鑰、AI 建議修改行程、套用後保留至重�
 
     await expect(page.getByText("已幫你加入待辦。")).toBeVisible();
     await expect(page.getByText("AI 建議修改行程")).toBeVisible();
-    await expect(page.getByText("查看變更")).toBeVisible();
+
+    // 展開 DiffView。diff base 是送出當下的 canonical 序列化（modeline 與
+    // derived 欄位都被剝掉），proposed 是 fixture 原文，所以 hunk 不只一個——
+    // 斷言用正則、不釘確切數量。hunk 導覽只斷言計數文字，不斷言捲動位置：
+    // jump() 用顯式 smooth scroll，reducedMotion 設定壓不住它，位置斷言會 flaky。
+    await page.getByText("查看變更").click();
+    await expect(page.getByText(/共 \d+ 處變更/)).toBeVisible();
+    await page.getByRole("button", { name: "下一處變更" }).click();
+    await expect(page.getByText(/第 1 \/ \d+ 處/)).toBeVisible();
+    await expect(page.getByText("+ - text: 換日幣")).toBeVisible();
 
     await page.getByRole("button", { name: "套用變更" }).click();
     await expect(page.getByRole("status")).toContainText("已套用");
