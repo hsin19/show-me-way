@@ -3,6 +3,7 @@ import X from "@lucide/svelte/icons/x";
 import { fade } from "svelte/transition";
 import type { EnlargedCard } from "../enlarge";
 import { copyToClipboard } from "../toast.svelte";
+import { prefersReducedMotion } from "../utils";
 import { acquireScreenWakeLock } from "../wakelock";
 
 interface Props {
@@ -12,6 +13,8 @@ interface Props {
 }
 
 let { card, onClose }: Props = $props();
+
+const FADE_MS = 300;
 
 let dialogEl = $state<HTMLDivElement>();
 
@@ -39,7 +42,7 @@ $effect(() => {
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-        transition:fade={{ duration: 300 }}
+        transition:fade={{ duration: prefersReducedMotion() ? 0 : FADE_MS }}
         onoutrostart={e => e.currentTarget.classList.add("pointer-events-none")}
         onclick={onClose}
         class="fixed inset-0 bg-scrim z-[1000] flex items-center justify-center p-5"
