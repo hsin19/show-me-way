@@ -74,8 +74,11 @@ export default defineConfig({
                 // Data files are enumerated exactly instead of *.yaml/*.json so
                 // that files dropped into public/ later do not silently enter
                 // every user's precache. woff2 deliberately stays out: fonts go
-                // through the runtimeCaching route below.
-                globPatterns: ["**/*.{js,css,html,svg,png,ico,webp}", "itinerary.yaml", "showmeway-schema.json"],
+                // through the runtimeCaching route below. showmeway-schema.json
+                // is served but not precached: its only consumers are external
+                // editors resolving the $schema modeline, and those requests
+                // never pass through this service worker.
+                globPatterns: ["**/*.{js,css,html,svg,png,ico,webp}", "itinerary.yaml"],
                 // itinerary.local.yaml is personal, untracked data that local
                 // builds copy into dist/ — it must never enter the precache
                 // manifest. The runtime route below caches it from the second
