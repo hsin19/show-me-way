@@ -491,13 +491,39 @@ function applyAiEdit(yaml: string): boolean {
         showToast("AI 的修改內容無效，已略過");
         return false;
     }
+    // Snapshot before persistTripData overwrites it — the toast's 復原 needs the
+    // pre-edit YAML, and the backup ring alone would leave undo buried in 行程管理.
+    const previousYaml = localStorage.getItem(USER_YAML_KEY);
     backupCurrentYaml();
     // Assigned in place rather than via loadTripData, which would unmount the AI
     // tab and take its in-memory conversation with it.
     tripData = parsed;
     persistTripData();
     loadTripWeather(parsed);
-    showToast("已套用 AI 修改的行程");
+    if (previousYaml) {
+        showToast({
+            message: "已套用 AI 修改的行程",
+            actionLabel: "復原",
+            onAction: () => {
+                let restored: TripData;
+                try {
+                    restored = validateYaml(previousYaml);
+                } catch (err) {
+                    console.error("Failed to undo AI edit:", err);
+                    showToast("復原失敗，可到行程管理還原備份");
+                    return;
+                }
+                // Backs up again so the AI version itself stays recoverable.
+                backupCurrentYaml();
+                tripData = restored;
+                persistTripData();
+                loadTripWeather(restored);
+                showToast("已復原為套用前的行程");
+            },
+        });
+    } else {
+        showToast("已套用 AI 修改的行程");
+    }
     return true;
 }
 
