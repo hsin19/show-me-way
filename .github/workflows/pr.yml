@@ -41,11 +41,13 @@ jobs:
 
   # Merges a green Dependabot PR with a dedicated PAT (Dependabot secret, NOT the
   # default GITHUB_TOKEN) so the resulting push to main still triggers deploy.yml.
-  # See .github/workflows/README.md for the token setup.
+  # See .github/workflows/README.md for the token setup. The pages-actions group
+  # (dependabot.yml) is excluded: those actions only ever run on a push to main,
+  # so a green PR proves nothing about them — they get a human look instead.
   auto-merge:
     name: Auto-merge Dependabot
     needs: [check, dependency-review]
-    if: ${{ success() && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ success() && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository && !contains(github.head_ref, 'pages-actions') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}

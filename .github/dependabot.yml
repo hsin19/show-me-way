@@ -52,3 +52,14 @@ updates:
       actions:
         patterns:
           - '*'
+        exclude-patterns:
+          - 'actions/configure-pages'
+          - 'actions/deploy-pages'
+          - 'actions/upload-pages-artifact'
+      # deploy.yml 專用的三支 action 只在 push main 時執行，PR 檢查永遠跑不到它們，
+      # 升級等於未經驗證直上生產部署——獨立成組，pr.yml 依組名跳過 auto-merge。
+      pages-actions:
+        patterns:
+          - 'actions/configure-pages'
+          - 'actions/deploy-pages'
+          - 'actions/upload-pages-artifact'
