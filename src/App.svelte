@@ -16,22 +16,18 @@ import {
     buildLedgerCsv,
     createChecklistItemId,
     createExpenseId,
-    createProfile,
     type DayItinerary,
-    deleteProfile,
     downloadTextFile,
-    ensureActiveProfileId,
-    fetchDefaultYamlText,
-    fetchItinerary,
-    listProfiles,
-    type ProfileInfo,
     saveTripData,
     serializeToYaml,
-    switchToProfile,
     type TripData,
     USER_YAML_KEY,
     validateYaml,
 } from "./lib/api";
+import {
+    fetchDefaultYamlText,
+    fetchItinerary,
+} from "./lib/api-fetch";
 import AppSettings from "./lib/components/AppSettings.svelte";
 import ChatPanel from "./lib/components/ChatPanel.svelte";
 import Checklist from "./lib/components/Checklist.svelte";
@@ -45,6 +41,14 @@ import ToolsTab from "./lib/components/ToolsTab.svelte";
 import type { EnlargedCard } from "./lib/enlarge";
 import { parseLegacyExpenses } from "./lib/ledger";
 import { getLanguageConfig } from "./lib/phrases";
+import {
+    createProfile,
+    deleteProfile,
+    ensureActiveProfileId,
+    listProfiles,
+    type ProfileInfo,
+    switchToProfile,
+} from "./lib/profiles";
 import { initPwaInstallPrompt } from "./lib/pwa-install.svelte";
 import { settingsDraft } from "./lib/settings-draft.svelte";
 import {

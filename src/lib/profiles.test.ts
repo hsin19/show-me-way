@@ -6,6 +6,7 @@ import {
     it,
     vi,
 } from "vitest";
+import { USER_YAML_KEY } from "./api";
 import {
     ACTIVE_PROFILE_KEY,
     createProfile,
@@ -16,8 +17,7 @@ import {
     PROFILES_KEY,
     switchToProfile,
     tripNameFromYaml,
-    USER_YAML_KEY,
-} from "./api";
+} from "./profiles";
 
 // Minimal YAML carrying just a trip.name — tripNameFromYaml parses the raw YAML
 // directly (no full-structure validation), so this is all the swap logic needs.

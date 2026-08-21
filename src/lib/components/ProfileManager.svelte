@@ -3,7 +3,7 @@ import ChevronDown from "@lucide/svelte/icons/chevron-down";
 import Layers from "@lucide/svelte/icons/layers";
 import Plus from "@lucide/svelte/icons/plus";
 import Trash2 from "@lucide/svelte/icons/trash-2";
-import type { ProfileInfo } from "../api";
+import type { ProfileInfo } from "../profiles";
 import ConfirmBar from "./ConfirmBar.svelte";
 
 // Rendered by two hosts, so an edit here changes both: collapsed at the top of

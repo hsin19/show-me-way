@@ -10,7 +10,6 @@ import Share2 from "@lucide/svelte/icons/share-2";
 import Wallet from "@lucide/svelte/icons/wallet";
 import type {
     DayItinerary,
-    ProfileInfo,
     TripData,
 } from "../api";
 import type { EnlargedCard } from "../enlarge";
@@ -20,6 +19,7 @@ import {
     getCurrencyConfig,
 } from "../ledger";
 import { getLanguageConfig } from "../phrases";
+import type { ProfileInfo } from "../profiles";
 import {
     formatDateRange,
     isOvernightStay,

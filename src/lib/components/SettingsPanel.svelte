@@ -9,16 +9,18 @@ import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import { onMount } from "svelte";
 import {
     backupCurrentYaml,
-    fetchDefaultYamlText,
     getYamlBackup,
     listYamlBackups,
-    type ProfileInfo,
     serializeToYaml,
-    tripNameFromYaml,
     USER_YAML_KEY,
     validateYaml,
     type YamlBackup,
 } from "../api";
+import { fetchDefaultYamlText } from "../api-fetch";
+import {
+    type ProfileInfo,
+    tripNameFromYaml,
+} from "../profiles";
 import { settingsDraft } from "../settings-draft.svelte";
 import {
     decodeShareToken,

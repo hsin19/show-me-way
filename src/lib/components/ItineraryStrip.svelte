@@ -1,11 +1,11 @@
 <script lang="ts">
 import type {
     DayItinerary,
-    ProfileInfo,
     TripData,
 } from "../api";
 import type { EnlargedCard } from "../enlarge";
 import type { ExpenseItem } from "../ledger";
+import type { ProfileInfo } from "../profiles";
 import {
     findCurrentEventIndex,
     formatNextEventLabel,
