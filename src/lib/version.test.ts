@@ -6,6 +6,8 @@ import {
 import {
     APP_VERSION,
     formatBuildDate,
+    REPO_URL,
+    versionCommitUrl,
 } from "./version";
 
 describe("formatBuildDate", () => {
@@ -33,5 +35,15 @@ describe("APP_VERSION", () => {
     it("is a non-empty injected string", () => {
         expect(typeof APP_VERSION).toBe("string");
         expect(APP_VERSION.length).toBeGreaterThan(0);
+    });
+});
+
+describe("versionCommitUrl", () => {
+    it("builds a commit URL from a short SHA", () => {
+        expect(versionCommitUrl("3f8508a")).toBe(`${REPO_URL}/commit/3f8508a`);
+    });
+
+    it("returns null for the dev fallback, which has no commit to link", () => {
+        expect(versionCommitUrl("dev")).toBeNull();
     });
 });

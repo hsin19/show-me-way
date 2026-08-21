@@ -47,12 +47,16 @@ import { formatBytes } from "../utils";
 import {
     APP_VERSION,
     formatBuildDate,
+    REPO_URL,
+    versionCommitUrl,
 } from "../version";
 import ConfirmBar from "./ConfirmBar.svelte";
 import GitHubIcon from "./icons/GitHubIcon.svelte";
 
 // Everything here is a property of the device, not of a trip: nothing on this
 // page travels with a profile. Trip-level settings are 行程管理.
+
+const commitUrl = versionCommitUrl();
 
 const THEMES: { id: ThemePref; label: string; icon: typeof Sun; hint: string; }[] = [
     { id: "system", label: "跟隨系統", icon: Monitor, hint: "依裝置的深淺色設定自動切換" },
@@ -475,7 +479,7 @@ function handleFullReset() {
             <Info size={16} class="text-accent" aria-hidden="true" />關於 App
         </h3>
         <a
-            href="https://github.com/hsin19/show-me-way"
+            href={REPO_URL}
             target="_blank"
             rel="noopener noreferrer"
             class="
@@ -488,6 +492,11 @@ function handleFullReset() {
         </a>
     </div>
     <p class="text-[11px] text-text-muted leading-normal">
-        版本：{APP_VERSION} · {formatBuildDate()}
+        版本：{#if commitUrl}<a
+                href={commitUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="underline decoration-dotted underline-offset-2 hover:text-text-primary transition-colors"
+            >{APP_VERSION}</a>{:else}{APP_VERSION}{/if} · {formatBuildDate()}
     </p>
 </section>
