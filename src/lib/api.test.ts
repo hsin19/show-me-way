@@ -786,4 +786,14 @@ describe("buildLedgerCsv", () => {
         // A comma inside a field forces quoting.
         expect(lines[3]).toBe('2026-06-12,"紀念品, 含稅",3000,WOWPASS 支付');
     });
+
+    it("sorts rows by date even though the ledger lists newest first", () => {
+        const csv = buildLedgerCsv([
+            { date: "2026-06-13", name: "門票", amount: 800, type: "Cash" },
+            { date: "2026-06-11", name: "晚餐", amount: 1200, type: "Cash" },
+            { date: "2026-06-12", name: "早餐", amount: 300, type: "Cash" },
+        ])!;
+        const lines = csv.slice(1).trimEnd().split("\r\n");
+        expect(lines.slice(1).map(l => l.split(",")[0])).toEqual(["2026-06-11", "2026-06-12", "2026-06-13"]);
+    });
 });
