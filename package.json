@@ -24,6 +24,7 @@
     "knip:ci": "knip --exclude dependencies,devDependencies --no-config-hints",
     "check": "pnpm run format && pnpm run knip:fix && pnpm run lint:fix && pnpm run typecheck && pnpm run test && pnpm run build && E2E_SKIP_BUILD=1 pnpm run test:e2e",
     "ci": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run knip:ci && pnpm run test && pnpm run build",
+    "skills:update": "pnpm dlx skills update",
     "prepare": "simple-git-hooks"
   },
   "simple-git-hooks": {
