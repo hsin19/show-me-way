@@ -28,6 +28,7 @@ import {
     getActiveProfileId,
     type ProfileInfo,
     tripNameFromYaml,
+    tripStartDateFromYaml,
 } from "../profiles";
 import { settingsDraft } from "../settings-draft.svelte";
 import {
@@ -304,6 +305,7 @@ function discardDraft() {
 <div class="mb-2.5">
     <ProfileManager
         activeTripName={activeTripName ?? "（尚未載入）"}
+        activeTripStartDate={tripStartDateFromYaml(yamlInput) ?? undefined}
         {profiles}
         {onSwitchProfile}
         {onCreateProfile}

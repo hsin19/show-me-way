@@ -7,6 +7,8 @@ export const GDRIVE_FOLDER_ID_STORAGE = "showmeway_gdrive_folder_id";
 /** @public */
 export const GDRIVE_FILE_MAP_STORAGE = "showmeway_gdrive_file_map";
 
+import { tripStartDateFromYaml } from "./profiles";
+
 export const GDRIVE_FOLDER_NAME = "ShowMeWay";
 /** @public */
 export const GDRIVE_OAUTH_SCOPES = [
@@ -27,6 +29,7 @@ export interface CloudTripFile {
     modifiedTime: string;
     size?: number;
     tripId?: string;
+    startDate?: string;
 }
 
 /** @public */
@@ -403,7 +406,7 @@ interface RawDriveFile {
     name?: string;
     modifiedTime?: string;
     size?: string;
-    appProperties?: { showmewayTripId?: string; };
+    appProperties?: { showmewayTripId?: string; startDate?: string; };
 }
 
 /** List all trip files stored in the ShowMeWay Google Drive folder */
@@ -431,6 +434,7 @@ export async function listCloudTrips(token: string, folderId?: string): Promise<
             modifiedTime: f.modifiedTime,
             size: f.size ? parseInt(f.size, 10) : undefined,
             tripId: f.appProperties?.showmewayTripId,
+            startDate: f.appProperties?.startDate,
         }));
 }
 
@@ -457,12 +461,16 @@ export async function uploadOrUpdateCloudTrip(
 ): Promise<CloudTripFile> {
     const boundary = `-------ShowMeWayBoundary${Date.now()}`;
     const fileName = `${tripName.trim() || "未命名行程"}.yaml`;
+    const startDate = tripStartDateFromYaml(yamlContent);
 
     const appProperties: Record<string, string> = {
         updatedAt: new Date().toISOString(),
     };
     if (options.tripId) {
         appProperties.showmewayTripId = options.tripId;
+    }
+    if (startDate) {
+        appProperties.startDate = startDate;
     }
 
     if (options.fileId) {
@@ -495,6 +503,7 @@ export async function uploadOrUpdateCloudTrip(
             name: (data.name || fileName).replace(/\.ya?ml$/i, ""),
             modifiedTime: data.modifiedTime || new Date().toISOString(),
             tripId: options.tripId,
+            startDate: startDate ?? undefined,
         };
     } else {
         // Create new file in folder
@@ -529,6 +538,7 @@ export async function uploadOrUpdateCloudTrip(
             name: (data.name || fileName).replace(/\.ya?ml$/i, ""),
             modifiedTime: data.modifiedTime || new Date().toISOString(),
             tripId: options.tripId,
+            startDate: startDate ?? undefined,
         };
     }
 }

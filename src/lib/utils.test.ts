@@ -9,12 +9,14 @@ import {
     addDaysIso,
     buildDayReport,
     classifyTimelineEvents,
+    compareTripDates,
     findCurrentEventIndex,
     formatBackupTime,
     formatBytes,
     formatDateRange,
     formatDayDate,
     formatNextEventLabel,
+    formatYearMonth,
     getCountdownText,
     getNextEventInfo,
     getTodayIsoString,
@@ -557,5 +559,44 @@ describe("formatBytes", () => {
     it("formats MB", () => {
         expect(formatBytes(1048576)).toBe("1.0 MB");
         expect(formatBytes(5242880)).toBe("5.0 MB");
+    });
+});
+
+describe("formatYearMonth", () => {
+    it("formats ISO date string into YYYY.MM", () => {
+        expect(formatYearMonth("2026-06-11")).toBe("2026.06");
+        expect(formatYearMonth("2025-12-25T10:00:00")).toBe("2025.12");
+        expect(formatYearMonth("2024/04/01")).toBe("2024.04");
+    });
+
+    it("returns empty string on empty/null input", () => {
+        expect(formatYearMonth("")).toBe("");
+        expect(formatYearMonth(null)).toBe("");
+        expect(formatYearMonth(undefined)).toBe("");
+    });
+});
+
+describe("compareTripDates", () => {
+    const today = "2026-08-24";
+
+    it("sorts upcoming trips by closest first", () => {
+        expect(compareTripDates("2026-09-01", "2026-10-15", today)).toBeLessThan(0);
+        expect(compareTripDates("2026-12-01", "2026-09-01", today)).toBeGreaterThan(0);
+    });
+
+    it("sorts past trips by most recent first", () => {
+        expect(compareTripDates("2026-07-01", "2025-01-01", today)).toBeLessThan(0);
+        expect(compareTripDates("2024-05-01", "2026-06-01", today)).toBeGreaterThan(0);
+    });
+
+    it("places upcoming trips before past trips", () => {
+        expect(compareTripDates("2026-09-01", "2026-07-01", today)).toBeLessThan(0);
+        expect(compareTripDates("2026-07-01", "2026-09-01", today)).toBeGreaterThan(0);
+    });
+
+    it("places undated trips at the end", () => {
+        expect(compareTripDates("2026-09-01", null, today)).toBeLessThan(0);
+        expect(compareTripDates(undefined, "2026-09-01", today)).toBeGreaterThan(0);
+        expect(compareTripDates(null, undefined, today)).toBe(0);
     });
 });

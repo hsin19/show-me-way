@@ -53,6 +53,50 @@ export function formatBackupTime(savedAt: string): string {
     return `${formatDayDate(toLocalIsoDate(date))} ${hh}:${mm}`;
 }
 
+/** "2026-06-11" -> "2026.06" */
+export function formatYearMonth(dateStr?: string | null): string {
+    if (!dateStr) return "";
+    const match = /^(\d{4})[-/.](\d{2})/.exec(dateStr.trim());
+    if (match) {
+        return `${match[1]}.${match[2]}`;
+    }
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        return `${y}.${m}`;
+    }
+    return "";
+}
+
+/**
+ * Sort trips by departure date with closest upcoming trip first, then recent past trips,
+ * and trips without dates at the end.
+ */
+export function compareTripDates(
+    dateA?: string | null,
+    dateB?: string | null,
+    referenceToday = getTodayIsoString(),
+): number {
+    const a = dateA?.slice(0, 10)?.trim();
+    const b = dateB?.slice(0, 10)?.trim();
+
+    if (!a && !b) return 0;
+    if (!a) return 1;
+    if (!b) return -1;
+
+    const isFutureA = a >= referenceToday;
+    const isFutureB = b >= referenceToday;
+
+    if (isFutureA && isFutureB) {
+        return a.localeCompare(b);
+    }
+    if (!isFutureA && !isFutureB) {
+        return b.localeCompare(a);
+    }
+    return isFutureA ? -1 : 1;
+}
+
 /**
  * The UTC calendar day of a `Date` as YYYY-MM-DD -- for a Date that already
  * *means* a bare date, which is how js-yaml hands back an unquoted `2026-10-01`

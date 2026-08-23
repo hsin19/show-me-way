@@ -24,6 +24,7 @@ export interface ProfileInfo {
     /** Derived from the stored YAML on every read, so it cannot go stale against a renamed trip. */
     name: string;
     savedAt: string;
+    startDate?: string;
 }
 
 function genProfileId(): string {
@@ -81,12 +82,32 @@ export function tripNameFromYaml(yaml: string): string {
     return "未命名行程";
 }
 
+/** Extract trip start date from YAML without full normalization */
+export function tripStartDateFromYaml(yaml: string): string | null {
+    try {
+        const data = parseYaml(yaml) as Partial<TripData> | null;
+        if (data?.days && Array.isArray(data.days) && data.days.length > 0) {
+            const firstDate = data.days[0]?.date;
+            if (typeof firstDate === "string" && firstDate.trim()) {
+                return firstDate.trim();
+            }
+        }
+        if (data?.trip && typeof (data.trip as { start?: string; }).start === "string") {
+            return (data.trip as { start: string; }).start.trim();
+        }
+    } catch {
+        // ignore
+    }
+    return null;
+}
+
 /** Parked trips only, newest first — the active one lives in USER_YAML_KEY. */
 export function listProfiles(): ProfileInfo[] {
     return readStoredProfiles().map(p => ({
         id: p.id,
         name: tripNameFromYaml(p.yaml),
         savedAt: p.savedAt,
+        startDate: tripStartDateFromYaml(p.yaml) ?? undefined,
     }));
 }
 

@@ -51,7 +51,7 @@ test("分享連結匯入：接受後成為新行程，原行程保留可切回",
     await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await page.getByRole("button", { name: "行程管理", exact: true }).click();
     await page.getByRole("button", { name: /目前行程/ }).click();
-    await expect(page.getByRole("button", { name: "測試行程 切換" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /測試行程.*切換/ })).toBeVisible();
 });
 
 test("分享連結匯入：無原行程時直接匯入無彈窗", async ({ page }) => {

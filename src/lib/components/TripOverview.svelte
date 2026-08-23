@@ -147,6 +147,7 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
         <div class="mt-4 pt-3.5 border-t border-line-faint">
             <ProfileManager
                 activeTripName={trip.name}
+                activeTripStartDate={trip.start}
                 {profiles}
                 expanded={true}
                 onToggleExpand={toggleSwitcher}

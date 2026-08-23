@@ -41,7 +41,7 @@ test("行程設定檔：建立、切換、刪除與取消刪除", async ({ page 
     await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await expect(expander).toHaveAttribute("aria-expanded", "false");
     await expander.click();
-    const parkedFixtureRow = page.getByRole("button", { name: "測試行程 切換" });
+    const parkedFixtureRow = page.getByRole("button", { name: /測試行程.*切換/ });
     await expect(parkedFixtureRow).toBeVisible();
 
     // (2) 切換：換回原本的行程 — 切換成功會自動導回行程分頁
@@ -54,7 +54,7 @@ test("行程設定檔：建立、切換、刪除與取消刪除", async ({ page 
     await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await expect(expander).toHaveAttribute("aria-expanded", "false");
     await expander.click();
-    const parkedTemplateRow = page.getByRole("button", { name: "下面一way-我的探索之旅 切換" });
+    const parkedTemplateRow = page.getByRole("button", { name: /下面一way-我的探索之旅.*切換/ });
     const deleteButton = page.getByRole("button", { name: "刪除行程 下面一way-我的探索之旅" });
     await expect(parkedTemplateRow).toBeVisible();
 

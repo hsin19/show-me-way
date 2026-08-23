@@ -17,6 +17,7 @@ import {
     PROFILES_KEY,
     switchToProfile,
     tripNameFromYaml,
+    tripStartDateFromYaml,
 } from "./profiles";
 
 // Minimal YAML carrying just a trip.name — tripNameFromYaml parses the raw YAML
@@ -60,6 +61,19 @@ describe("trip profiles", () => {
         });
         it("falls back when trip.name is missing", () => {
             expect(tripNameFromYaml("trip:\n  start: '2026-06-11'\n")).toBe("未命名行程");
+        });
+    });
+
+    describe("tripStartDateFromYaml", () => {
+        it("reads start date from days[0].date", () => {
+            expect(tripStartDateFromYaml("days:\n  - date: '2026-06-11'\n")).toBe("2026-06-11");
+        });
+        it("reads start date from trip.start fallback", () => {
+            expect(tripStartDateFromYaml("trip:\n  start: '2025-10-01'\n")).toBe("2025-10-01");
+        });
+        it("returns null when no date is present", () => {
+            expect(tripStartDateFromYaml("trip:\n  name: '東京'\n")).toBeNull();
+            expect(tripStartDateFromYaml("invalid: [yaml")).toBeNull();
         });
     });
 
