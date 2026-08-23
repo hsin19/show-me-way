@@ -1,14 +1,18 @@
 <script lang="ts">
 import Check from "@lucide/svelte/icons/check";
+import Cloud from "@lucide/svelte/icons/cloud";
 import CloudOff from "@lucide/svelte/icons/cloud-off";
 import Download from "@lucide/svelte/icons/download";
 import ExternalLink from "@lucide/svelte/icons/external-link";
 import HardDrive from "@lucide/svelte/icons/hard-drive";
 import History from "@lucide/svelte/icons/history";
 import Info from "@lucide/svelte/icons/info";
+import LogIn from "@lucide/svelte/icons/log-in";
+import LogOut from "@lucide/svelte/icons/log-out";
 import Monitor from "@lucide/svelte/icons/monitor";
 import Moon from "@lucide/svelte/icons/moon";
 import Palette from "@lucide/svelte/icons/palette";
+import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 import Settings from "@lucide/svelte/icons/settings";
 import Share from "@lucide/svelte/icons/share";
 import Sparkles from "@lucide/svelte/icons/sparkles";
@@ -16,6 +20,7 @@ import SquarePlus from "@lucide/svelte/icons/square-plus";
 import Sun from "@lucide/svelte/icons/sun";
 import Trash2 from "@lucide/svelte/icons/trash-2";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+import { gdriveSync } from "../gdrive.svelte";
 import {
     clearGeminiApiKey,
     type GeminiModelFilterMode,
@@ -178,6 +183,77 @@ function handleFullReset() {
                     : "淺色"
                 }）</span>{/if}
     </p>
+</section>
+
+<section class="panel rounded-xl p-3.5 mt-3">
+    <div class="flex items-center justify-between mb-2.5">
+        <h3 class="text-sm font-bold text-text-primary flex items-center gap-1.5">
+            <Cloud size={16} class="text-accent" aria-hidden="true" />Google 雲端硬碟同步
+        </h3>
+        {#if gdriveSync.isConnected}
+            <span class="text-[11px] font-semibold text-positive bg-positive/10 px-2 py-0.5 rounded-full border border-positive/20 flex items-center gap-1">
+                <Check size={12} aria-hidden="true" />已連線
+            </span>
+        {:else}
+            <span class="text-[11px] font-semibold text-text-muted bg-tint-1 px-2 py-0.5 rounded-full border border-card-border">
+                未連線
+            </span>
+        {/if}
+    </div>
+
+    <div class="space-y-3">
+        <div class="p-3 bg-well rounded-xl border border-line-faint flex flex-col gap-2.5">
+            <div class="flex items-center justify-between gap-2">
+                <div class="min-w-0">
+                    <div class="text-xs font-bold text-text-primary truncate">
+                        {gdriveSync.user ? `${gdriveSync.user.name} (${gdriveSync.user.email})` : "尚未登入 Google"}
+                    </div>
+                    <div class="text-[10px] text-text-muted mt-0.5">
+                        {gdriveSync.user ? "檔案儲存於 Google Drive 的 ShowMeWay/ 資料夾" : "登入授權後即可跨裝置同步與備份行程"}
+                    </div>
+                </div>
+                {#if gdriveSync.user}
+                    <button
+                        type="button"
+                        onclick={() => gdriveSync.disconnect()}
+                        class="text-xs font-bold px-3 py-1.5 rounded-lg bg-tint-1 border border-card-border text-text-secondary hover:text-danger hover:bg-danger/10 transition cursor-pointer flex items-center gap-1 shrink-0"
+                    >
+                        <LogOut size={13} aria-hidden="true" /> 登出
+                    </button>
+                {:else}
+                    <button
+                        type="button"
+                        disabled={gdriveSync.isConnecting}
+                        onclick={() => void gdriveSync.connect()}
+                        class="text-xs font-bold px-3.5 py-1.5 rounded-lg bg-accent text-accent-contrast transition active:scale-[0.98] cursor-pointer flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                    >
+                        {#if gdriveSync.isConnecting}
+                            <RefreshCw size={13} class="animate-spin" aria-hidden="true" />
+                            連線中…
+                        {:else}
+                            <LogIn size={13} aria-hidden="true" />
+                            登入 Google
+                        {/if}
+                    </button>
+                {/if}
+            </div>
+
+            {#if gdriveSync.isConnected}
+                <div class="pt-2 border-t border-line-faint flex items-center justify-between">
+                    <label for="gdrive-auto-sync-checkbox" class="text-xs font-semibold text-text-secondary cursor-pointer select-none">
+                        儲存行程時自動同步至 Google Drive
+                    </label>
+                    <input
+                        id="gdrive-auto-sync-checkbox"
+                        type="checkbox"
+                        checked={gdriveSync.autoSync}
+                        onchange={(e => gdriveSync.setAutoSync(e.currentTarget.checked))}
+                        class="w-4 h-4 rounded accent-accent cursor-pointer"
+                    />
+                </div>
+            {/if}
+        </div>
+    </div>
 </section>
 
 <section class="panel rounded-xl p-3.5 mt-3">

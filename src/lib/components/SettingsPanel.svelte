@@ -1,10 +1,14 @@
 <script lang="ts">
+import Cloud from "@lucide/svelte/icons/cloud";
+import CloudUpload from "@lucide/svelte/icons/cloud-upload";
 import Copy from "@lucide/svelte/icons/copy";
 import Download from "@lucide/svelte/icons/download";
 import History from "@lucide/svelte/icons/history";
 import Lightbulb from "@lucide/svelte/icons/lightbulb";
 import Link2 from "@lucide/svelte/icons/link-2";
+import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 import Sliders from "@lucide/svelte/icons/sliders";
+import Trash2 from "@lucide/svelte/icons/trash-2";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import { onMount } from "svelte";
 import {
@@ -17,7 +21,9 @@ import {
     type YamlBackup,
 } from "../api";
 import { fetchDefaultYamlText } from "../api-fetch";
+import { gdriveSync } from "../gdrive.svelte";
 import {
+    getActiveProfileId,
     type ProfileInfo,
     tripNameFromYaml,
 } from "../profiles";
@@ -74,6 +80,9 @@ let yamlSnapshot = $state("");
 // draft outranks the persisted YAML on the way back in.
 onMount(async () => {
     yamlBackups = listYamlBackups();
+    if (gdriveSync.isConnected) {
+        void gdriveSync.refreshFiles();
+    }
     let persisted = localStorage.getItem(USER_YAML_KEY);
     if (persisted === null) {
         try {
@@ -105,6 +114,13 @@ async function save() {
         yamlSnapshot = tidied;
         settingsDraft.yaml = null;
         validationError = null;
+
+        if (gdriveSync.autoSync && gdriveSync.isConnected) {
+            const activeId = getActiveProfileId() ?? undefined;
+            const tripName = parsed.trip?.name ?? "未命名行程";
+            void gdriveSync.syncTrip(tripName, tidied, activeId, false);
+        }
+
         showToast(token ? "已從分享連結載入行程！" : "自訂 YAML 行程儲存成功！");
         await onReload();
         onDone();
@@ -112,6 +128,45 @@ async function save() {
         console.error("YAML Validation failed:", err);
         validationError = err instanceof Error ? err.message : "YAML 格式錯誤，請檢查縮排！";
     }
+}
+
+let confirmingCloudFileId = $state<string | null>(null);
+let confirmingCloudDeleteFileId = $state<string | null>(null);
+
+async function handleSyncToCloud() {
+    const tripName = tripNameFromYaml(yamlInput);
+    const activeId = getActiveProfileId() ?? undefined;
+    await gdriveSync.syncTrip(tripName, yamlInput, activeId);
+}
+
+async function handleLoadFromCloud(fileId: string, cloudName: string) {
+    confirmingCloudFileId = null;
+    const yaml = await gdriveSync.loadTripYaml(fileId);
+    if (!yaml) return;
+    try {
+        validateYaml(yaml);
+    } catch (err) {
+        console.error("Cloud YAML validation failed:", err);
+        yamlInput = yaml;
+        settingsDraft.yaml = yaml;
+        validationError = err instanceof Error ? err.message : "雲端 YAML 格式錯誤，請檢查！";
+        showToast("此雲端行程格式有誤，已載入編輯器，請修正後再儲存");
+        return;
+    }
+    backupCurrentYaml();
+    localStorage.setItem(USER_YAML_KEY, yaml);
+    yamlInput = yaml;
+    yamlSnapshot = yaml;
+    settingsDraft.yaml = null;
+    validationError = null;
+    showToast(`已從 Google Drive 載入「${cloudName}」`);
+    await onReload();
+    onDone();
+}
+
+async function handleDeleteCloudTrip(fileId: string) {
+    confirmingCloudDeleteFileId = null;
+    await gdriveSync.deleteTrip(fileId);
 }
 
 /** "06/11(四) 14:30" */
@@ -289,6 +344,90 @@ function discardDraft() {
             </li>
         </ul>
     </div>
+
+    {#if gdriveSync.isConnected}
+        <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint">
+            <div class="flex items-center justify-between">
+                <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
+                    <Cloud size={12} class="shrink-0 text-accent" aria-hidden="true" />Google Drive 雲端同步
+                </p>
+                <div class="flex items-center gap-2">
+                    <button
+                        type="button"
+                        disabled={gdriveSync.isSyncing}
+                        onclick={() => void gdriveSync.refreshFiles()}
+                        class="text-[10px] text-text-secondary hover:text-accent flex items-center gap-1 cursor-pointer font-medium disabled:opacity-40"
+                    >
+                        <RefreshCw size={10} class={gdriveSync.isSyncing ? "animate-spin" : ""} aria-hidden="true" />
+                        重整
+                    </button>
+                </div>
+            </div>
+
+            <div class="mt-2 flex gap-2">
+                <button
+                    type="button"
+                    disabled={gdriveSync.isSyncing}
+                    onclick={handleSyncToCloud}
+                    class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3 rounded-lg bg-accent/10 text-[11px] font-bold text-accent hover:bg-accent/15 transition cursor-pointer text-center disabled:opacity-50"
+                >
+                    <CloudUpload size={13} aria-hidden="true" />
+                    備份目前行程至 Google Drive
+                </button>
+            </div>
+
+            {#if gdriveSync.cloudFiles.length > 0}
+                <div class="mt-2.5 pt-2 border-t border-line-faint space-y-1.5">
+                    <div class="text-[10px] font-semibold text-text-secondary">雲端資料夾行程清單：</div>
+                    <ul class="space-y-1.5">
+                        {#each gdriveSync.cloudFiles as file (file.id)}
+                            <li>
+                                {#if confirmingCloudFileId === file.id}
+                                    <ConfirmBar
+                                        message={yamlInput !== yamlSnapshot
+                                        ? `尚有未儲存的變更，載入雲端行程將捨棄這些變更。確定載入「${file.name}」嗎？`
+                                        : `確定從 Google Drive 載入「${file.name}」並覆蓋目前行程嗎？`}
+                                        confirmLabel="確定載入"
+                                        onconfirm={() => handleLoadFromCloud(file.id, file.name)}
+                                        oncancel={() => (confirmingCloudFileId = null)}
+                                    />
+                                {:else if confirmingCloudDeleteFileId === file.id}
+                                    <ConfirmBar
+                                        message={`確定從 Google Drive 刪除「${file.name}」嗎？此動作無法復原。`}
+                                        confirmLabel="確定刪除"
+                                        onconfirm={() => handleDeleteCloudTrip(file.id)}
+                                        oncancel={() => (confirmingCloudDeleteFileId = null)}
+                                    />
+                                {:else}
+                                    <div class="flex items-center gap-1">
+                                        <button
+                                            type="button"
+                                            onclick={() => (confirmingCloudFileId = file.id)}
+                                            class="flex-1 min-w-0 min-h-[44px] flex items-center justify-between gap-2 px-3 rounded-lg bg-tint-1 border border-card-border text-[11px] text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer"
+                                        >
+                                            <span class="flex items-center gap-2 min-w-0">
+                                                <span class="font-mono text-text-muted shrink-0">{formatBackupTime(file.modifiedTime)}</span>
+                                                <span class="font-semibold text-text-primary truncate">{file.name}</span>
+                                            </span>
+                                            <span class="text-[10px] font-bold shrink-0">載入</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onclick={() => (confirmingCloudDeleteFileId = file.id)}
+                                            aria-label={`刪除雲端檔案 ${file.name}`}
+                                            class="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-text-muted hover:text-danger transition cursor-pointer"
+                                        >
+                                            <Trash2 size={14} aria-hidden="true" />
+                                        </button>
+                                    </div>
+                                {/if}
+                            </li>
+                        {/each}
+                    </ul>
+                </div>
+            {/if}
+        </div>
+    {/if}
 
     <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint">
         <p class="flex items-center gap-1 font-bold text-text-primary text-xs">

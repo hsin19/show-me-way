@@ -39,12 +39,14 @@ import SettingsPanel from "./lib/components/SettingsPanel.svelte";
 import Toast from "./lib/components/Toast.svelte";
 import ToolsTab from "./lib/components/ToolsTab.svelte";
 import type { EnlargedCard } from "./lib/enlarge";
+import { gdriveSync } from "./lib/gdrive.svelte";
 import { parseLegacyExpenses } from "./lib/ledger";
 import { getLanguageConfig } from "./lib/phrases";
 import {
     createProfile,
     deleteProfile,
     ensureActiveProfileId,
+    getActiveProfileId,
     listProfiles,
     type ProfileInfo,
     switchToProfile,
@@ -320,6 +322,11 @@ function persistTripData() {
     if (!tripData) return;
     try {
         saveTripData(tripData);
+        if (gdriveSync.autoSync && gdriveSync.isConnected) {
+            const activeId = getActiveProfileId() ?? undefined;
+            const yaml = serializeToYaml(tripData);
+            void gdriveSync.syncTrip(tripData.trip.name, yaml, activeId, false);
+        }
     } catch (err) {
         console.error("Failed to persist trip data:", err);
         showToast("儲存失敗，請稍後再試");
