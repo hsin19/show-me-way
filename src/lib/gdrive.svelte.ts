@@ -8,13 +8,17 @@ import {
     getCachedAccessToken,
     getCloudFileIdForTrip,
     getGdriveClientId,
+    getTripLocalModifiedTime,
     type GoogleUser,
     listCloudTrips,
     loadGdriveAutoSync,
     loadGdriveUser,
+    removeCloudFileIdForTrip,
     requestGoogleAccessToken,
     saveGdriveAutoSync,
     saveGdriveUser,
+    setCloudFileIdForTrip,
+    setTripLocalModifiedTime,
     uploadOrUpdateCloudTrip,
 } from "./gdrive";
 import { showToast } from "./toast.svelte";
@@ -43,11 +47,22 @@ class GDriveSyncState {
         const cached = getCachedAccessToken();
         if (cached) return cached;
 
+        if (this.isConnected) {
+            try {
+                const res = await requestGoogleAccessToken(this.clientId, "");
+                return res.token;
+            } catch (err) {
+                if (!interactive) {
+                    throw err;
+                }
+            }
+        }
+
         if (!interactive) {
             throw new Error("尚未登入 Google 或登入憑證已過期");
         }
 
-        const res = await requestGoogleAccessToken(this.clientId, "");
+        const res = await requestGoogleAccessToken(this.clientId, "consent");
         return res.token;
     }
 
@@ -130,6 +145,84 @@ class GDriveSyncState {
             if (showFeedback) {
                 showToast(`雲端同步失敗: ${msg}`);
             }
+            return null;
+        } finally {
+            this.isSyncing = false;
+        }
+    }
+
+    bindTripToFile(tripId: string, fileId: string) {
+        setCloudFileIdForTrip(tripId, fileId);
+    }
+
+    async smartSyncTrip(
+        tripName: string,
+        localYaml: string,
+        tripId: string,
+    ): Promise<{ action: "uploaded" | "downloaded" | "up_to_date"; downloadedYaml?: string; file?: CloudTripFile; } | null> {
+        if (!this.isConnected) return null;
+        this.isSyncing = true;
+        this.error = null;
+        try {
+            const token = await this.getValidToken(true);
+            const boundFileId = getCloudFileIdForTrip(tripId);
+
+            if (!boundFileId) {
+                // Not bound yet -> Create on Drive
+                const res = await uploadOrUpdateCloudTrip(token, tripName, localYaml, { tripId });
+                setTripLocalModifiedTime(tripId, new Date(res.modifiedTime).getTime());
+                this.lastSyncedAt = new Date().toISOString();
+                showToast(`已建立雲端備份「${res.name}」並完成同步`);
+                void this.refreshFiles();
+                return { action: "uploaded", file: res };
+            }
+
+            // Bound -> Find cloud file metadata
+            let cloudFile = this.cloudFiles.find(f => f.id === boundFileId);
+            if (!cloudFile) {
+                const files = await listCloudTrips(token);
+                this.cloudFiles = files;
+                cloudFile = files.find(f => f.id === boundFileId);
+            }
+
+            if (!cloudFile) {
+                // Remote file missing on Drive -> Re-create
+                removeCloudFileIdForTrip(tripId);
+                const res = await uploadOrUpdateCloudTrip(token, tripName, localYaml, { tripId });
+                setTripLocalModifiedTime(tripId, new Date(res.modifiedTime).getTime());
+                this.lastSyncedAt = new Date().toISOString();
+                showToast(`雲端檔案已重新建立「${res.name}」`);
+                void this.refreshFiles();
+                return { action: "uploaded", file: res };
+            }
+
+            const localTime = getTripLocalModifiedTime(tripId);
+            const remoteTime = new Date(cloudFile.modifiedTime).getTime();
+
+            if (localTime > remoteTime + 3000) {
+                // Local is newer -> Upload to Drive
+                const res = await uploadOrUpdateCloudTrip(token, tripName, localYaml, { fileId: boundFileId, tripId });
+                setTripLocalModifiedTime(tripId, new Date(res.modifiedTime).getTime());
+                this.lastSyncedAt = new Date().toISOString();
+                showToast(`本地內容較新，已更新至 Google Drive「${res.name}」`);
+                void this.refreshFiles();
+                return { action: "uploaded", file: res };
+            } else if (remoteTime > localTime + 3000) {
+                // Remote is newer -> Download from Drive
+                const remoteYaml = await downloadCloudTripYaml(token, boundFileId);
+                setTripLocalModifiedTime(tripId, remoteTime);
+                this.lastSyncedAt = new Date().toISOString();
+                showToast(`雲端內容較新，已下載「${cloudFile.name}」最新版本`);
+                return { action: "downloaded", downloadedYaml: remoteYaml, file: cloudFile };
+            } else {
+                // Both up to date
+                showToast(`「${cloudFile.name}」本地與雲端已是最新狀態`);
+                return { action: "up_to_date", file: cloudFile };
+            }
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            this.error = msg;
+            showToast(`同步失敗: ${msg}`);
             return null;
         } finally {
             this.isSyncing = false;

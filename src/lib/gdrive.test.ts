@@ -86,10 +86,13 @@ describe("gdrive module", () => {
             expect(getCloudFileIdForTrip("trip-1")).toBeNull();
         });
 
-        it("handles in-memory token cache and expiry", () => {
+        it("handles persistent token cache and expiry", () => {
             expect(getCachedAccessToken()).toBeNull();
             setCachedAccessToken("token-xyz", 3600);
             expect(getCachedAccessToken()).toBe("token-xyz");
+            // Expired token
+            setCachedAccessToken("token-expired", 10); // 10s is within the 60s buffer
+            expect(getCachedAccessToken()).toBeNull();
             clearCachedAccessToken();
             expect(getCachedAccessToken()).toBeNull();
         });

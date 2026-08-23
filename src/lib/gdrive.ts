@@ -1,4 +1,5 @@
 export const GDRIVE_USER_STORAGE = "showmeway_gdrive_user";
+const GDRIVE_TOKEN_STORAGE = "showmeway_gdrive_token";
 /** @public */
 export const GDRIVE_AUTO_SYNC_STORAGE = "showmeway_gdrive_auto_sync";
 /** @public */
@@ -153,25 +154,77 @@ export function removeCloudFileIdForTrip(tripId: string): void {
     }
 }
 
-// Memory token cache
-let inMemoryToken: string | null = null;
-let tokenExpiresAt = 0;
+const GDRIVE_LOCAL_MODIFIED_PREFIX = "showmeway_gdrive_mod_";
+
+export function getTripLocalModifiedTime(tripId: string): number {
+    try {
+        const val = localStorage.getItem(`${GDRIVE_LOCAL_MODIFIED_PREFIX}${tripId}`);
+        if (val) {
+            const num = Number(val);
+            if (!isNaN(num) && num > 0) return num;
+        }
+    } catch {
+        // ignore
+    }
+    return 0;
+}
+
+export function setTripLocalModifiedTime(tripId: string, timestamp?: number): void {
+    try {
+        localStorage.setItem(`${GDRIVE_LOCAL_MODIFIED_PREFIX}${tripId}`, String(timestamp ?? Date.now()));
+    } catch (e) {
+        console.warn("Failed to set local trip modified time", e);
+    }
+}
+
+interface CachedTokenData {
+    token: string;
+    expiresAt: number;
+}
 
 export function getCachedAccessToken(): string | null {
-    if (inMemoryToken && Date.now() < tokenExpiresAt - 60000) {
-        return inMemoryToken;
+    try {
+        const raw = localStorage.getItem(GDRIVE_TOKEN_STORAGE);
+        if (!raw) return null;
+        const data: unknown = JSON.parse(raw);
+        if (
+            data
+            && typeof data === "object"
+            && "token" in data
+            && "expiresAt" in data
+            && typeof (data as CachedTokenData).token === "string"
+            && typeof (data as CachedTokenData).expiresAt === "number"
+        ) {
+            const cached = data as CachedTokenData;
+            // 60-second buffer before actual token expiration
+            if (Date.now() < cached.expiresAt - 60000) {
+                return cached.token;
+            }
+        }
+        return null;
+    } catch {
+        return null;
     }
-    return null;
 }
 
 export function setCachedAccessToken(token: string, expiresInSeconds: number): void {
-    inMemoryToken = token;
-    tokenExpiresAt = Date.now() + expiresInSeconds * 1000;
+    try {
+        const data: CachedTokenData = {
+            token,
+            expiresAt: Date.now() + expiresInSeconds * 1000,
+        };
+        localStorage.setItem(GDRIVE_TOKEN_STORAGE, JSON.stringify(data));
+    } catch (e) {
+        console.warn("Failed to cache Google Drive Token", e);
+    }
 }
 
 export function clearCachedAccessToken(): void {
-    inMemoryToken = null;
-    tokenExpiresAt = 0;
+    try {
+        localStorage.removeItem(GDRIVE_TOKEN_STORAGE);
+    } catch (e) {
+        console.warn("Failed to clear Google Drive Token", e);
+    }
 }
 
 /** Dynamic loader for Google Identity Services SDK */
@@ -212,7 +265,7 @@ export async function requestGoogleAccessToken(
 ): Promise<{ token: string; expiresIn: number; }> {
     const cached = getCachedAccessToken();
     if (cached && prompt !== "consent") {
-        return { token: cached, expiresIn: Math.floor((tokenExpiresAt - Date.now()) / 1000) };
+        return { token: cached, expiresIn: 3600 };
     }
 
     await loadGisScript();

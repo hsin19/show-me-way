@@ -4,8 +4,13 @@ import Cloud from "@lucide/svelte/icons/cloud";
 import Layers from "@lucide/svelte/icons/layers";
 import Plus from "@lucide/svelte/icons/plus";
 import Trash2 from "@lucide/svelte/icons/trash-2";
+import { SvelteSet } from "svelte/reactivity";
+import { loadGdriveFileMap } from "../gdrive";
 import { gdriveSync } from "../gdrive.svelte";
-import type { ProfileInfo } from "../profiles";
+import {
+    getActiveProfileId,
+    type ProfileInfo,
+} from "../profiles";
 import ConfirmBar from "./ConfirmBar.svelte";
 
 // Rendered by two hosts, so an edit here changes both: collapsed at the top of
@@ -40,6 +45,26 @@ let {
 let confirmingDeleteProfileId = $state<string | null>(null);
 let confirmingCloudFileId = $state<string | null>(null);
 let confirmingCloudDeleteFileId = $state<string | null>(null);
+
+let activeProfileId = $derived(getActiveProfileId() ?? "default");
+let boundFileIds = $derived.by(() => {
+    if (!gdriveSync.isConnected) return new SvelteSet<string>();
+    const fileMap = loadGdriveFileMap();
+    const activeFileId = fileMap[activeProfileId];
+    const profileFileIds = profiles.map(p => fileMap[p.id]).filter((id): id is string => Boolean(id));
+    const ids = new SvelteSet<string>();
+    if (activeFileId) ids.add(activeFileId);
+    for (const id of profileFileIds) {
+        ids.add(id);
+    }
+    return ids;
+});
+
+let unimportedCloudFiles = $derived(
+    gdriveSync.isConnected
+        ? gdriveSync.cloudFiles.filter(file => !boundFileIds.has(file.id))
+        : [],
+);
 
 function handleToggle() {
     if (onToggleExpand) {
@@ -133,9 +158,9 @@ async function handleDeleteCloud(fileId: string) {
                 {/if}
             {/each}
 
-            <!-- 2. 雲端行程 (Google Drive) 直接排在後面 -->
-            {#if gdriveSync.isConnected && gdriveSync.cloudFiles.length > 0}
-                {#each gdriveSync.cloudFiles as file (file.id)}
+            <!-- 2. 雲端行程 (Google Drive) 僅列出尚未存在於本機的遠端行程 -->
+            {#if gdriveSync.isConnected && unimportedCloudFiles.length > 0}
+                {#each unimportedCloudFiles as file (file.id)}
                     {@const cleanName = file.name.replace(/\.ya?ml$/i, "")}
                     {#if confirmingCloudFileId === file.id}
                         <ConfirmBar

@@ -39,6 +39,10 @@ import SettingsPanel from "./lib/components/SettingsPanel.svelte";
 import Toast from "./lib/components/Toast.svelte";
 import ToolsTab from "./lib/components/ToolsTab.svelte";
 import type { EnlargedCard } from "./lib/enlarge";
+import {
+    removeCloudFileIdForTrip,
+    setTripLocalModifiedTime,
+} from "./lib/gdrive";
 import { gdriveSync } from "./lib/gdrive.svelte";
 import { parseLegacyExpenses } from "./lib/ledger";
 import { getLanguageConfig } from "./lib/phrases";
@@ -322,8 +326,9 @@ function persistTripData() {
     if (!tripData) return;
     try {
         saveTripData(tripData);
+        const activeId = getActiveProfileId() ?? "default";
+        setTripLocalModifiedTime(activeId, Date.now());
         if (gdriveSync.autoSync && gdriveSync.isConnected) {
-            const activeId = getActiveProfileId() ?? undefined;
             const yaml = serializeToYaml(tripData);
             void gdriveSync.syncTrip(tripData.trip.name, yaml, activeId, false);
         }
@@ -658,6 +663,7 @@ async function handleSwitchProfile(id: string) {
 
 function handleDeleteProfile(id: string) {
     deleteProfile(id);
+    removeCloudFileIdForTrip(id);
     profiles = listProfiles();
     showToast("已刪除行程");
 }
@@ -677,6 +683,12 @@ async function handleLoadCloudTrip(fileId: string, fileName: string) {
         saveTripData(tripData);
     }
     createProfile(yaml);
+    const newActiveId = getActiveProfileId() ?? "default";
+    gdriveSync.bindTripToFile(newActiveId, fileId);
+    const cloudFile = gdriveSync.cloudFiles.find(f => f.id === fileId);
+    if (cloudFile) {
+        setTripLocalModifiedTime(newActiveId, new Date(cloudFile.modifiedTime).getTime());
+    }
     settingsDraft.yaml = null;
     await loadTripData();
     showToast(`已從 Google Drive 載入「${fileName}」`);

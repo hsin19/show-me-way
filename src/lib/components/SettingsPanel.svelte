@@ -18,8 +18,13 @@ import {
     type YamlBackup,
 } from "../api";
 import { fetchDefaultYamlText } from "../api-fetch";
+import {
+    getCloudFileIdForTrip,
+    setTripLocalModifiedTime,
+} from "../gdrive";
 import { gdriveSync } from "../gdrive.svelte";
 import {
+    createProfile,
     getActiveProfileId,
     type ProfileInfo,
     tripNameFromYaml,
@@ -101,6 +106,7 @@ async function save() {
         const tidied = serializeToYaml(parsed);
         backupCurrentYaml();
         localStorage.setItem(USER_YAML_KEY, tidied);
+        setTripLocalModifiedTime(activeTripId, Date.now());
         yamlInput = tidied;
         yamlSnapshot = tidied;
         settingsDraft.yaml = null;
@@ -121,10 +127,40 @@ async function save() {
     }
 }
 
-async function handleSyncToCloud() {
+let activeTripId = $derived(getActiveProfileId() ?? "default");
+let boundCloudFileId = $derived(
+    gdriveSync.isConnected ? getCloudFileIdForTrip(activeTripId) : null,
+);
+let isBoundToCloud = $derived(
+    gdriveSync.isConnected && !!boundCloudFileId && gdriveSync.cloudFiles.some(f => f.id === boundCloudFileId),
+);
+
+async function handleCloudAction() {
     const tripName = tripNameFromYaml(yamlInput);
-    const activeId = getActiveProfileId() ?? undefined;
-    await gdriveSync.syncTrip(tripName, yamlInput, activeId);
+    if (!gdriveSync.isConnected) {
+        const connected = await gdriveSync.connect();
+        if (!connected) return;
+        await gdriveSync.smartSyncTrip(tripName, yamlInput, activeTripId);
+        return;
+    }
+
+    const res = await gdriveSync.smartSyncTrip(tripName, yamlInput, activeTripId);
+    if (res?.action === "downloaded" && res.downloadedYaml) {
+        try {
+            validateYaml(res.downloadedYaml);
+            backupCurrentYaml();
+            localStorage.setItem(USER_YAML_KEY, res.downloadedYaml);
+            yamlInput = res.downloadedYaml;
+            yamlSnapshot = res.downloadedYaml;
+            settingsDraft.yaml = null;
+            validationError = null;
+            await onReload();
+        } catch (e) {
+            console.error("Downloaded cloud YAML validation failed:", e);
+            showToast("下載的雲端行程格式有誤，已載入編輯器");
+            yamlInput = res.downloadedYaml;
+        }
+    }
 }
 
 async function handleLoadFromCloud(fileId: string, cloudName: string) {
@@ -140,13 +176,17 @@ async function handleLoadFromCloud(fileId: string, cloudName: string) {
         showToast("此雲端行程格式有誤，已載入編輯器，請修正後再儲存");
         return;
     }
-    backupCurrentYaml();
-    localStorage.setItem(USER_YAML_KEY, yaml);
+    const newActiveId = createProfile(yaml);
+    gdriveSync.bindTripToFile(newActiveId, fileId);
+    const cloudFile = gdriveSync.cloudFiles.find(f => f.id === fileId);
+    if (cloudFile) {
+        setTripLocalModifiedTime(newActiveId, new Date(cloudFile.modifiedTime).getTime());
+    }
     yamlInput = yaml;
     yamlSnapshot = yaml;
     settingsDraft.yaml = null;
     validationError = null;
-    showToast(`已從 Google Drive 載入「${cloudName}」`);
+    showToast(`已從 Google Drive 載入「${cloudName}」為新行程`);
     await onReload();
     onDone();
 }
@@ -234,29 +274,30 @@ function discardDraft() {
         <p class="text-xs text-text-secondary mt-0.5">切換行程、直接編輯行程資料，儲存後立即套用</p>
     </div>
     <div class="flex items-center gap-1.5 shrink-0">
-        {#if gdriveSync.isConnected}
-            <button
-                type="button"
-                disabled={gdriveSync.isSyncing}
-                onclick={handleSyncToCloud}
-                aria-label="備份目前行程至 Google Drive"
-                title="備份目前行程至 Google Drive"
-                class="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer disabled:opacity-40"
-            >
-                <CloudUpload size={18} class={gdriveSync.isSyncing ? "animate-pulse" : ""} aria-hidden="true" />
-            </button>
-        {:else}
-            <button
-                type="button"
-                disabled={gdriveSync.isConnecting}
-                onclick={() => void gdriveSync.connect()}
-                aria-label="登入 Google 雲端硬碟同步"
-                title="登入 Google 雲端硬碟同步"
-                class="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer disabled:opacity-40"
-            >
-                <CloudSync size={18} class={gdriveSync.isConnecting ? "animate-spin" : ""} aria-hidden="true" />
-            </button>
-        {/if}
+        <button
+            type="button"
+            disabled={gdriveSync.isSyncing || gdriveSync.isConnecting}
+            onclick={handleCloudAction}
+            aria-label={!gdriveSync.isConnected
+            ? "登入 Google 雲端硬碟並上傳"
+            : isBoundToCloud
+            ? "同步行程 (比較本地與雲端更新時間)"
+            : "上傳此行程至 Google Drive (建立新檔案)"}
+            title={!gdriveSync.isConnected
+            ? "登入 Google 雲端硬碟並上傳"
+            : isBoundToCloud
+            ? "同步行程 (比較本地與雲端更新時間)"
+            : "上傳此行程至 Google Drive (建立新檔案)"}
+            class="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer disabled:opacity-40"
+        >
+            {#if gdriveSync.isSyncing || gdriveSync.isConnecting}
+                <CloudSync size={18} class="animate-spin text-accent" aria-hidden="true" />
+            {:else if isBoundToCloud}
+                <CloudSync size={18} class="text-accent" aria-hidden="true" />
+            {:else}
+                <CloudUpload size={18} aria-hidden="true" />
+            {/if}
+        </button>
     </div>
 </div>
 
