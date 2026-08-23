@@ -43,6 +43,8 @@ interface Props {
     onSwitchProfile?: (id: string) => void;
     onCreateProfile?: () => void;
     onDeleteProfile?: (id: string) => void;
+    onLoadCloudTrip?: (fileId: string, fileName: string) => void | Promise<void>;
+    onDeleteCloudTrip?: (fileId: string) => void | Promise<void>;
 }
 
 let {
@@ -66,6 +68,8 @@ let {
     onSwitchProfile,
     onCreateProfile,
     onDeleteProfile,
+    onLoadCloudTrip,
+    onDeleteCloudTrip,
 }: Props = $props();
 
 // Breathing room above the card an auto-scroll lands on.
@@ -134,6 +138,8 @@ function positionPanel(day: number, panel: HTMLElement) {
                 {onSwitchProfile}
                 {onCreateProfile}
                 {onDeleteProfile}
+                {onLoadCloudTrip}
+                {onDeleteCloudTrip}
             />
         {:else if currentDayData}
             <Timeline

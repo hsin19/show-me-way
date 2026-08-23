@@ -44,6 +44,15 @@ export function getTodayIsoString(): string {
     return toLocalIsoDate(new Date());
 }
 
+/** "2026-06-11T14:30:00.000Z" -> "06/11(四) 14:30" in local time */
+export function formatBackupTime(savedAt: string): string {
+    const date = new Date(savedAt);
+    if (isNaN(date.getTime())) return savedAt;
+    const hh = String(date.getHours()).padStart(2, "0");
+    const mm = String(date.getMinutes()).padStart(2, "0");
+    return `${formatDayDate(toLocalIsoDate(date))} ${hh}:${mm}`;
+}
+
 /**
  * The UTC calendar day of a `Date` as YYYY-MM-DD -- for a Date that already
  * *means* a bare date, which is how js-yaml hands back an unquoted `2026-10-01`

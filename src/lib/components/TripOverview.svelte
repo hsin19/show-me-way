@@ -54,6 +54,8 @@ interface Props {
     onSwitchProfile?: (id: string) => void;
     onCreateProfile?: () => void;
     onDeleteProfile?: (id: string) => void;
+    onLoadCloudTrip?: (fileId: string, fileName: string) => void | Promise<void>;
+    onDeleteCloudTrip?: (fileId: string) => void | Promise<void>;
 }
 
 let {
@@ -74,6 +76,8 @@ let {
     onSwitchProfile,
     onCreateProfile,
     onDeleteProfile,
+    onLoadCloudTrip,
+    onDeleteCloudTrip,
 }: Props = $props();
 
 let isSwitcherOpen = $state(false);
@@ -149,6 +153,8 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
                 {onSwitchProfile}
                 {onCreateProfile}
                 onDeleteProfile={(id => onDeleteProfile?.(id))}
+                {onLoadCloudTrip}
+                {onDeleteCloudTrip}
             />
         </div>
     {/if}

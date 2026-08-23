@@ -1,14 +1,11 @@
 <script lang="ts">
-import Cloud from "@lucide/svelte/icons/cloud";
+import CloudSync from "@lucide/svelte/icons/cloud-sync";
 import CloudUpload from "@lucide/svelte/icons/cloud-upload";
-import Copy from "@lucide/svelte/icons/copy";
 import Download from "@lucide/svelte/icons/download";
 import History from "@lucide/svelte/icons/history";
 import Lightbulb from "@lucide/svelte/icons/lightbulb";
 import Link2 from "@lucide/svelte/icons/link-2";
-import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 import Sliders from "@lucide/svelte/icons/sliders";
-import Trash2 from "@lucide/svelte/icons/trash-2";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import { onMount } from "svelte";
 import {
@@ -32,14 +29,8 @@ import {
     decodeShareToken,
     parseShareToken,
 } from "../share";
-import {
-    copyToClipboard,
-    showToast,
-} from "../toast.svelte";
-import {
-    formatDayDate,
-    toLocalIsoDate,
-} from "../utils";
+import { showToast } from "../toast.svelte";
+import { formatBackupTime } from "../utils";
 import ConfirmBar from "./ConfirmBar.svelte";
 import ProfileManager from "./ProfileManager.svelte";
 
@@ -130,9 +121,6 @@ async function save() {
     }
 }
 
-let confirmingCloudFileId = $state<string | null>(null);
-let confirmingCloudDeleteFileId = $state<string | null>(null);
-
 async function handleSyncToCloud() {
     const tripName = tripNameFromYaml(yamlInput);
     const activeId = getActiveProfileId() ?? undefined;
@@ -140,7 +128,6 @@ async function handleSyncToCloud() {
 }
 
 async function handleLoadFromCloud(fileId: string, cloudName: string) {
-    confirmingCloudFileId = null;
     const yaml = await gdriveSync.loadTripYaml(fileId);
     if (!yaml) return;
     try {
@@ -165,17 +152,7 @@ async function handleLoadFromCloud(fileId: string, cloudName: string) {
 }
 
 async function handleDeleteCloudTrip(fileId: string) {
-    confirmingCloudDeleteFileId = null;
     await gdriveSync.deleteTrip(fileId);
-}
-
-/** "06/11(四) 14:30" */
-function formatBackupTime(savedAt: string): string {
-    const date = new Date(savedAt);
-    if (isNaN(date.getTime())) return savedAt;
-    const hh = String(date.getHours()).padStart(2, "0");
-    const mm = String(date.getMinutes()).padStart(2, "0");
-    return `${formatDayDate(toLocalIsoDate(date))} ${hh}:${mm}`;
 }
 
 let confirmingBackupSavedAt = $state<string | null>(null);
@@ -249,11 +226,38 @@ function discardDraft() {
 }
 </script>
 
-<div class="mb-4">
-    <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
-        <Sliders size={22} class="text-accent" aria-hidden="true" />行程管理
-    </h2>
-    <p class="text-xs text-text-secondary mt-0.5">切換行程、直接編輯行程資料，儲存後立即套用</p>
+<div class="mb-4 flex items-center justify-between gap-2">
+    <div>
+        <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
+            <Sliders size={22} class="text-accent" aria-hidden="true" />行程管理
+        </h2>
+        <p class="text-xs text-text-secondary mt-0.5">切換行程、直接編輯行程資料，儲存後立即套用</p>
+    </div>
+    <div class="flex items-center gap-1.5 shrink-0">
+        {#if gdriveSync.isConnected}
+            <button
+                type="button"
+                disabled={gdriveSync.isSyncing}
+                onclick={handleSyncToCloud}
+                aria-label="備份目前行程至 Google Drive"
+                title="備份目前行程至 Google Drive"
+                class="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer disabled:opacity-40"
+            >
+                <CloudUpload size={18} class={gdriveSync.isSyncing ? "animate-pulse" : ""} aria-hidden="true" />
+            </button>
+        {:else}
+            <button
+                type="button"
+                disabled={gdriveSync.isConnecting}
+                onclick={() => void gdriveSync.connect()}
+                aria-label="登入 Google 雲端硬碟同步"
+                title="登入 Google 雲端硬碟同步"
+                class="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer disabled:opacity-40"
+            >
+                <CloudSync size={18} class={gdriveSync.isConnecting ? "animate-spin" : ""} aria-hidden="true" />
+            </button>
+        {/if}
+    </div>
 </div>
 
 <div class="mb-2.5">
@@ -263,6 +267,8 @@ function discardDraft() {
         {onSwitchProfile}
         {onCreateProfile}
         {onDeleteProfile}
+        onLoadCloudTrip={handleLoadFromCloud}
+        onDeleteCloudTrip={handleDeleteCloudTrip}
     />
 </div>
 
@@ -273,161 +279,65 @@ function discardDraft() {
             <!-- 44px hot zones grown in-flow (no -mx), so adjacent ones cannot
                  overlap; the -mb is capped at the 6px gap so they stop short of
                  the textarea. -->
-            <div class="flex items-center gap-2.5">
+            <div class="flex gap-2 -mb-1.5">
                 <button
                     onclick={selectAll}
-                    class="text-[11px] min-w-[44px] min-h-[44px] -mt-3 -mb-1.5 pt-1.5 px-1 text-text-secondary hover:text-accent flex items-center justify-center gap-0.5 cursor-pointer font-medium transition"
+                    class="text-[11px] font-bold text-accent min-h-[44px] flex items-center hover:underline cursor-pointer"
                 >
                     全選
                 </button>
-                <span class="text-[9px] text-line-raised select-none">|</span>
                 <button
                     onclick={clearEditor}
-                    class="text-[11px] min-w-[44px] min-h-[44px] -mt-3 -mb-1.5 pt-1.5 px-1 text-text-secondary hover:text-danger flex items-center justify-center gap-0.5 cursor-pointer font-medium transition"
+                    class="text-[11px] font-bold text-text-muted min-h-[44px] flex items-center hover:text-danger cursor-pointer"
                 >
                     清空
                 </button>
-                <span class="text-[9px] text-line-raised select-none">|</span>
-                <button
-                    onclick={() => copyToClipboard(yamlInput, "已複製編輯器中的 YAML")}
-                    class="text-[11px] min-w-[44px] min-h-[44px] -mt-3 -mb-1.5 pt-1.5 px-1 text-text-secondary hover:text-accent flex items-center justify-center gap-1 cursor-pointer font-medium transition"
-                >
-                    <Copy size={12} aria-hidden="true" /> 複製
-                </button>
             </div>
         </div>
+
         <textarea
             id="yaml-editor"
             bind:value={yamlInput}
             oninput={markDraft}
-            spellcheck="false"
-            autocapitalize="off"
-            placeholder="貼上你的 YAML 行程，或直接貼上分享連結…"
-            class="w-full h-[45dvh] min-h-[240px] bg-well-deep border border-card-border rounded-xl p-3 text-[11px] text-text-primary font-mono outline-none focus:border-accent resize-none overflow-y-auto overscroll-contain"
+            class="w-full h-80 bg-well-deep border border-card-border rounded-xl p-3 font-mono text-xs text-text-primary outline-none focus:border-accent transition resize-y leading-relaxed shadow-inner"
+            placeholder="請貼上您的行程 YAML 內容…"
         ></textarea>
-    </div>
-    {#if validationError}
-        <div class="flex items-start gap-1.5 text-[10px] text-danger bg-danger/10 border border-danger/20 p-2.5 rounded-lg font-mono">
-            <TriangleAlert size={12} class="shrink-0 mt-px" aria-hidden="true" />
-            <span>{validationError}</span>
-        </div>
-    {/if}
 
-    <div class="grid grid-cols-2 gap-2 mt-0.5">
-        <button
-            onclick={discardDraft}
-            disabled={yamlInput === yamlSnapshot}
-            class="bg-tint-1 border border-card-border text-text-secondary font-bold py-3 px-4 rounded-xl text-xs hover:bg-tint-2 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-            放棄變更
-        </button>
-        <button
-            onclick={save}
-            class="bg-accent text-accent-contrast font-bold py-3 px-4 rounded-xl text-xs transition active:scale-[0.98] cursor-pointer"
-        >
-            儲存並解析
-        </button>
-    </div>
-
-    <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint space-y-1">
-        <p class="flex items-center gap-1">
-            <Lightbulb size={12} class="shrink-0 text-accent" aria-hidden="true" />行程僅存於本機、不會上傳。
-        </p>
-        <ul class="list-disc pl-4 mt-1 space-y-1.5">
-            <li>貼上 YAML 行程內容，或他人的分享連結，按下方儲存即可。</li>
-            <li>清空並儲存會還原為預設的 <a href="./itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-accent underline hover:text-text-primary transition">itinerary.yaml</a>。</li>
-            <li>
-                可用此指令安裝行程小幫手 Skill：
-                <div class="bg-well-deep border border-line rounded px-2 py-1 mt-1 font-mono text-[10px] select-all break-all text-text-primary">
-                    npx skills add https://github.com/hsin19/show-me-way --skill itinerary-yaml-builder
-                </div>
-            </li>
-        </ul>
-    </div>
-
-    {#if gdriveSync.isConnected}
-        <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint">
-            <div class="flex items-center justify-between">
-                <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
-                    <Cloud size={12} class="shrink-0 text-accent" aria-hidden="true" />Google Drive 雲端同步
-                </p>
-                <div class="flex items-center gap-2">
-                    <button
-                        type="button"
-                        disabled={gdriveSync.isSyncing}
-                        onclick={() => void gdriveSync.refreshFiles()}
-                        class="text-[10px] text-text-secondary hover:text-accent flex items-center gap-1 cursor-pointer font-medium disabled:opacity-40"
-                    >
-                        <RefreshCw size={10} class={gdriveSync.isSyncing ? "animate-spin" : ""} aria-hidden="true" />
-                        重整
-                    </button>
-                </div>
+        {#if validationError}
+            <div role="alert" class="p-3 bg-danger/10 border border-danger/30 rounded-xl text-danger text-xs flex items-start gap-2">
+                <TriangleAlert size={14} class="shrink-0 mt-0.5" aria-hidden="true" />
+                <div class="flex-1 whitespace-pre-wrap">{validationError}</div>
             </div>
+        {/if}
 
-            <div class="mt-2 flex gap-2">
+        <div class="flex items-center gap-2 mt-1">
+            <button
+                onclick={() => void save()}
+                class="flex-1 min-h-[44px] bg-accent text-accent-contrast font-bold py-2.5 px-4 rounded-xl hover:opacity-90 transition active:scale-[0.98] cursor-pointer shadow-sm text-center"
+            >
+                儲存並解析
+            </button>
+            {#if yamlInput !== yamlSnapshot}
                 <button
-                    type="button"
-                    disabled={gdriveSync.isSyncing}
-                    onclick={handleSyncToCloud}
-                    class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3 rounded-lg bg-accent/10 text-[11px] font-bold text-accent hover:bg-accent/15 transition cursor-pointer text-center disabled:opacity-50"
+                    onclick={discardDraft}
+                    class="min-h-[44px] bg-tint-1 border border-card-border text-text-secondary hover:text-text-primary font-bold py-2.5 px-4 rounded-xl hover:bg-tint-2 transition active:scale-[0.98] cursor-pointer text-center"
                 >
-                    <CloudUpload size={13} aria-hidden="true" />
-                    備份目前行程至 Google Drive
+                    放棄變更
                 </button>
-            </div>
-
-            {#if gdriveSync.cloudFiles.length > 0}
-                <div class="mt-2.5 pt-2 border-t border-line-faint space-y-1.5">
-                    <div class="text-[10px] font-semibold text-text-secondary">雲端資料夾行程清單：</div>
-                    <ul class="space-y-1.5">
-                        {#each gdriveSync.cloudFiles as file (file.id)}
-                            <li>
-                                {#if confirmingCloudFileId === file.id}
-                                    <ConfirmBar
-                                        message={yamlInput !== yamlSnapshot
-                                        ? `尚有未儲存的變更，載入雲端行程將捨棄這些變更。確定載入「${file.name}」嗎？`
-                                        : `確定從 Google Drive 載入「${file.name}」並覆蓋目前行程嗎？`}
-                                        confirmLabel="確定載入"
-                                        onconfirm={() => handleLoadFromCloud(file.id, file.name)}
-                                        oncancel={() => (confirmingCloudFileId = null)}
-                                    />
-                                {:else if confirmingCloudDeleteFileId === file.id}
-                                    <ConfirmBar
-                                        message={`確定從 Google Drive 刪除「${file.name}」嗎？此動作無法復原。`}
-                                        confirmLabel="確定刪除"
-                                        onconfirm={() => handleDeleteCloudTrip(file.id)}
-                                        oncancel={() => (confirmingCloudDeleteFileId = null)}
-                                    />
-                                {:else}
-                                    <div class="flex items-center gap-1">
-                                        <button
-                                            type="button"
-                                            onclick={() => (confirmingCloudFileId = file.id)}
-                                            class="flex-1 min-w-0 min-h-[44px] flex items-center justify-between gap-2 px-3 rounded-lg bg-tint-1 border border-card-border text-[11px] text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer"
-                                        >
-                                            <span class="flex items-center gap-2 min-w-0">
-                                                <span class="font-mono text-text-muted shrink-0">{formatBackupTime(file.modifiedTime)}</span>
-                                                <span class="font-semibold text-text-primary truncate">{file.name}</span>
-                                            </span>
-                                            <span class="text-[10px] font-bold shrink-0">載入</span>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onclick={() => (confirmingCloudDeleteFileId = file.id)}
-                                            aria-label={`刪除雲端檔案 ${file.name}`}
-                                            class="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-text-muted hover:text-danger transition cursor-pointer"
-                                        >
-                                            <Trash2 size={14} aria-hidden="true" />
-                                        </button>
-                                    </div>
-                                {/if}
-                            </li>
-                        {/each}
-                    </ul>
-                </div>
             {/if}
         </div>
-    {/if}
+    </div>
+
+    <!-- Quick instructions on the editor's share-link sniffing behavior. -->
+    <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint">
+        <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
+            <Lightbulb size={12} class="shrink-0 text-accent" aria-hidden="true" />分享連結匯入說明
+        </p>
+        <ul class="list-disc list-inside mt-1.5 space-y-1">
+            <li>若收到他人分享的行程網址，直接將整串網址貼在上方編輯器，點擊「儲存並解析」即可匯入。</li>
+            <li>匯入成功後會自動套用該行程，同時保留原本的備份紀錄。</li>
+        </ul>
+    </div>
 
     <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint">
         <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
@@ -446,6 +356,7 @@ function discardDraft() {
                                 ? `尚有未儲存的變更，還原備份將捨棄這些變更。確定還原「${tripName}」的備份嗎？`
                                 : `確定要還原「${tripName}」的備份嗎？`}
                                 confirmLabel="確定還原"
+                                variant="accent"
                                 onconfirm={() => executeRestore(backup.savedAt)}
                                 oncancel={() => (confirmingBackupSavedAt = null)}
                             />

@@ -10,6 +10,7 @@ import {
     buildDayReport,
     classifyTimelineEvents,
     findCurrentEventIndex,
+    formatBackupTime,
     formatBytes,
     formatDateRange,
     formatDayDate,
@@ -40,6 +41,17 @@ describe("parseLocalDate", () => {
     it("falls back to native Date for full ISO datetime strings", () => {
         const d = parseLocalDate("2026-06-11T14:00:00+08:00");
         expect(isNaN(d.getTime())).toBe(false);
+    });
+});
+
+describe("formatBackupTime", () => {
+    it("formats ISO datetime into localized string", () => {
+        const result = formatBackupTime("2026-06-11T14:30:00");
+        expect(result).toMatch(/06\/11\(.+?\)\s+14:30/);
+    });
+
+    it("returns raw string on invalid date", () => {
+        expect(formatBackupTime("invalid-date")).toBe("invalid-date");
     });
 });
 

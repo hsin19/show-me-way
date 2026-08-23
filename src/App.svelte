@@ -662,6 +662,31 @@ function handleDeleteProfile(id: string) {
     showToast("已刪除行程");
 }
 
+async function handleLoadCloudTrip(fileId: string, fileName: string) {
+    const yaml = await gdriveSync.loadTripYaml(fileId);
+    if (!yaml) return;
+    try {
+        validateYaml(yaml);
+    } catch (err) {
+        console.error("Cloud YAML validation failed:", err);
+        showToast("此雲端行程格式有誤，請到行程管理修正");
+        openTools("settings");
+        return;
+    }
+    if (tripData) {
+        saveTripData(tripData);
+    }
+    createProfile(yaml);
+    settingsDraft.yaml = null;
+    await loadTripData();
+    showToast(`已從 Google Drive 載入「${fileName}」`);
+    activeTab = "itinerary";
+}
+
+async function handleDeleteCloudTrip(fileId: string) {
+    await gdriveSync.deleteTrip(fileId);
+}
+
 /** What every 分享 action goes through, so they all behave the same way. */
 async function shareOrCopy(data: { url?: string; text?: string; title?: string; }, copyText: string, copyMsg: string) {
     if (typeof navigator.share === "function") {
@@ -805,6 +830,8 @@ async function shareOrCopy(data: { url?: string; text?: string; title?: string; 
                         onSwitchProfile={handleSwitchProfile}
                         onCreateProfile={handleCreateProfile}
                         onDeleteProfile={handleDeleteProfile}
+                        onLoadCloudTrip={handleLoadCloudTrip}
+                        onDeleteCloudTrip={handleDeleteCloudTrip}
                         onEnlarge={card => (enlargedCard = card)}
                         onSetEventStatus={setEventStatus}
                         onShareDay={shareDayReport}
