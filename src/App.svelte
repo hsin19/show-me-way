@@ -64,7 +64,7 @@ import {
     initServiceWorkerUpdates,
 } from "./lib/sw-update";
 import {
-    copyToClipboard,
+    shareOrCopyToClipboard,
     showToast,
 } from "./lib/toast.svelte";
 import {
@@ -501,7 +501,7 @@ async function shareCurrentTrip() {
         // Expenses stripped: what the owner spent is not part of an itinerary
         // shared with other people. `exportTripUrl` deliberately keeps them.
         const url = await buildShareUrl(serializeToYaml({ ...tripData, expenses: [] }));
-        await shareOrCopy({ url }, url, "分享連結已複製！網址較長，可用短網址服務縮短");
+        await shareOrCopyToClipboard({ url }, url, "分享連結已複製！網址較長，可用短網址服務縮短");
     } catch (err) {
         console.error("Failed to build share link:", err);
         showToast("無法產生分享連結，請稍後再試");
@@ -512,7 +512,7 @@ async function shareCurrentTrip() {
 async function shareDayReport(dayData: DayItinerary) {
     if (!tripData) return;
     const text = buildDayReport(dayData, tripData.trip.hotels, tripData.trip.name);
-    await shareOrCopy({ text }, text, "已複製今日行程，可直接貼上分享");
+    await shareOrCopyToClipboard({ text }, text, "已複製今日行程，可直接貼上分享");
 }
 
 // The file exports below are the escape hatch from localStorage being a single
@@ -547,7 +547,7 @@ async function exportTripUrl() {
     }
     try {
         const url = await buildShareUrl(serializeToYaml(tripData));
-        await shareOrCopy({ url }, url, "已複製跨裝置連結（含記帳），在另一台裝置貼上即可");
+        await shareOrCopyToClipboard({ url }, url, "已複製跨裝置連結（含記帳），在另一台裝置貼上即可");
     } catch (err) {
         console.error("Failed to build transfer link:", err);
         showToast("無法產生連結，請稍後再試");
@@ -643,21 +643,6 @@ async function handleLoadCloudTrip(fileId: string, fileName: string) {
 
 async function handleDeleteCloudTrip(fileId: string) {
     await gdriveSync.deleteTrip(fileId);
-}
-
-/** What every 分享 action goes through, so they all behave the same way. */
-async function shareOrCopy(data: { url?: string; text?: string; title?: string; }, copyText: string, copyMsg: string) {
-    if (typeof navigator.share === "function") {
-        try {
-            await navigator.share(data);
-            return;
-        } catch (err) {
-            // Closing the sheet is a decision, not a failure — stay silent. Only
-            // a real error (busy sheet, permission) falls through to the copy.
-            if ((err as DOMException)?.name === "AbortError") return;
-        }
-    }
-    copyToClipboard(copyText, copyMsg);
 }
 </script>
 

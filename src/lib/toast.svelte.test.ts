@@ -9,6 +9,7 @@ import {
 import {
     dismissToast,
     runToastAction,
+    shareOrCopyToClipboard,
     showToast,
     toast,
 } from "./toast.svelte";
@@ -258,5 +259,65 @@ describe("toast stack", () => {
         showToast("還在畫面上");
         expect(() => runToastAction(9999)).not.toThrow();
         expect(messages()).toEqual(["還在畫面上"]);
+    });
+});
+
+describe("shareOrCopyToClipboard", () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.stubGlobal("window", {
+            setTimeout: (handler: () => void, timeout?: number) => setTimeout(handler, timeout),
+        });
+    });
+
+    afterEach(() => {
+        vi.advanceTimersByTime(10_000);
+        for (const item of [...toast.items]) dismissToast(item.id);
+        vi.useRealTimers();
+        vi.unstubAllGlobals();
+    });
+
+    it("uses the native share sheet when available, without falling back to copy", async () => {
+        const share = vi.fn(() => Promise.resolve());
+        vi.stubGlobal("navigator", { share });
+
+        await shareOrCopyToClipboard({ url: "https://example.com" }, "https://example.com", "copy msg");
+
+        expect(share).toHaveBeenCalledWith({ url: "https://example.com" });
+        expect(toast.items).toHaveLength(0);
+    });
+
+    it("stays silent (no toast, no copy) when the user declines the share sheet", async () => {
+        const share = vi.fn(() => Promise.reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
+        vi.stubGlobal("navigator", { share });
+
+        await shareOrCopyToClipboard({ url: "https://example.com" }, "https://example.com", "copy msg");
+
+        expect(toast.items).toHaveLength(0);
+    });
+
+    it("falls back to copying when the share sheet fails for a real reason", async () => {
+        const share = vi.fn(() => Promise.reject(new Error("share sheet busy")));
+        const writeText = vi.fn(() => Promise.resolve());
+        vi.stubGlobal("navigator", { share, clipboard: { writeText } });
+
+        await shareOrCopyToClipboard({ url: "https://example.com" }, "https://example.com", "已複製連結");
+        // `copyToClipboard` reports success via a `.then()` on this same promise,
+        // registered before this await — awaiting it lets that microtask run first.
+        await writeText.mock.results[0]?.value;
+
+        expect(writeText).toHaveBeenCalledWith("https://example.com");
+        expect(toast.items.map(item => item.message)).toEqual(["已複製連結"]);
+    });
+
+    it("copies directly when the browser has no share API at all", async () => {
+        const writeText = vi.fn(() => Promise.resolve());
+        vi.stubGlobal("navigator", { clipboard: { writeText } });
+
+        await shareOrCopyToClipboard({ text: "今日行程" }, "今日行程", "已複製今日行程");
+        await writeText.mock.results[0]?.value;
+
+        expect(writeText).toHaveBeenCalledWith("今日行程");
+        expect(toast.items.map(item => item.message)).toEqual(["已複製今日行程"]);
     });
 });

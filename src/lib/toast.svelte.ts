@@ -154,3 +154,25 @@ export function copyToClipboard(text: string, successMsg = "已複製"): void {
         document.body.removeChild(textarea);
     });
 }
+
+/**
+ * What every 分享 action goes through, so they all behave the same way:
+ * the native share sheet if there is one, else the clipboard fallback.
+ * Declining the share sheet (AbortError) is a decision, not a failure — stay
+ * silent rather than falling through to the copy.
+ */
+export async function shareOrCopyToClipboard(
+    data: { url?: string; text?: string; title?: string; },
+    copyText: string,
+    copyMsg: string,
+): Promise<void> {
+    if (typeof navigator.share === "function") {
+        try {
+            await navigator.share(data);
+            return;
+        } catch (err) {
+            if ((err as DOMException)?.name === "AbortError") return;
+        }
+    }
+    copyToClipboard(copyText, copyMsg);
+}
