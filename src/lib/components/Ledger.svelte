@@ -48,24 +48,9 @@ const activeCurrency = $derived.by(() => {
     return "TWD";
 });
 
-// What a trip in this currency almost certainly uses, so a new trip has usable
-// wallets before the user configures any.
-const defaultWallets = $derived.by(() => {
-    switch (activeCurrency) {
-        case "JPY":
-            return ["Suica"];
-        case "KRW":
-            return ["WOWPASS", "T-money"];
-        case "TWD":
-            return ["信用卡"];
-        default:
-            return [];
-    }
-});
-
-const activeWallets = $derived(wallets.length > 0 ? wallets : defaultWallets);
-
 const localConfig = $derived(getCurrencyConfig(activeCurrency));
+
+const activeWallets = $derived(wallets.length > 0 ? wallets : localConfig.defaultWallets);
 
 let exchangeRate = $state(1.0);
 let foreignValue = $state("1000");

@@ -130,6 +130,7 @@ describe("getCurrencyConfig", () => {
             currencyCode: "JPY",
             currencyName: "日圓",
             currencySymbol: "¥",
+            defaultWallets: ["Suica"],
         });
     });
 
@@ -138,6 +139,7 @@ describe("getCurrencyConfig", () => {
             currencyCode: "KRW",
             currencyName: "韓元",
             currencySymbol: "₩",
+            defaultWallets: ["WOWPASS", "T-money"],
         });
     });
 
@@ -146,6 +148,7 @@ describe("getCurrencyConfig", () => {
             currencyCode: "TWD",
             currencyName: "台幣",
             currencySymbol: "NT$",
+            defaultWallets: ["信用卡"],
         });
     });
 
@@ -154,6 +157,7 @@ describe("getCurrencyConfig", () => {
             currencyCode: "USD",
             currencyName: "美元",
             currencySymbol: "$",
+            defaultWallets: [],
         });
     });
 
@@ -162,6 +166,7 @@ describe("getCurrencyConfig", () => {
             currencyCode: "EUR",
             currencyName: "EUR",
             currencySymbol: "$",
+            defaultWallets: [],
         });
     });
 });

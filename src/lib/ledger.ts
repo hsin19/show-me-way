@@ -32,6 +32,8 @@ export interface CurrencyConfig {
     currencyCode: string;
     currencyName: string;
     currencySymbol: string;
+    /** What a trip in this currency almost certainly uses, so a new trip has usable wallets before the user configures any. */
+    defaultWallets: string[];
 }
 
 /**
@@ -72,30 +74,35 @@ export function getCurrencyConfig(code: string): CurrencyConfig {
                 currencyCode: "JPY",
                 currencyName: "日圓",
                 currencySymbol: "¥",
+                defaultWallets: ["Suica"],
             };
         case "KRW":
             return {
                 currencyCode: "KRW",
                 currencyName: "韓元",
                 currencySymbol: "₩",
+                defaultWallets: ["WOWPASS", "T-money"],
             };
         case "TWD":
             return {
                 currencyCode: "TWD",
                 currencyName: "台幣",
                 currencySymbol: "NT$",
+                defaultWallets: ["信用卡"],
             };
         case "USD":
             return {
                 currencyCode: "USD",
                 currencyName: "美元",
                 currencySymbol: "$",
+                defaultWallets: [],
             };
         default:
             return {
                 currencyCode: code,
                 currencyName: code,
                 currencySymbol: "$",
+                defaultWallets: [],
             };
     }
 }
