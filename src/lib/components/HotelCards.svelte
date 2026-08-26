@@ -5,8 +5,8 @@ import Copy from "@lucide/svelte/icons/copy";
 import Maximize2 from "@lucide/svelte/icons/maximize-2";
 import type { HotelInfo } from "../api";
 import type { EnlargedCard } from "../enlarge";
+import { isOvernightStay } from "../timeline";
 import { copyToClipboard } from "../toast.svelte";
-import { isOvernightStay } from "../utils";
 import ConfirmationChips from "./ConfirmationChips.svelte";
 
 interface Props {

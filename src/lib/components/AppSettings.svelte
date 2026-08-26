@@ -40,6 +40,7 @@ import {
     clearApiCache,
     clearAppLocalStorage,
     clearYamlBackups,
+    formatBytes,
     getStorageSummary,
 } from "../storage-admin";
 import {
@@ -48,7 +49,6 @@ import {
     type ThemePref,
 } from "../theme.svelte";
 import { showToast } from "../toast.svelte";
-import { formatBytes } from "../utils";
 import {
     APP_VERSION,
     formatBuildDate,

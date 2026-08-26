@@ -52,6 +52,14 @@ function storedBytes(key: string): number {
     return (key.length + (localStorage.getItem(key) ?? "").length) * 2;
 }
 
+/** Renders a `StorageSummary` byte count for display, e.g. in App 設定. */
+export function formatBytes(bytes: number): string {
+    if (bytes <= 0) return "0 B";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function isAppKey(key: string): boolean {
     return (
         key.startsWith(APP_KEY_PREFIX)

@@ -11,8 +11,8 @@ import {
     formatNextEventLabel,
     getCountdownText,
     getNextEventInfo,
-    toLocalIsoDate,
-} from "../utils";
+} from "../timeline";
+import { toLocalIsoDate } from "../utils";
 import type { DailyWeather } from "../weather";
 import DayChip from "./DayChip.svelte";
 import TabPager from "./TabPager.svelte";

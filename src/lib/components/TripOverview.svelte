@@ -21,9 +21,9 @@ import {
 } from "../ledger";
 import { getLanguageConfig } from "../phrases";
 import type { ProfileInfo } from "../profiles";
+import { isOvernightStay } from "../timeline";
 import {
     formatDateRange,
-    isOvernightStay,
     splitDayDate,
 } from "../utils";
 import type { DailyWeather } from "../weather";

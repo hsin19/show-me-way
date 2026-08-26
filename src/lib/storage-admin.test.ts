@@ -10,6 +10,7 @@ import {
     clearApiCache,
     clearAppLocalStorage,
     clearYamlBackups,
+    formatBytes,
     getStorageSummary,
 } from "./storage-admin";
 import {
@@ -161,5 +162,26 @@ describe("clearAppLocalStorage", () => {
         writeCachedJson("showmeway_weather_tokyo", { n: 1 } satisfies Entry);
         clearAppLocalStorage();
         expect(readCachedJson("showmeway_weather_tokyo", isEntry)).toBeNull();
+    });
+});
+
+describe("formatBytes", () => {
+    it("formats zero and negative bytes as 0 B", () => {
+        expect(formatBytes(0)).toBe("0 B");
+        expect(formatBytes(-100)).toBe("0 B");
+    });
+
+    it("formats bytes under 1 KB", () => {
+        expect(formatBytes(512)).toBe("512 B");
+    });
+
+    it("formats KB", () => {
+        expect(formatBytes(1024)).toBe("1.0 KB");
+        expect(formatBytes(1536)).toBe("1.5 KB");
+    });
+
+    it("formats MB", () => {
+        expect(formatBytes(1048576)).toBe("1.0 MB");
+        expect(formatBytes(5242880)).toBe("5.0 MB");
     });
 });

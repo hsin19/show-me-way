@@ -13,8 +13,10 @@ import Play from "@lucide/svelte/icons/play";
 import Share2 from "@lucide/svelte/icons/share-2";
 import SkipForward from "@lucide/svelte/icons/skip-forward";
 import Zap from "@lucide/svelte/icons/zap";
-import type { DayItinerary } from "../api";
-import type { HotelInfo } from "../api";
+import type {
+    DayItinerary,
+    HotelInfo,
+} from "../api";
 import type { EnlargedCard } from "../enlarge";
 import { sanitizeLinkHref } from "../markdown";
 import {
@@ -22,7 +24,7 @@ import {
     isCheckoutDay,
     isOvernightStay,
     mapSearch,
-} from "../utils";
+} from "../timeline";
 import type { DailyWeather } from "../weather";
 import ConfirmationChips from "./ConfirmationChips.svelte";
 import GoogleMapsIcon from "./icons/GoogleMapsIcon.svelte";

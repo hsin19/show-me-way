@@ -3,9 +3,9 @@ import {
     loadAll as loadYamlDocuments,
 } from "js-yaml";
 import { type ExpenseItem } from "./ledger";
+import { parseEventStartMinutes } from "./timeline";
 import {
     addDaysIso,
-    parseEventStartMinutes,
     toUtcIsoDate,
 } from "./utils";
 

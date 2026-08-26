@@ -65,12 +65,12 @@ import {
     checkForSwUpdate,
     initServiceWorkerUpdates,
 } from "./lib/sw-update";
+import { buildDayReport } from "./lib/timeline";
 import {
     shareOrCopyToClipboard,
     showToast,
 } from "./lib/toast.svelte";
 import {
-    buildDayReport,
     getTodayIsoString,
     insertAtClamped,
     toLocalIsoDate,
