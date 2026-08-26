@@ -5,7 +5,6 @@ import Layers from "@lucide/svelte/icons/layers";
 import Plus from "@lucide/svelte/icons/plus";
 import Trash2 from "@lucide/svelte/icons/trash-2";
 import { SvelteSet } from "svelte/reactivity";
-import { loadGdriveFileMap } from "../gdrive";
 import { gdriveSync } from "../gdrive.svelte";
 import {
     getActiveProfileId,
@@ -31,8 +30,9 @@ interface Props {
     /** Called only after the inline confirm — this is the app's only guard on a profile delete. */
     onDeleteProfile: (id: string, name: string) => void;
     onToggleExpand?: () => void;
-    onLoadCloudTrip?: (fileId: string, fileName: string) => void | Promise<void>;
-    onDeleteCloudTrip?: (fileId: string) => void | Promise<void>;
+    /** Required: the fallback used to download a trip and discard it. */
+    onLoadCloudTrip: (fileId: string, fileName: string) => void | Promise<void>;
+    onDeleteCloudTrip: (fileId: string) => void | Promise<void>;
 }
 
 let {
@@ -57,9 +57,8 @@ let activeTripYearMonth = $derived(formatYearMonth(activeTripStartDate));
 
 let boundFileIds = $derived.by(() => {
     if (!gdriveSync.isConnected) return new SvelteSet<string>();
-    const fileMap = loadGdriveFileMap();
-    const activeFileId = fileMap[activeProfileId];
-    const profileFileIds = profiles.map(p => fileMap[p.id]).filter((id): id is string => Boolean(id));
+    const activeFileId = gdriveSync.cloudFileId(activeProfileId);
+    const profileFileIds = profiles.map(p => gdriveSync.cloudFileId(p.id)).filter((id): id is string => Boolean(id));
     const ids = new SvelteSet<string>();
     if (activeFileId) ids.add(activeFileId);
     for (const id of profileFileIds) {
@@ -103,20 +102,12 @@ function handleCreate() {
 async function handleLoadCloud(fileId: string, fileName: string) {
     confirmingCloudFileId = null;
     expanded = false;
-    if (onLoadCloudTrip) {
-        await onLoadCloudTrip(fileId, fileName);
-    } else {
-        await gdriveSync.loadTripYaml(fileId);
-    }
+    await onLoadCloudTrip(fileId, fileName);
 }
 
 async function handleDeleteCloud(fileId: string) {
     confirmingCloudDeleteFileId = null;
-    if (onDeleteCloudTrip) {
-        await onDeleteCloudTrip(fileId);
-    } else {
-        await gdriveSync.deleteTrip(fileId);
-    }
+    await onDeleteCloudTrip(fileId);
 }
 </script>
 
@@ -187,10 +178,9 @@ async function handleDeleteCloud(fileId: string) {
             <!-- 2. 雲端行程 (Google Drive 尚未載入本機者，日期近者優先) -->
             {#if gdriveSync.isConnected && sortedCloudFiles.length > 0}
                 {#each sortedCloudFiles as file (file.id)}
-                    {@const cleanName = file.name.replace(/\.ya?ml$/i, "")}
                     {#if confirmingCloudFileId === file.id}
                         <ConfirmBar
-                            message={`確定從 Google Drive 載入「${cleanName}」嗎？`}
+                            message={`確定從 Google Drive 載入「${file.name}」嗎？`}
                             confirmLabel="確定載入"
                             variant="accent"
                             onconfirm={() => handleLoadCloud(file.id, file.name)}
@@ -198,7 +188,7 @@ async function handleDeleteCloud(fileId: string) {
                         />
                     {:else if confirmingCloudDeleteFileId === file.id}
                         <ConfirmBar
-                            message={`確定從 Google Drive 刪除「${cleanName}」嗎？此動作無法復原。`}
+                            message={`確定從 Google Drive 刪除「${file.name}」嗎？此動作無法復原。`}
                             confirmLabel="確定刪除"
                             onconfirm={() => handleDeleteCloud(file.id)}
                             oncancel={() => (confirmingCloudDeleteFileId = null)}
@@ -212,7 +202,7 @@ async function handleDeleteCloud(fileId: string) {
                             >
                                 <span class="flex items-center gap-1.5 min-w-0 truncate">
                                     <Cloud size={15} class="text-accent shrink-0" aria-hidden="true" />
-                                    <span class="truncate text-sm font-semibold">{cleanName}</span>
+                                    <span class="truncate text-sm font-semibold">{file.name}</span>
                                     {#if file.startDate}
                                         <span class="text-[11px] text-text-muted font-normal shrink-0">({formatYearMonth(file.startDate)})</span>
                                     {/if}
@@ -222,7 +212,7 @@ async function handleDeleteCloud(fileId: string) {
                             <button
                                 type="button"
                                 onclick={() => (confirmingCloudDeleteFileId = file.id)}
-                                aria-label={`刪除雲端檔案 ${cleanName}`}
+                                aria-label={`刪除雲端檔案 ${file.name}`}
                                 class="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-text-muted hover:text-danger transition cursor-pointer"
                             >
                                 <Trash2 size={16} aria-hidden="true" />

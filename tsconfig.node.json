@@ -20,5 +20,19 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "pwa-assets.config.ts", "playwright.config.ts", "e2e/**/*.ts"]
+  /*
+   * `src/vite-env.d.ts` is here because e2e specs import from `src/lib/` (share.spec.ts
+   * and gdrive.spec.ts both do, rather than restating an algorithm they need to agree
+   * with). That pulls those modules into THIS project, which has no `vite/client`, so
+   * without the ambient declarations an `import.meta.env` read in any of them fails to
+   * compile here while being fine under tsconfig.app.json.
+   */
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "pwa-assets.config.ts",
+    "playwright.config.ts",
+    "e2e/**/*.ts",
+    "src/vite-env.d.ts"
+  ]
 }

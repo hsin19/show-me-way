@@ -39,10 +39,7 @@ import SettingsPanel from "./lib/components/SettingsPanel.svelte";
 import Toast from "./lib/components/Toast.svelte";
 import ToolsTab from "./lib/components/ToolsTab.svelte";
 import type { EnlargedCard } from "./lib/enlarge";
-import {
-    removeCloudFileIdForTrip,
-    setTripLocalModifiedTime,
-} from "./lib/gdrive";
+import { migrateGdriveSyncState } from "./lib/gdrive";
 import { gdriveSync } from "./lib/gdrive.svelte";
 import { parseLegacyExpenses } from "./lib/ledger";
 import { getLanguageConfig } from "./lib/phrases";
@@ -50,7 +47,6 @@ import {
     createProfile,
     deleteProfile,
     ensureActiveProfileId,
-    getActiveProfileId,
     listProfiles,
     type ProfileInfo,
     switchToProfile,
@@ -213,6 +209,7 @@ function handleVisibilityChange() {
     // Background interval ticks are throttled or frozen, so the clock is behind.
     clockNow = new Date();
     checkForSwUpdate();
+    void gdriveSync.refreshFiles();
     if (tripData) {
         refreshTripWeather(tripData);
         // Resumed across midnight: ItineraryStrip repositions as a pure reaction
@@ -255,6 +252,10 @@ onMount(async () => {
     // Before the load, so an imported trip is what gets loaded.
     await maybeImportSharedItinerary();
     await loadTripData();
+    // Owned here rather than by 行程管理's onMount: ProfileManager renders the cloud
+    // list in TripOverview's drawer too, and that host would otherwise show nothing
+    // until the user had visited 行程管理 once.
+    void gdriveSync.refreshFiles();
 });
 
 // Non-destructive: the shared trip lands as a NEW profile and the current one is
@@ -309,6 +310,7 @@ async function loadTripData() {
         profiles = listProfiles();
         loadTripWeather(data);
 
+        migrateGdriveSyncState();
         let migrated = migrateLegacyChecklistState(data);
         if (migrateLegacyLedger(data)) migrated = true;
         if (migrated) persistTripData();
@@ -326,12 +328,11 @@ function persistTripData() {
     if (!tripData) return;
     try {
         saveTripData(tripData);
-        const activeId = getActiveProfileId() ?? "default";
-        setTripLocalModifiedTime(activeId, Date.now());
-        if (gdriveSync.autoSync && gdriveSync.isConnected) {
-            const yaml = serializeToYaml(tripData);
-            void gdriveSync.syncTrip(tripData.trip.name, yaml, activeId, false);
-        }
+        // ensureActiveProfileId, not a `?? "default"` fallback: the id keys this trip's
+        // sync state, and two trips sharing a literal would share one Drive file.
+        const activeId = ensureActiveProfileId();
+        // Debounced and opt-in-checked inside the sync state; this runs on every tap.
+        gdriveSync.scheduleSync(tripData.trip.name, serializeToYaml(tripData), activeId);
     } catch (err) {
         console.error("Failed to persist trip data:", err);
         showToast("儲存失敗，請稍後再試");
@@ -663,14 +664,15 @@ async function handleSwitchProfile(id: string) {
 
 function handleDeleteProfile(id: string) {
     deleteProfile(id);
-    removeCloudFileIdForTrip(id);
+    gdriveSync.unbindTrip(id);
     profiles = listProfiles();
     showToast("已刪除行程");
 }
 
 async function handleLoadCloudTrip(fileId: string, fileName: string) {
-    const yaml = await gdriveSync.loadTripYaml(fileId);
-    if (!yaml) return;
+    const pulled = await gdriveSync.loadTripYaml(fileId);
+    if (!pulled) return;
+    const yaml = pulled.yaml;
     try {
         validateYaml(yaml);
     } catch (err) {
@@ -682,16 +684,11 @@ async function handleLoadCloudTrip(fileId: string, fileName: string) {
     if (tripData) {
         saveTripData(tripData);
     }
-    createProfile(yaml);
-    const newActiveId = getActiveProfileId() ?? "default";
-    gdriveSync.bindTripToFile(newActiveId, fileId);
-    const cloudFile = gdriveSync.cloudFiles.find(f => f.id === fileId);
-    if (cloudFile) {
-        setTripLocalModifiedTime(newActiveId, new Date(cloudFile.modifiedTime).getTime());
-    }
+    const newActiveId = createProfile(yaml);
+    gdriveSync.adoptCloudTrip(newActiveId, fileId, yaml, pulled.md5);
     settingsDraft.yaml = null;
     await loadTripData();
-    showToast(`已從 Google Drive 載入「${fileName}」`);
+    showToast(`已從 Google Drive 載入「${fileName.replace(/\.ya?ml$/i, "")}」`);
     activeTab = "itinerary";
 }
 

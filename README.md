@@ -11,8 +11,8 @@
 - **乘車助手**：飯店外文地址全螢幕放大給司機看，搭配實用常用語一鍵複製。
 - **匯率與記帳**：雙向幣別換算與記帳，自動依目的地語系切換貨幣單位（日圓、韓元、美元等）與對應電子錢包（Suica、WOWPASS 等）。
 - **出發倒數**：依班機時間顯示倒數，旅程中／結束自動切換狀態。
-- **雲端同步與備份**：支援 Google 雲端硬碟（Google Drive API），可一鍵備份與跨裝置載入同步行程。
-- **離線可用**：以 PWA 安裝到主畫面，資料存於本機 localStorage，不上傳第三方伺服器。
+- **雲端同步與備份**：可選擇連線 Google 雲端硬碟，一鍵備份與跨裝置同步行程。同步的是完整行程（含記帳明細），存放在你自己的 Drive。
+- **離線可用**：以 PWA 安裝到主畫面，行程存於裝置的 localStorage；未連線雲端硬碟時不會離開這台裝置。
 
 ## 技術
 
@@ -37,6 +37,14 @@ pnpm check     # 完整檢查鏈（format、lint、型別、單元測試、build
 3. `public/itinerary.yaml`（專案預設範本）。
 
 編輯 YAML 時，檔案頂部已指向 [`showmeway-schema.json`](./public/showmeway-schema.json)，在 VS Code（搭配 YAML 擴充套件）中可獲得欄位自動補全與驗證。完整欄位定義請見該 schema。
+
+## 自行部署
+
+雲端同步用的 Google OAuth client id 從 `VITE_GOOGLE_CLIENT_ID` 讀取，設定方式見 [`.env.example`](./.env.example)。
+
+**fork 或換網域一定要自己申請一組**：沒設定時會退回程式碼裡內建的 id，而那個 id 綁定本專案的 authorized JavaScript origins，所以在別的來源登入會直接失敗，而且錯誤訊息看不出原因。
+
+`BASE_PATH`（GitHub Pages 專案站的子路徑）與 `VITE_GIT_SHA`（顯示在「關於」的版本）由 `vite.config.ts` 從 shell 讀取、不吃 `.env`，要在 build 指令上帶入 —— `.github/workflows/deploy.yml` 就是這樣做的。
 
 最小範例：
 

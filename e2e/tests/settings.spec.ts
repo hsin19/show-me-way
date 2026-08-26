@@ -93,3 +93,27 @@ test("未儲存草稿：切換分頁後再回來仍保留編輯內容", async ({
     await expect(page.getByRole("heading", { name: "行程管理" })).toBeVisible();
     await expect(editor).toHaveValue("edited: true");
 });
+
+// 這幾個 affordance 曾經在一次無關的改寫中被順手刪掉（複製鈕、手機輸入屬性、
+// 預設行程與 Skill 安裝說明），而型別、lint、單元測試全都不會察覺。
+test("編輯器：複製鈕可用，且保留手機輸入必要屬性與說明", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await seedItinerary(page);
+    await page.goto("/");
+    await openSettings(page);
+
+    // YAML 的 key 全小寫：手機輸入法自動大寫會直接產生無效的行程。
+    const editor = page.locator("#yaml-editor");
+    await expect(editor).toHaveAttribute("spellcheck", "false");
+    await expect(editor).toHaveAttribute("autocapitalize", "off");
+
+    // exact：不加會連「複製跨裝置連結」一起命中。
+    await page.getByRole("button", { name: "複製", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("已複製編輯器中的 YAML");
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("name: 測試行程");
+
+    // 說明卡：清空後的行為、資料出境、以及產生 YAML 的 Skill 從哪來。
+    await expect(page.getByRole("link", { name: "itinerary.yaml" })).toBeVisible();
+    await expect(page.getByText(/同步會把整份行程（含記帳明細）複製到你自己的 Drive/)).toBeVisible();
+    await expect(page.getByText(/npx skills add .*itinerary-yaml-builder/)).toBeVisible();
+});

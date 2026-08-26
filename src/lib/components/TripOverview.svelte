@@ -154,8 +154,8 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
                 {onSwitchProfile}
                 {onCreateProfile}
                 onDeleteProfile={(id => onDeleteProfile?.(id))}
-                {onLoadCloudTrip}
-                {onDeleteCloudTrip}
+                onLoadCloudTrip={((fileId, fileName) => onLoadCloudTrip?.(fileId, fileName))}
+                onDeleteCloudTrip={(fileId => onDeleteCloudTrip?.(fileId))}
             />
         </div>
     {/if}

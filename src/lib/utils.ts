@@ -44,7 +44,7 @@ export function getTodayIsoString(): string {
     return toLocalIsoDate(new Date());
 }
 
-/** "2026-06-11T14:30:00.000Z" -> "06/11(四) 14:30" in local time */
+/** A backup's ISO timestamp as a local "06/11(四) 14:30". */
 export function formatBackupTime(savedAt: string): string {
     const date = new Date(savedAt);
     if (isNaN(date.getTime())) return savedAt;
@@ -78,8 +78,9 @@ export function compareTripDates(
     dateB?: string | null,
     referenceToday = getTodayIsoString(),
 ): number {
-    const a = dateA?.slice(0, 10)?.trim();
-    const b = dateB?.slice(0, 10)?.trim();
+    // trim first: slicing a leading-space value to 10 chars would drop its last digit.
+    const a = dateA?.trim().slice(0, 10);
+    const b = dateB?.trim().slice(0, 10);
 
     if (!a && !b) return 0;
     if (!a) return 1;

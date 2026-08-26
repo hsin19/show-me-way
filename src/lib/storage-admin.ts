@@ -15,7 +15,6 @@ import {
     clearExchangeCache,
     exchangeCacheKeys,
 } from "./exchange";
-import { clearCachedAccessToken } from "./gdrive";
 import { MANUAL_RATE_KEY_PREFIX } from "./ledger";
 import { clearStorageCacheMemory } from "./storage-cache";
 import {
@@ -109,5 +108,4 @@ export function clearApiCache(): number {
 export function clearAppLocalStorage(): void {
     appKeys().forEach(key => localStorage.removeItem(key));
     clearStorageCacheMemory();
-    clearCachedAccessToken();
 }

@@ -82,14 +82,23 @@ export function tripNameFromYaml(yaml: string): string {
     return "未命名行程";
 }
 
-/** Extract trip start date from YAML without full normalization */
+/**
+ * The trip's first day, read straight from raw YAML without normalizing it.
+ *
+ * Takes the earliest `days[].date` rather than the first listed one: `normalizeTripData`
+ * sorts before every save, so persisted trips are already in order, but an unsaved editor
+ * draft is not — and this value becomes a sort key and the Drive file's `startDate`.
+ */
 export function tripStartDateFromYaml(yaml: string): string | null {
     try {
         const data = parseYaml(yaml) as Partial<TripData> | null;
         if (data?.days && Array.isArray(data.days) && data.days.length > 0) {
-            const firstDate = data.days[0]?.date;
-            if (typeof firstDate === "string" && firstDate.trim()) {
-                return firstDate.trim();
+            const dates = data.days
+                .map(day => day?.date)
+                .filter((date): date is string => typeof date === "string" && !!date.trim())
+                .map(date => date.trim());
+            if (dates.length > 0) {
+                return dates.reduce((earliest, date) => (date < earliest ? date : earliest));
             }
         }
         if (data?.trip && typeof (data.trip as { start?: string; }).start === "string") {

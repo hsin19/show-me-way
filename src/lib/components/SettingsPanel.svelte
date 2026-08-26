@@ -1,6 +1,7 @@
 <script lang="ts">
 import CloudSync from "@lucide/svelte/icons/cloud-sync";
 import CloudUpload from "@lucide/svelte/icons/cloud-upload";
+import Copy from "@lucide/svelte/icons/copy";
 import Download from "@lucide/svelte/icons/download";
 import History from "@lucide/svelte/icons/history";
 import Lightbulb from "@lucide/svelte/icons/lightbulb";
@@ -18,14 +19,10 @@ import {
     type YamlBackup,
 } from "../api";
 import { fetchDefaultYamlText } from "../api-fetch";
-import {
-    getCloudFileIdForTrip,
-    setTripLocalModifiedTime,
-} from "../gdrive";
 import { gdriveSync } from "../gdrive.svelte";
 import {
     createProfile,
-    getActiveProfileId,
+    ensureActiveProfileId,
     type ProfileInfo,
     tripNameFromYaml,
     tripStartDateFromYaml,
@@ -35,7 +32,10 @@ import {
     decodeShareToken,
     parseShareToken,
 } from "../share";
-import { showToast } from "../toast.svelte";
+import {
+    copyToClipboard,
+    showToast,
+} from "../toast.svelte";
 import { formatBackupTime } from "../utils";
 import ConfirmBar from "./ConfirmBar.svelte";
 import ProfileManager from "./ProfileManager.svelte";
@@ -107,17 +107,12 @@ async function save() {
         const tidied = serializeToYaml(parsed);
         backupCurrentYaml();
         localStorage.setItem(USER_YAML_KEY, tidied);
-        setTripLocalModifiedTime(activeTripId, Date.now());
         yamlInput = tidied;
         yamlSnapshot = tidied;
         settingsDraft.yaml = null;
         validationError = null;
 
-        if (gdriveSync.autoSync && gdriveSync.isConnected) {
-            const activeId = getActiveProfileId() ?? undefined;
-            const tripName = parsed.trip?.name ?? "未命名行程";
-            void gdriveSync.syncTrip(tripName, tidied, activeId, false);
-        }
+        gdriveSync.scheduleSync(parsed.trip?.name ?? "未命名行程", tidied, activeTripId);
 
         showToast(token ? "已從分享連結載入行程！" : "自訂 YAML 行程儲存成功！");
         await onReload();
@@ -128,45 +123,108 @@ async function save() {
     }
 }
 
-let activeTripId = $derived(getActiveProfileId() ?? "default");
-let boundCloudFileId = $derived(
-    gdriveSync.isConnected ? getCloudFileIdForTrip(activeTripId) : null,
-);
+// ensureActiveProfileId, matching persistTripData: this id keys the trip's Drive binding
+// and merge base, so a `?? "default"` fallback here would bind a second trip to the
+// first one's cloud file. A plain const, not `$derived`: it mints the id on first call,
+// and a reactive computation has no business writing storage. Switching profiles
+// navigates back to 行程, which destroys this panel, so it cannot go stale.
+const activeTripId = ensureActiveProfileId();
+let boundCloudFileId = $derived(gdriveSync.isConnected ? gdriveSync.cloudFileId(activeTripId) : null);
+// From the persisted copy, not the live editor value: this is a full js-yaml parse, and
+// binding it to the textarea ran one per keystroke to move a year-month label.
+let activeTripStartDate = $derived(tripStartDateFromYaml(yamlSnapshot) ?? undefined);
 let isBoundToCloud = $derived(
     gdriveSync.isConnected && !!boundCloudFileId && gdriveSync.cloudFiles.some(f => f.id === boundCloudFileId),
 );
 
+/**
+ * Persists an unsaved editor draft before anything uploads it. Returns false when the
+ * draft does not parse, in which case nothing was written.
+ *
+ * Same backup and reload as `save()`: without them the app keeps serving the pre-draft
+ * trip from memory and the next `persistTripData` writes that stale copy back over
+ * whatever was just synced.
+ */
+async function landDraft(): Promise<boolean> {
+    if (yamlInput === yamlSnapshot) return true;
+    try {
+        validateYaml(yamlInput);
+    } catch (err) {
+        console.error("Draft YAML Validation failed:", err);
+        validationError = err instanceof Error ? err.message : "YAML 格式錯誤，請修正後再同步！";
+        showToast("請先修正編輯器中的 YAML 格式錯誤");
+        return false;
+    }
+    backupCurrentYaml();
+    localStorage.setItem(USER_YAML_KEY, yamlInput);
+    yamlSnapshot = yamlInput;
+    settingsDraft.yaml = null;
+    validationError = null;
+    yamlBackups = listYamlBackups();
+    await onReload();
+    return true;
+}
+
 async function handleCloudAction() {
+    // An unsaved draft is what the user means by "this trip".
+    if (!await landDraft()) return;
+
     const tripName = tripNameFromYaml(yamlInput);
+
+    // 2. Connect if not connected yet
     if (!gdriveSync.isConnected) {
         const connected = await gdriveSync.connect();
         if (!connected) return;
-        await gdriveSync.smartSyncTrip(tripName, yamlInput, activeTripId);
-        return;
     }
 
-    const res = await gdriveSync.smartSyncTrip(tripName, yamlInput, activeTripId);
-    if (res?.action === "downloaded" && res.downloadedYaml) {
-        try {
-            validateYaml(res.downloadedYaml);
-            backupCurrentYaml();
-            localStorage.setItem(USER_YAML_KEY, res.downloadedYaml);
-            yamlInput = res.downloadedYaml;
-            yamlSnapshot = res.downloadedYaml;
-            settingsDraft.yaml = null;
-            validationError = null;
-            await onReload();
-        } catch (e) {
-            console.error("Downloaded cloud YAML validation failed:", e);
-            showToast("下載的雲端行程格式有誤，已載入編輯器");
-            yamlInput = res.downloadedYaml;
-        }
+    // 3. One reconcile. A divergence comes back as `conflict` and changes nothing — the
+    //    strip below is where the user picks a side.
+    const res = await gdriveSync.sync(tripName, yamlInput, activeTripId);
+    if (res?.action === "pulled" && res.yaml) await landPulled(res.yaml);
+}
+
+/** Persists a copy `sync` pulled from Drive, backing up what it replaces. */
+async function landPulled(yaml: string) {
+    try {
+        validateYaml(yaml);
+    } catch (e) {
+        console.error("Downloaded cloud YAML validation failed:", e);
+        // Into the draft, not just the textarea: the draft is what survives a sub-tab
+        // switch, and without it the content the toast asks the user to fix is gone.
+        yamlInput = yaml;
+        settingsDraft.yaml = yaml;
+        validationError = e instanceof Error ? e.message : "雲端 YAML 格式錯誤，請檢查！";
+        showToast("下載的雲端行程格式有誤，已載入編輯器，請修正後再儲存");
+        return;
     }
+    backupCurrentYaml();
+    localStorage.setItem(USER_YAML_KEY, yaml);
+    yamlInput = yaml;
+    yamlSnapshot = yaml;
+    settingsDraft.yaml = null;
+    validationError = null;
+    yamlBackups = listYamlBackups();
+    await onReload();
+}
+
+async function keepLocalVersion() {
+    confirmingConflictSide = null;
+    // Through landDraft, so what overwrites the cloud copy is the trip the app is
+    // actually running rather than an unvalidated editor buffer.
+    if (!await landDraft()) return;
+    await gdriveSync.sync(tripNameFromYaml(yamlInput), yamlInput, activeTripId, { force: "local" });
+}
+
+async function takeCloudVersion() {
+    confirmingConflictSide = null;
+    const res = await gdriveSync.sync(tripNameFromYaml(yamlInput), yamlInput, activeTripId, { force: "remote" });
+    if (res?.action === "pulled" && res.yaml) await landPulled(res.yaml);
 }
 
 async function handleLoadFromCloud(fileId: string, cloudName: string) {
-    const yaml = await gdriveSync.loadTripYaml(fileId);
-    if (!yaml) return;
+    const pulled = await gdriveSync.loadTripYaml(fileId);
+    if (!pulled) return;
+    const yaml = pulled.yaml;
     try {
         validateYaml(yaml);
     } catch (err) {
@@ -178,11 +236,9 @@ async function handleLoadFromCloud(fileId: string, cloudName: string) {
         return;
     }
     const newActiveId = createProfile(yaml);
-    gdriveSync.bindTripToFile(newActiveId, fileId);
-    const cloudFile = gdriveSync.cloudFiles.find(f => f.id === fileId);
-    if (cloudFile) {
-        setTripLocalModifiedTime(newActiveId, new Date(cloudFile.modifiedTime).getTime());
-    }
+    // The bytes just downloaded, not the cached listing's checksum: a stale entry would
+    // record an agreement matching no version and report a conflict nobody caused.
+    gdriveSync.adoptCloudTrip(newActiveId, fileId, yaml, pulled.md5);
     yamlInput = yaml;
     yamlSnapshot = yaml;
     settingsDraft.yaml = null;
@@ -195,6 +251,11 @@ async function handleLoadFromCloud(fileId: string, cloudName: string) {
 async function handleDeleteCloudTrip(fileId: string) {
     await gdriveSync.deleteTrip(fileId);
 }
+
+let confirmingConflictSide = $state<"local" | "remote" | null>(null);
+let activeConflict = $derived(
+    gdriveSync.conflict?.tripId === activeTripId ? gdriveSync.conflict : null,
+);
 
 let confirmingBackupSavedAt = $state<string | null>(null);
 
@@ -237,6 +298,10 @@ async function handleReset() {
     confirmingReset = false;
     backupCurrentYaml();
     localStorage.removeItem(USER_YAML_KEY);
+    // Unbind rather than mark dirty: this discards the trip, and marking it dirty would
+    // arm an auto-sync that pushes the bundled default template over the user's cloud
+    // itinerary. The Drive copy survives and reappears in the 雲端行程 list.
+    gdriveSync.unbindTrip(activeTripId);
     settingsDraft.yaml = null;
     validationError = null;
     showToast("已恢復為預設行程…");
@@ -282,12 +347,12 @@ function discardDraft() {
             aria-label={!gdriveSync.isConnected
             ? "登入 Google 雲端硬碟並上傳"
             : isBoundToCloud
-            ? "同步行程 (比較本地與雲端更新時間)"
+            ? "同步行程 (比對本地與雲端內容差異)"
             : "上傳此行程至 Google Drive (建立新檔案)"}
             title={!gdriveSync.isConnected
             ? "登入 Google 雲端硬碟並上傳"
             : isBoundToCloud
-            ? "同步行程 (比較本地與雲端更新時間)"
+            ? "同步行程 (比對本地與雲端內容差異)"
             : "上傳此行程至 Google Drive (建立新檔案)"}
             class="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer disabled:opacity-40"
         >
@@ -302,10 +367,63 @@ function discardDraft() {
     </div>
 </div>
 
+{#if activeConflict}
+    <div class="mb-2.5">
+        {#if confirmingConflictSide === "local"}
+            <ConfirmBar
+                message={`確定以本機版本覆蓋雲端的「${activeConflict.fileName}」嗎？其他裝置寫入雲端的修改會被取代。`}
+                confirmLabel="覆蓋雲端"
+                onconfirm={() => void keepLocalVersion()}
+                oncancel={() => (confirmingConflictSide = null)}
+            />
+        {:else if confirmingConflictSide === "remote"}
+            <ConfirmBar
+                message={activeConflict.kind === "both-changed"
+                ? `確定改用雲端的「${activeConflict.fileName}」嗎？本機尚未同步的修改會被取代，還原前會先存一份備份。`
+                : `確定載入雲端的「${activeConflict.fileName}」嗎？載入前會先存一份備份。`}
+                confirmLabel="採用雲端"
+                onconfirm={() => void takeCloudVersion()}
+                oncancel={() => (confirmingConflictSide = null)}
+            />
+        {:else}
+            <!-- Both sides diverged from the last synced copy. Nothing was changed on
+                 either side; automatic sync stays paused for this trip until the user
+                 picks, so a background save cannot decide it for them. -->
+            {@const conflictMessage = activeConflict.kind === "both-changed"
+            ? `「${activeConflict.fileName}」在雲端和這台裝置上都改過，自動同步已暫停。請選擇要保留哪一份。`
+            : `「${activeConflict.fileName}」的雲端版本比這台裝置新，自動同步已暫停。請選擇要載入雲端版本，或保留這台裝置的內容。`}
+            <div role="alertdialog" aria-label={conflictMessage} class="rounded-xl border border-danger/40 bg-danger/10 p-2.5">
+                <p class="flex items-start gap-1.5 text-[11px] font-medium text-danger leading-normal">
+                    <TriangleAlert size={14} class="shrink-0 mt-px" aria-hidden="true" />
+                    {conflictMessage}
+                </p>
+                <div class="mt-2 flex gap-2">
+                    <button
+                        type="button"
+                        disabled={gdriveSync.isSyncing}
+                        onclick={() => (confirmingConflictSide = "remote")}
+                        class="flex-1 min-h-[44px] rounded-lg bg-accent text-accent-contrast text-xs font-bold cursor-pointer hover:opacity-90 transition duration-200 disabled:opacity-40"
+                    >
+                        採用雲端版本
+                    </button>
+                    <button
+                        type="button"
+                        disabled={gdriveSync.isSyncing}
+                        onclick={() => (confirmingConflictSide = "local")}
+                        class="flex-1 min-h-[44px] rounded-lg bg-tint-2 text-text-secondary text-xs font-bold border border-card-border hover:bg-tint-3 transition duration-200 cursor-pointer disabled:opacity-40"
+                    >
+                        保留本機版本
+                    </button>
+                </div>
+            </div>
+        {/if}
+    </div>
+{/if}
+
 <div class="mb-2.5">
     <ProfileManager
         activeTripName={activeTripName ?? "（尚未載入）"}
-        activeTripStartDate={tripStartDateFromYaml(yamlInput) ?? undefined}
+        activeTripStartDate={activeTripStartDate}
         {profiles}
         {onSwitchProfile}
         {onCreateProfile}
@@ -335,15 +453,28 @@ function discardDraft() {
                 >
                     清空
                 </button>
+                <button
+                    onclick={() => copyToClipboard(yamlInput, "已複製編輯器中的 YAML")}
+                    class="text-[11px] font-bold text-text-muted min-h-[44px] flex items-center gap-1 hover:text-accent cursor-pointer"
+                >
+                    <Copy size={12} aria-hidden="true" /> 複製
+                </button>
             </div>
         </div>
 
+        <!-- spellcheck/autocapitalize off because every YAML key is lower case: a phone
+             keyboard would otherwise capitalise each line and red-underline every
+             identifier. overscroll-contain stops a scroll that reaches the end of the
+             textarea from chaining to the page and triggering pull-to-refresh. Height is
+             viewport-relative so a small phone still gets a usable editor. -->
         <textarea
             id="yaml-editor"
             bind:value={yamlInput}
             oninput={markDraft}
-            class="w-full h-80 bg-well-deep border border-card-border rounded-xl p-3 font-mono text-xs text-text-primary outline-none focus:border-accent transition resize-y leading-relaxed shadow-inner"
-            placeholder="請貼上您的行程 YAML 內容…"
+            spellcheck="false"
+            autocapitalize="off"
+            class="w-full h-[45dvh] min-h-[240px] bg-well-deep border border-card-border rounded-xl p-3 font-mono text-xs text-text-primary outline-none focus:border-accent transition resize-none overflow-y-auto overscroll-contain leading-relaxed shadow-inner"
+            placeholder="貼上你的 YAML 行程，或直接貼上分享連結…"
         ></textarea>
 
         {#if validationError}
@@ -371,14 +502,23 @@ function discardDraft() {
         </div>
     </div>
 
-    <!-- Quick instructions on the editor's share-link sniffing behavior. -->
+    <!-- The editor's share-link sniffing, the clear-to-default behaviour, and where the
+         data goes. That last line is the only place in the app that says the itinerary
+         leaves the device, so it has to stay true to what sync actually uploads. -->
     <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint">
         <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
-            <Lightbulb size={12} class="shrink-0 text-accent" aria-hidden="true" />分享連結匯入說明
+            <Lightbulb size={12} class="shrink-0 text-accent" aria-hidden="true" />編輯器與匯入說明
         </p>
-        <ul class="list-disc list-inside mt-1.5 space-y-1">
-            <li>若收到他人分享的行程網址，直接將整串網址貼在上方編輯器，點擊「儲存並解析」即可匯入。</li>
-            <li>匯入成功後會自動套用該行程，同時保留原本的備份紀錄。</li>
+        <ul class="list-disc pl-4 mt-1.5 space-y-1.5">
+            <li>貼上 YAML 行程內容，或他人的分享連結，按「儲存並解析」即可匯入；原本的行程會留在下方的備份紀錄。</li>
+            <li>清空並儲存會還原為預設的 <a href="./itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-accent underline hover:text-text-primary transition">itinerary.yaml</a>。</li>
+            <li>行程存在這台裝置上。連線 Google 雲端硬碟後，同步會把整份行程（含記帳明細）複製到你自己的 Drive。</li>
+            <li>
+                可用此指令安裝行程小幫手 Skill：
+                <div class="bg-well-deep border border-line rounded px-2 py-1 mt-1 font-mono text-[10px] select-all break-all text-text-primary">
+                    npx skills add https://github.com/hsin19/show-me-way --skill itinerary-yaml-builder
+                </div>
+            </li>
         </ul>
     </div>
 
