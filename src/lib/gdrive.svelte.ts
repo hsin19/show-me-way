@@ -11,6 +11,7 @@ import {
     fetchGoogleUserInfo,
     getCachedAccessToken,
     getGdriveClientId,
+    type GoogleAuthPrompt,
     type GoogleUser,
     listCloudTrips,
     loadGdriveAutoSync,
@@ -47,8 +48,30 @@ interface SyncResult {
     file?: CloudTripFile;
 }
 
+/**
+ * How far a token request may go, and the reason there is no middle setting.
+ *
+ * GIS has no silent refresh: the token model supports only the dialog UX, so "get a
+ * token" and "open a window in the user's face" are the same act — `prompt: "none"`
+ * included (see `GoogleAuthPrompt`). Every path that a tap did not start must therefore
+ * stop at the cached token and let the UI offer a reconnect button, which is also what
+ * Google's own guidance says to do with an expired token.
+ */
+type TokenMode =
+    /** Cached token or nothing. Never reaches GIS, so it can never open a window. */
+    | "cache-only"
+    /** May escalate all the way to the consent screen. Only from a user gesture. */
+    | "interactive";
+
+/** Where the cloud trip list stands, so the switcher can render one row instead of guessing. */
+export type CloudListState = "idle" | "loading" | "ready" | "failed";
+
+// Long enough that opening and closing the switcher a few times costs one Drive call,
+// short enough that a trip added on another device shows up without a reload.
+const CLOUD_LIST_TTL_MS = 60_000;
+
 interface SyncOptions {
-    /** false suppresses toasts, never opens a consent popup, and never swaps the trip. */
+    /** false suppresses toasts, keeps token acquisition cache-only, and never swaps the trip. */
     interactive?: boolean;
     /** Conflict resolution: which side wins. */
     force?: "local" | "remote";
@@ -68,6 +91,7 @@ class GDriveSyncState {
     isSyncing = $state<boolean>(false);
     isConnecting = $state<boolean>(false);
     cloudFiles = $state<CloudTripFile[]>([]);
+    cloudListState = $state<CloudListState>("idle");
     /**
      * What both sides looked like at each trip's last sync — the one source of truth for
      * sync direction. Private on purpose: callers ask `cloudFileId`, so nothing outside
@@ -86,6 +110,8 @@ class GDriveSyncState {
     private timer: ReturnType<typeof setTimeout> | null = null;
     private pending: { tripName: string; yaml: string; tripId: string; } | null = null;
     private retries = 0;
+    private lastRefreshAt = 0;
+    private refreshInFlight: Promise<CloudTripFile[]> | null = null;
 
     setAutoSync(enabled: boolean) {
         this.autoSync = enabled;
@@ -137,33 +163,36 @@ class GDriveSyncState {
         if (this.pending?.tripId === tripId) this.pending = null;
     }
 
-    private async getValidToken(interactive = true): Promise<string> {
+    private async getValidToken(mode: TokenMode = "interactive"): Promise<string> {
         const cached = getCachedAccessToken();
         if (cached) return cached;
 
-        if (this.isConnected) {
-            try {
-                const res = await requestGoogleAccessToken(this.clientId, "");
-                return res.token;
-            } catch (err) {
-                if (!interactive) {
-                    throw err;
-                }
-            }
-        }
-
-        if (!interactive) {
+        if (mode === "cache-only" || !this.isConnected) {
             throw new Error("尚未登入 Google 或登入憑證已過期");
         }
 
+        try {
+            return (await requestGoogleAccessToken(this.clientId, "")).token;
+        } catch {
+            // An empty prompt only re-uses an existing grant; falling back is what covers
+            // a scope the account has not approved yet.
+        }
         const res = await requestGoogleAccessToken(this.clientId, "consent");
         return res.token;
     }
 
-    async connect(): Promise<boolean> {
+    /**
+     * Signs in, or re-authorizes an account that is already signed in.
+     *
+     * `prompt` defaults by situation: a first sign-in has to show the consent screen,
+     * but merely replacing an expired token does not — re-consenting an account that
+     * already granted the scopes only makes the user re-read a list they have approved.
+     * Pass `"select_account"` to deliberately switch accounts.
+     */
+    async connect(prompt?: GoogleAuthPrompt): Promise<boolean> {
         this.isConnecting = true;
         try {
-            const { token } = await requestGoogleAccessToken(this.clientId, "consent");
+            const { token } = await requestGoogleAccessToken(this.clientId, prompt ?? (this.user ? "" : "consent"));
             const userInfo = await fetchGoogleUserInfo(token);
             // The consent screen doubles as an account chooser. Records name files the
             // previous account owns, which this one has no `drive.file` grant for, so
@@ -175,7 +204,10 @@ class GDriveSyncState {
             saveGdriveUser(userInfo);
             this.user = userInfo;
             showToast(`Google 雲端硬碟已連線 (${userInfo.email})`);
-            void this.refreshFiles();
+            void this.refreshFiles({ force: true });
+            // An edit made while the token was dead is still queued; without this it would
+            // wait for the user to touch the trip again before it reached Drive.
+            void this.flush();
             return true;
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
@@ -193,25 +225,58 @@ class GDriveSyncState {
         this.cancelPending();
         this.user = null;
         this.cloudFiles = [];
+        this.cloudListState = "idle";
         // Left behind it would keep rendering a strip whose buttons cannot do anything.
         this.conflict = null;
         showToast("已取消 Google 雲端硬碟連線");
     }
 
-    async refreshFiles(): Promise<CloudTripFile[]> {
-        if (!this.isConnected) return [];
-        try {
-            const token = await this.getValidToken(false);
-            const files = await listCloudTrips(token);
-            this.cloudFiles = files;
-            return files;
-        } catch (err) {
-            // Listing is a background convenience, so it touches neither `isSyncing` nor
-            // `error`: clearing either would let a refresh drop the spinner, and mask the
-            // reason, of a write that is still running.
-            console.warn("Refresh cloud files failed:", err);
+    /**
+     * Reloads the cloud trip list and reports the outcome through `cloudListState`, which
+     * is what the switcher renders its cloud row from.
+     *
+     * Always cache-only: listing is never worth a window in the user's face, so an
+     * expired token surfaces as `failed` and the switcher offers a reconnect instead.
+     * A failure leaves `cloudFiles` alone — the list is hidden while `cloudListState` is
+     * `failed`, so keeping it means a successful retry restores the rows instead of
+     * flashing an empty list first.
+     */
+    async refreshFiles(options: { force?: boolean; } = {}): Promise<CloudTripFile[]> {
+        if (!this.isConnected) {
+            this.cloudListState = "idle";
             return [];
         }
+        if (this.refreshInFlight) return this.refreshInFlight;
+        if (
+            !options.force
+            && this.cloudListState === "ready"
+            && Date.now() - this.lastRefreshAt < CLOUD_LIST_TTL_MS
+        ) {
+            return this.cloudFiles;
+        }
+
+        this.cloudListState = "loading";
+        const attempt = (async () => {
+            try {
+                const token = await this.getValidToken("cache-only");
+                const files = await listCloudTrips(token);
+                this.cloudFiles = files;
+                this.lastRefreshAt = Date.now();
+                this.cloudListState = "ready";
+                return files;
+            } catch (err) {
+                // Listing is a background convenience, so it touches neither `isSyncing` nor
+                // `error`: clearing either would let a refresh drop the spinner, and mask the
+                // reason, of a write that is still running.
+                console.warn("Refresh cloud files failed:", err);
+                this.cloudListState = "failed";
+                return [];
+            } finally {
+                this.refreshInFlight = null;
+            }
+        })();
+        this.refreshInFlight = attempt;
+        return attempt;
     }
 
     /**
@@ -315,7 +380,7 @@ class GDriveSyncState {
         this.busy = true;
         this.isSyncing = true;
         try {
-            const token = await this.getValidToken(interactive);
+            const token = await this.getValidToken(interactive ? "interactive" : "cache-only");
             const record = this.trips[tripId] ?? null;
             const remoteFile = record ? await fetchCloudTripMeta(token, record.fileId) : null;
 
@@ -346,7 +411,7 @@ class GDriveSyncState {
                             : `已建立雲端備份「${res.name}」`,
                     );
                 }
-                void this.refreshFiles();
+                void this.refreshFiles({ force: true });
                 return { action: "pushed", file: res };
             }
 
@@ -402,7 +467,7 @@ class GDriveSyncState {
         this.busy = true;
         this.isSyncing = true;
         try {
-            const token = await this.getValidToken(true);
+            const token = await this.getValidToken();
             const remote = await fetchCloudTripMeta(token, fileId);
             const yaml = await downloadCloudTripYaml(token, fileId);
             return { yaml, md5: remote?.md5Checksum };
@@ -458,14 +523,14 @@ class GDriveSyncState {
         this.busy = true;
         this.isSyncing = true;
         try {
-            const token = await this.getValidToken(true);
+            const token = await this.getValidToken();
             await deleteCloudTrip(token, fileId);
             // Any trip still bound to it would PATCH a file that no longer exists.
             Object.entries(this.trips)
                 .filter(([, record]) => record.fileId === fileId)
                 .forEach(([tripId]) => this.unbindTrip(tripId));
             showToast("已從 Google Drive 刪除行程");
-            void this.refreshFiles();
+            void this.refreshFiles({ force: true });
             return true;
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);

@@ -370,13 +370,27 @@ interface TokenResponse {
     error_description?: string;
 }
 
+/**
+ * The prompts this app asks GIS for.
+ *
+ * `"none"` is deliberately absent. It reads like a silent refresh and is not one: the
+ * token model supports only the dialog UX, so GIS still calls `window.open` — measured,
+ * one open and zero iframes — and the user sees the same flash. Worse, it then failed
+ * with `Popup window closed` and returned no token, so it costs the flash and buys
+ * nothing. Anything that must not open a window has to stop at the cached token.
+ */
+export type GoogleAuthPrompt = "" | "consent" | "select_account";
+
+/** The prompts whose whole purpose is to re-ask, so a cached token would defeat them. */
+const CACHE_BYPASSING_PROMPTS: GoogleAuthPrompt[] = ["consent", "select_account"];
+
 /** Request OAuth access token using Google Identity Services */
 export async function requestGoogleAccessToken(
     clientId: string,
-    prompt: "" | "consent" = "",
+    prompt: GoogleAuthPrompt = "",
 ): Promise<{ token: string; expiresIn: number; }> {
     const cached = getCachedAccessToken();
-    if (cached && prompt !== "consent") {
+    if (cached && !CACHE_BYPASSING_PROMPTS.includes(prompt)) {
         return { token: cached, expiresIn: 3600 };
     }
 

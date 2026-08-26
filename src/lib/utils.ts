@@ -70,8 +70,37 @@ export function formatYearMonth(dateStr?: string | null): string {
 }
 
 /**
- * Sort trips by departure date with closest upcoming trip first, then recent past trips,
- * and trips without dates at the end.
+ * How long after its start date a trip still counts as current.
+ *
+ * A cloud trip record carries only `startDate`, never an end date, so "is it over" has
+ * to be guessed from the start alone. A month is long enough to cover any trip a person
+ * would plan with this app, which means the guess errs towards still showing a trip that
+ * has in fact ended rather than folding away one the user is on.
+ */
+const TRIP_RECENCY_GRACE_DAYS = 30;
+
+/**
+ * Whether a trip started long enough ago to be certainly over — what the switcher folds
+ * behind its "load earlier" row.
+ *
+ * An absent or unparseable date is NOT long past: a record that says nothing about when
+ * it happened is the last thing that should disappear from a list.
+ */
+export function isTripLongPast(startDate?: string | null, referenceToday = getTodayIsoString()): boolean {
+    const start = startDate?.trim().slice(0, 10);
+    if (!start) return false;
+    return start < addDaysIso(referenceToday, -TRIP_RECENCY_GRACE_DAYS);
+}
+
+/**
+ * Sort trips by date: the one you are on or just back from first, then upcoming trips by
+ * how soon, then older trips most-recent-first, and undated trips at the end.
+ *
+ * The leading group is `isTripLongPast`'s complement rather than `date >= today`, and
+ * deliberately the same predicate the switcher folds by — otherwise a trip could be shown
+ * as current and sorted as history at the same time. It is also the better answer on its
+ * own: a trip that started last week outranks every future one, because you are probably
+ * still on it.
  */
 export function compareTripDates(
     dateA?: string | null,
@@ -86,16 +115,16 @@ export function compareTripDates(
     if (!a) return 1;
     if (!b) return -1;
 
-    const isFutureA = a >= referenceToday;
-    const isFutureB = b >= referenceToday;
+    const isCurrentA = !isTripLongPast(a, referenceToday);
+    const isCurrentB = !isTripLongPast(b, referenceToday);
 
-    if (isFutureA && isFutureB) {
+    if (isCurrentA && isCurrentB) {
         return a.localeCompare(b);
     }
-    if (!isFutureA && !isFutureB) {
+    if (!isCurrentA && !isCurrentB) {
         return b.localeCompare(a);
     }
-    return isFutureA ? -1 : 1;
+    return isCurrentA ? -1 : 1;
 }
 
 /**

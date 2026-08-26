@@ -1,8 +1,12 @@
 <script lang="ts">
 import ChevronDown from "@lucide/svelte/icons/chevron-down";
 import Cloud from "@lucide/svelte/icons/cloud";
+import CloudOff from "@lucide/svelte/icons/cloud-off";
+import History from "@lucide/svelte/icons/history";
 import Layers from "@lucide/svelte/icons/layers";
+import LogIn from "@lucide/svelte/icons/log-in";
 import Plus from "@lucide/svelte/icons/plus";
+import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 import Trash2 from "@lucide/svelte/icons/trash-2";
 import { gdriveSync } from "../gdrive.svelte";
 import {
@@ -12,6 +16,7 @@ import {
 import {
     compareTripDates,
     formatYearMonth,
+    isTripLongPast,
 } from "../utils";
 import ConfirmBar from "./ConfirmBar.svelte";
 
@@ -73,6 +78,43 @@ let unimportedCloudFiles = $derived(
 let sortedCloudFiles = $derived(
     [...unimportedCloudFiles].sort((a, b) => compareTripDates(a.startDate, b.startDate)),
 );
+
+// Deliberately one-way, and reset on close below: the switcher is a place you pass
+// through, so a fold the user has to undo every time is worse than one that quietly
+// re-folds itself.
+let showEarlierCloudTrips = $state(false);
+
+// compareTripDates groups by this same predicate, so the fold falls exactly on a group
+// boundary: filtering keeps each side's order, and appending the long-past ones behind
+// the button reads as one continuous list rather than a reshuffle.
+let earlierCloudFiles = $derived(sortedCloudFiles.filter(file => isTripLongPast(file.startDate)));
+let currentCloudFiles = $derived(sortedCloudFiles.filter(file => !isTripLongPast(file.startDate)));
+let shownCloudFiles = $derived(showEarlierCloudTrips ? [...currentCloudFiles, ...earlierCloudFiles] : currentCloudFiles);
+
+/**
+ * Whichever single thing the cloud slot shows. Collapsing it to one value here is what
+ * keeps the markup from rendering, say, a stale list next to a reconnect prompt.
+ */
+let cloudSlot = $derived.by((): "signin" | "loading" | "list" | "reconnect" => {
+    if (!gdriveSync.isConnected) return "signin";
+    if (gdriveSync.cloudListState === "failed") return "reconnect";
+    if (gdriveSync.cloudListState === "loading" && gdriveSync.cloudFiles.length === 0) return "loading";
+    return "list";
+});
+
+// The switcher is where the cloud rows are read, so this is where the list is worth
+// re-fetching. The TTL and the in-flight guard both live in refreshFiles, and reading
+// neither cloudFiles nor cloudListState here is what keeps the effect from re-triggering
+// itself.
+$effect(() => {
+    if (expanded && gdriveSync.isConnected) void gdriveSync.refreshFiles();
+});
+
+// Only 行程管理 needs this — TripOverview's drawer unmounts the whole component — but
+// the reset has to hold in both hosts.
+$effect(() => {
+    if (!expanded) showEarlierCloudTrips = false;
+});
 
 function handleToggle() {
     if (onToggleExpand) {
@@ -168,9 +210,9 @@ async function handleDeleteCloud(fileId: string) {
                 {/if}
             {/each}
 
-            <!-- 2. 雲端行程 (Google Drive 尚未載入本機者，日期近者優先) -->
-            {#if gdriveSync.isConnected && sortedCloudFiles.length > 0}
-                {#each sortedCloudFiles as file (file.id)}
+            <!-- 2. 雲端：清單／讀取中／重新連線／登入，恆為四者之一 -->
+            {#if cloudSlot === "list"}
+                {#each shownCloudFiles as file (file.id)}
                     {#if confirmingCloudFileId === file.id}
                         <ConfirmBar
                             message={`確定從 Google Drive 載入「${file.name}」嗎？`}
@@ -213,6 +255,39 @@ async function handleDeleteCloud(fileId: string) {
                         </div>
                     {/if}
                 {/each}
+                {#if !showEarlierCloudTrips && earlierCloudFiles.length > 0}
+                    <button
+                        type="button"
+                        onclick={() => (showEarlierCloudTrips = true)}
+                        class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-tint-1 border border-card-border text-text-muted hover:text-accent hover:bg-tint-2 transition cursor-pointer text-xs font-bold"
+                    >
+                        <History size={14} class="shrink-0" aria-hidden="true" /> 載入更早的 {earlierCloudFiles.length} 筆行程
+                    </button>
+                {/if}
+            {:else if cloudSlot === "loading"}
+                <div class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-tint-1 border border-card-border text-text-muted text-xs font-semibold">
+                    <RefreshCw size={14} class="animate-spin" aria-hidden="true" /> 讀取雲端行程…
+                </div>
+            {:else if cloudSlot === "reconnect"}
+                <button
+                    type="button"
+                    disabled={gdriveSync.isConnecting}
+                    onclick={() => void gdriveSync.connect()}
+                    class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-xs font-bold disabled:opacity-50"
+                >
+                    <CloudOff size={14} class="shrink-0 text-text-muted" aria-hidden="true" />
+                    {gdriveSync.isConnecting ? "連線中…" : "雲端連線中斷，點此重新連線"}
+                </button>
+            {:else}
+                <button
+                    type="button"
+                    disabled={gdriveSync.isConnecting}
+                    onclick={() => void gdriveSync.connect()}
+                    class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-xs font-bold disabled:opacity-50"
+                >
+                    <LogIn size={14} class="shrink-0 text-accent" aria-hidden="true" />
+                    {gdriveSync.isConnecting ? "連線中…" : "登入 Google 取得雲端行程"}
+                </button>
             {/if}
 
             <!-- 3. 新增行程 -->

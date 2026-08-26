@@ -203,9 +203,8 @@ onMount(async () => {
     // Before the load, so an imported trip is what gets loaded.
     await maybeImportSharedItinerary();
     await loadTripData();
-    // Owned here rather than by 行程管理's onMount: ProfileManager renders the cloud
-    // list in TripOverview's drawer too, and that host would otherwise show nothing
-    // until the user had visited 行程管理 once.
+    // A head start on the switcher's cloud rows, so opening the drawer usually has the
+    // list already rather than re-fetching on first open.
     void gdriveSync.refreshFiles();
 });
 

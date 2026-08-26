@@ -14,6 +14,7 @@ import {
     formatYearMonth,
     getTodayIsoString,
     insertAtClamped,
+    isTripLongPast,
     parseLocalDate,
     splitDayDate,
     toLocalIsoDate,
@@ -216,5 +217,47 @@ describe("compareTripDates", () => {
         expect(compareTripDates("2026-09-01", null, today)).toBeLessThan(0);
         expect(compareTripDates(undefined, "2026-09-01", today)).toBeGreaterThan(0);
         expect(compareTripDates(null, undefined, today)).toBe(0);
+    });
+
+    // The window between the grace boundary and today: a trip you are on, or just back
+    // from, is the one you want at the top — not filed behind everything still to come.
+    it("puts a trip inside the grace window ahead of every upcoming one", () => {
+        expect(compareTripDates("2026-08-08", "2026-09-01", today)).toBeLessThan(0);
+        expect(compareTripDates("2026-12-01", "2026-08-08", today)).toBeGreaterThan(0);
+    });
+
+    it("splits on the same boundary the switcher folds by", () => {
+        // 30 days back is still current, so it leads; one day earlier is history.
+        expect(compareTripDates("2026-07-25", "2026-12-01", today)).toBeLessThan(0);
+        expect(compareTripDates("2026-07-24", "2026-12-01", today)).toBeGreaterThan(0);
+        expect(isTripLongPast("2026-07-25", today)).toBe(false);
+        expect(isTripLongPast("2026-07-24", today)).toBe(true);
+    });
+});
+
+describe("isTripLongPast", () => {
+    const TODAY = "2026-08-27";
+
+    it("keeps a future trip and one that has not yet outlived the grace period", () => {
+        expect(isTripLongPast("2026-11-05", TODAY)).toBe(false);
+        expect(isTripLongPast(TODAY, TODAY)).toBe(false);
+        // 30 days back is the boundary itself, and the boundary still counts as current.
+        expect(isTripLongPast("2026-07-28", TODAY)).toBe(false);
+    });
+
+    it("folds away a trip that started before the grace period", () => {
+        expect(isTripLongPast("2026-07-27", TODAY)).toBe(true);
+        expect(isTripLongPast("2025-01-01", TODAY)).toBe(true);
+    });
+
+    it("never folds away a record that says nothing about when it happened", () => {
+        expect(isTripLongPast(undefined, TODAY)).toBe(false);
+        expect(isTripLongPast(null, TODAY)).toBe(false);
+        expect(isTripLongPast("   ", TODAY)).toBe(false);
+    });
+
+    it("reads only the date half of a timestamp, and trims before slicing", () => {
+        expect(isTripLongPast("2026-07-27T23:59:00Z", TODAY)).toBe(true);
+        expect(isTripLongPast(" 2026-11-05 ", TODAY)).toBe(false);
     });
 });

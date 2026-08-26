@@ -29,6 +29,8 @@ interface FakeFile {
     name: string;
     content: string;
     trashed?: boolean;
+    /** 對應 Drive appProperties.startDate —— 決定切換器要不要把它摺起來 */
+    startDate?: string;
 }
 
 interface FakeDrive {
@@ -54,7 +56,7 @@ async function installFakeDrive(page: Page, initial: FakeFile[] = []): Promise<F
         size: String(Buffer.byteLength(f.content, "utf8")),
         md5Checksum: md5(f.content),
         trashed: !!f.trashed,
-        appProperties: { showmewayTripId: "seeded" },
+        appProperties: { showmewayTripId: "seeded", ...(f.startDate ? { startDate: f.startDate } : {}) },
     });
 
     // multipart/related：part[1] 是 JSON metadata，part[2] 是空行之後的 YAML
@@ -127,19 +129,19 @@ async function installFakeDrive(page: Page, initial: FakeFile[] = []): Promise<F
  * 以「已連線」狀態開場。塞的是 token 快取而不是假的 window.google，所以 GIS 完全不介入；
  * `trips` 有 record 時代表這個行程已經綁好雲端檔（`localHash` 用真的指紋，才算「本機沒變」）。
  */
-async function seedConnected(page: Page, options: { autoSync?: boolean; record?: { fileId: string; remoteMd5: string; localHash: string; }; } = {}) {
+async function seedConnected(page: Page, options: { autoSync?: boolean; expiredToken?: boolean; record?: { fileId: string; remoteMd5: string; localHash: string; }; } = {}) {
     await page.addInitScript(seed => {
         window.localStorage.setItem("showmeway_gdrive_user", JSON.stringify({ email: "tester@example.com", name: "測試者" }));
         window.localStorage.setItem(
             "showmeway_gdrive_token",
-            JSON.stringify({ token: "e2e-token", expiresAt: Date.now() + 3600_000 }),
+            JSON.stringify({ token: "e2e-token", expiresAt: Date.now() + (seed.expiredToken ? -3600_000 : 3600_000) }),
         );
         window.localStorage.setItem("showmeway_gdrive_auto_sync", seed.autoSync ? "true" : "false");
         if (seed.record) {
             window.localStorage.setItem("showmeway_gdrive_trips", JSON.stringify({ [seed.tripId]: seed.record }));
         }
         window.localStorage.setItem("showmeway_active_profile", seed.tripId);
-    }, { autoSync: !!options.autoSync, record: options.record, tripId: "p-e2e" });
+    }, { autoSync: !!options.autoSync, expiredToken: !!options.expiredToken, record: options.record, tripId: "p-e2e" });
 }
 
 function md5Of(content: string): string {
@@ -151,10 +153,12 @@ async function openTripManagement(page: Page) {
     await page.getByRole("button", { name: "行程管理", exact: true }).click();
 }
 
-test("連線 Google：走完 GIS 流程並把行程建立成雲端檔", async ({ page }) => {
-    const drive = await installFakeDrive(page);
-    // GIS 的 SDK 換成 stub：initTokenClient 直接回一個含 drive.file scope 的 token，
-    // 這樣 loadGisScript 與 requestGoogleAccessToken（含 scope 檢查）都真的被執行到。
+/**
+ * GIS 的 SDK 換成 stub：initTokenClient 直接回一個含 drive.file scope 的 token，
+ * 這樣 loadGisScript 與 requestGoogleAccessToken（含 scope 檢查）都真的被執行到。
+ * 只有使用者主動按下的流程才會走到它；背景刷新一律停在快取 token。
+ */
+async function installGisStub(page: Page) {
     await page.route("https://accounts.google.com/gsi/client", route =>
         route.fulfill({
             contentType: "text/javascript",
@@ -166,6 +170,11 @@ test("連線 Google：走完 GIS 流程並把行程建立成雲端檔", async ({
                 }),
             }) } } };`,
         }));
+}
+
+test("連線 Google：走完 GIS 流程並把行程建立成雲端檔", async ({ page }) => {
+    const drive = await installFakeDrive(page);
+    await installGisStub(page);
     await seedItinerary(page);
     await page.goto("/");
 
@@ -310,4 +319,61 @@ test("儲存完同步：連續操作在 debounce 窗口內只上傳一次", asyn
     // debounce 是 4s，等它收斂後才數。
     await expect.poll(() => drive.counts().uploads, { timeout: 15_000 }).toBe(1);
     expect(drive.list()[0].content).toContain("checked: true");
+});
+
+// 主畫面的「切換行程」抽屜：本機行程下方恆為單一雲端列 —— 清單、重新連線、或登入。
+// 之所以要在這裡驗，是因為它是唯一允許把取 token 升級到 cache-only 之上的入口。
+
+test("切換行程抽屜：未登入時給的是登入入口", async ({ page }) => {
+    await installFakeDrive(page);
+    await seedItinerary(page);
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "切換行程選單" }).click();
+
+    await expect(page.getByRole("button", { name: "登入 Google 取得雲端行程" })).toBeVisible();
+});
+
+test("切換行程抽屜：token 過期時顯示重新連線，連上後雲端行程才出現", async ({ page }) => {
+    await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "另一趟旅行", content: yamlNamed("另一趟旅行") }]);
+    await seedItinerary(page);
+    await seedConnected(page, { expiredToken: true });
+    await page.goto("/");
+
+    // 背景刷新只用快取 token，過期就停在這一列 —— 不碰 GIS，也就不可能彈視窗。
+    await page.getByRole("button", { name: "切換行程選單" }).click();
+    const reconnect = page.getByRole("button", { name: "雲端連線中斷，點此重新連線" });
+    await expect(reconnect).toBeVisible();
+    await expect(page.getByRole("button", { name: /另一趟旅行/ })).toBeHidden();
+
+    // 使用者主動按下去才走 GIS：失敗過的 script 標籤已被忘掉，這次會重新注入。
+    await installGisStub(page);
+    await reconnect.click();
+
+    await expect(page.getByRole("button", { name: /另一趟旅行.*載入/ })).toBeVisible();
+});
+
+test("切換行程抽屜：一個月前的雲端行程摺起來，載入後再開又摺回去", async ({ page }) => {
+    await installFakeDrive(page, [
+        { id: "file-soon", name: "即將出發", content: yamlNamed("即將出發"), startDate: "2099-01-01" },
+        { id: "file-old", name: "去年那趟", content: yamlNamed("去年那趟"), startDate: "2020-01-01" },
+    ]);
+    await seedItinerary(page);
+    await seedConnected(page);
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "切換行程選單" }).click();
+    await expect(page.getByRole("button", { name: /即將出發.*載入/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /去年那趟.*載入/ })).toBeHidden();
+
+    const loadEarlier = page.getByRole("button", { name: "載入更早的 1 筆行程" });
+    await loadEarlier.click();
+    await expect(page.getByRole("button", { name: /去年那趟.*載入/ })).toBeVisible();
+    await expect(loadEarlier).toBeHidden();
+
+    // 單向展開：關掉再開就自己摺回去，不必使用者收。
+    await page.getByRole("button", { name: "切換行程選單" }).click();
+    await page.getByRole("button", { name: "切換行程選單" }).click();
+    await expect(page.getByRole("button", { name: "載入更早的 1 筆行程" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /去年那趟.*載入/ })).toBeHidden();
 });

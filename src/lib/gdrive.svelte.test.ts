@@ -557,3 +557,133 @@ describe("scheduleSync", () => {
         expect(calls.length).toBe(0);
     });
 });
+
+describe("refreshFiles", () => {
+    const CLOUD = { id: "file-1", name: "東京.yaml", modifiedTime: "2026-06-11T00:00:00Z" };
+
+    /** How many list round-trips actually went out — the folder is pre-seeded, so one per refresh. */
+    function listCalls(calls: { url: string; }[]): number {
+        return calls.filter(c => c.url.includes("in+parents") || c.url.includes("in%20parents")).length;
+    }
+
+    beforeEach(() => {
+        gdrive.saveGdriveFolderId("folder-1");
+    });
+
+    it("serves the cached list inside the TTL and refetches once past it", async () => {
+        await loadSync();
+        const calls = createDriveStub({ list: [CLOUD], meta: { body: { id: "folder-1" } } });
+
+        vi.useFakeTimers();
+        try {
+            await sync.refreshFiles();
+            expect(listCalls(calls)).toBe(1);
+
+            await sync.refreshFiles();
+            expect(listCalls(calls)).toBe(1);
+
+            vi.advanceTimersByTime(61_000);
+            await sync.refreshFiles();
+            expect(listCalls(calls)).toBe(2);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("refetches inside the TTL when forced, which is what a push or delete needs", async () => {
+        await loadSync();
+        const calls = createDriveStub({ list: [CLOUD], meta: { body: { id: "folder-1" } } });
+
+        await sync.refreshFiles();
+        await sync.refreshFiles({ force: true });
+
+        expect(listCalls(calls)).toBe(2);
+    });
+
+    it("never reaches Google when the token has expired", async () => {
+        gdrive.clearCachedAccessToken();
+        await loadSync();
+        const calls = createDriveStub({ list: [CLOUD], meta: { body: { id: "folder-1" } } });
+
+        await sync.refreshFiles();
+
+        // The whole point: no request, no GIS, and above all no popup outside a gesture.
+        expect(calls.length).toBe(0);
+        expect(sync.cloudListState).toBe("failed");
+    });
+
+    it("keeps the last good list when a later refresh fails, so a retry cannot flash empty", async () => {
+        await loadSync();
+        createDriveStub({ list: [CLOUD], meta: { body: { id: "folder-1" } } });
+        await sync.refreshFiles();
+        expect(sync.cloudFiles).toHaveLength(1);
+
+        gdrive.clearCachedAccessToken();
+        await sync.refreshFiles({ force: true });
+
+        expect(sync.cloudListState).toBe("failed");
+        expect(sync.cloudFiles).toHaveLength(1);
+    });
+
+    it("reports idle rather than failed when nobody is signed in", async () => {
+        gdrive.clearGdriveUser();
+        await loadSync();
+
+        expect(await sync.refreshFiles()).toEqual([]);
+        expect(sync.cloudListState).toBe("idle");
+    });
+});
+
+describe("connect", () => {
+    /** Captures the prompt GIS was asked for; the token cache must be empty or it short-circuits. */
+    function stubGis(): string[] {
+        const prompts: string[] = [];
+        vi.stubGlobal("window", {
+            google: {
+                accounts: {
+                    oauth2: {
+                        initTokenClient: (config: { prompt?: string; callback: (r: unknown) => void; }) => ({
+                            requestAccessToken: (opts?: { prompt?: string; }) => {
+                                prompts.push(opts?.prompt ?? config.prompt ?? "");
+                                config.callback({
+                                    access_token: "gis-token",
+                                    expires_in: 3600,
+                                    scope: "https://www.googleapis.com/auth/drive.file",
+                                });
+                            },
+                        }),
+                    },
+                },
+            },
+        });
+        vi.stubGlobal(
+            "fetch",
+            vi.fn((url: string) => {
+                if (url.includes("oauth2/v3/userinfo")) {
+                    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ email: "a@example.com", name: "A" }) });
+                }
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ files: [] }) });
+            }),
+        );
+        return prompts;
+    }
+
+    it("re-authorizes an account that is already signed in without the consent screen", async () => {
+        gdrive.clearCachedAccessToken();
+        await loadSync();
+        const prompts = stubGis();
+
+        expect(await sync.connect()).toBe(true);
+        expect(prompts).toEqual([""]);
+    });
+
+    it("asks for consent on a first sign-in", async () => {
+        gdrive.clearGdriveUser();
+        gdrive.clearCachedAccessToken();
+        await loadSync();
+        const prompts = stubGis();
+
+        expect(await sync.connect()).toBe(true);
+        expect(prompts).toEqual(["consent"]);
+    });
+});
