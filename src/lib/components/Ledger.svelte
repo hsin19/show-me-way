@@ -9,7 +9,7 @@ import Trash2 from "@lucide/svelte/icons/trash-2";
 import Wallet from "@lucide/svelte/icons/wallet";
 import { untrack } from "svelte";
 import {
-    EXCHANGE_CACHE_TTL,
+    isExchangeRateStale,
     loadExchangeRates,
 } from "../exchange";
 import {
@@ -127,9 +127,7 @@ $effect(() => {
                 if (currency !== activeCurrency) return;
                 rateInfo = {
                     date: data.date,
-                    // Must exceed the TTL: a routine stale replay (anything past
-                    // 12h) would otherwise flash the badge until the refresh lands.
-                    offline: meta.fromCache && Date.now() - meta.fetchedAt >= EXCHANGE_CACHE_TTL * 2,
+                    offline: isExchangeRateStale(meta),
                 };
                 const prevRate = exchangeRate;
                 exchangeRate = fetchedRate;

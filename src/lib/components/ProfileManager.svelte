@@ -4,7 +4,6 @@ import Cloud from "@lucide/svelte/icons/cloud";
 import Layers from "@lucide/svelte/icons/layers";
 import Plus from "@lucide/svelte/icons/plus";
 import Trash2 from "@lucide/svelte/icons/trash-2";
-import { SvelteSet } from "svelte/reactivity";
 import { gdriveSync } from "../gdrive.svelte";
 import {
     getActiveProfileId,
@@ -55,17 +54,11 @@ let confirmingCloudDeleteFileId = $state<string | null>(null);
 let activeProfileId = $derived(getActiveProfileId() ?? "default");
 let activeTripYearMonth = $derived(formatYearMonth(activeTripStartDate));
 
-let boundFileIds = $derived.by(() => {
-    if (!gdriveSync.isConnected) return new SvelteSet<string>();
-    const activeFileId = gdriveSync.cloudFileId(activeProfileId);
-    const profileFileIds = profiles.map(p => gdriveSync.cloudFileId(p.id)).filter((id): id is string => Boolean(id));
-    const ids = new SvelteSet<string>();
-    if (activeFileId) ids.add(activeFileId);
-    for (const id of profileFileIds) {
-        ids.add(id);
-    }
-    return ids;
-});
+let boundFileIds = $derived(
+    gdriveSync.isConnected
+        ? gdriveSync.boundFileIdsFor([activeProfileId, ...profiles.map(p => p.id)])
+        : new Set<string>(),
+);
 
 let sortedProfiles = $derived(
     [...profiles].sort((a, b) => compareTripDates(a.startDate, b.startDate)),

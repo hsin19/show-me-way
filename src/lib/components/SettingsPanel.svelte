@@ -128,12 +128,11 @@ async function save() {
 // and a reactive computation has no business writing storage. Switching profiles
 // navigates back to 行程, which destroys this panel, so it cannot go stale.
 const activeTripId = ensureActiveProfileId();
-let boundCloudFileId = $derived(gdriveSync.isConnected ? gdriveSync.cloudFileId(activeTripId) : null);
 // From the persisted copy, not the live editor value: this is a full js-yaml parse, and
 // binding it to the textarea ran one per keystroke to move a year-month label.
 let activeTripStartDate = $derived(tripStartDateFromYaml(yamlSnapshot) ?? undefined);
 let isBoundToCloud = $derived(
-    gdriveSync.isConnected && !!boundCloudFileId && gdriveSync.cloudFiles.some(f => f.id === boundCloudFileId),
+    gdriveSync.isConnected && gdriveSync.boundFileIdsFor([activeTripId]).size > 0,
 );
 
 /**

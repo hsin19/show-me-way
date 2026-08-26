@@ -9,6 +9,7 @@ import {
 import {
     EXCHANGE_CACHE_TTL as CACHE_TTL,
     type ExchangeRates,
+    isExchangeRateStale,
     loadExchangeRates,
     resetExchangeCacheForTests,
 } from "./exchange";
@@ -185,5 +186,32 @@ describe("loadExchangeRates", () => {
         expect(fetchMock).toHaveBeenCalledTimes(1);
         expect(onUpdate).toHaveBeenCalledTimes(1);
         expect(onUpdate).toHaveBeenCalledWith(ratesOf(32), networkMeta(NOW));
+    });
+});
+
+describe("isExchangeRateStale", () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(NOW);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it("is never stale for a rate that came straight from the network", () => {
+        expect(isExchangeRateStale(networkMeta(NOW))).toBe(false);
+        expect(isExchangeRateStale(networkMeta(NOW - CACHE_TTL * 10))).toBe(false);
+    });
+
+    it("is not stale for a cached rate within the routine-replay window (up to 2x TTL)", () => {
+        expect(isExchangeRateStale(cacheMeta(NOW))).toBe(false);
+        expect(isExchangeRateStale(cacheMeta(NOW - CACHE_TTL))).toBe(false);
+        expect(isExchangeRateStale(cacheMeta(NOW - CACHE_TTL * 2 + 1))).toBe(false);
+    });
+
+    it("is stale once a cached rate is at least 2x TTL old", () => {
+        expect(isExchangeRateStale(cacheMeta(NOW - CACHE_TTL * 2))).toBe(true);
+        expect(isExchangeRateStale(cacheMeta(NOW - CACHE_TTL * 10))).toBe(true);
     });
 });

@@ -83,6 +83,15 @@ async function fetchFromNetwork(baseCurrency: string): Promise<ExchangeRates | n
     }
 }
 
+/**
+ * Whether a rate handed to `onUpdate` is stale enough to flag in the UI. Twice
+ * the TTL, not the TTL itself: a routine stale replay while a background
+ * refresh is in flight (anything under 2x) would otherwise flash the badge.
+ */
+export function isExchangeRateStale(meta: ExchangeRatesMeta): boolean {
+    return meta.fromCache && !isFresh(meta.fetchedAt, EXCHANGE_CACHE_TTL * 2, Date.now());
+}
+
 export function loadExchangeRates(
     baseCurrency: string,
     onUpdate: (rates: ExchangeRates, meta: ExchangeRatesMeta) => void,

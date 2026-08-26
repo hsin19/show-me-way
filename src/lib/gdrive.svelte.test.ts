@@ -387,6 +387,35 @@ describe("record bookkeeping", () => {
     });
 });
 
+describe("boundFileIdsFor", () => {
+    function cloudFile(id: string): { id: string; name: string; modifiedTime: string; } {
+        return { id, name: `${id}.yaml`, modifiedTime: "2026-06-11T00:00:00Z" };
+    }
+
+    it("includes only ids whose bound file is still present in cloudFiles", async () => {
+        await loadSync();
+        sync.adoptCloudTrip("p-a", "file-1", YAML_A, "md5-1");
+        sync.adoptCloudTrip("p-b", "file-2", YAML_B, "md5-2");
+        sync.cloudFiles = [cloudFile("file-1")]; // file-2 has since been trashed/removed
+
+        expect([...sync.boundFileIdsFor(["p-a", "p-b"])]).toEqual(["file-1"]);
+    });
+
+    it("omits an unbound trip id entirely", async () => {
+        await loadSync();
+        sync.adoptCloudTrip("p-a", "file-1", YAML_A, "md5-1");
+        sync.cloudFiles = [cloudFile("file-1")];
+
+        expect([...sync.boundFileIdsFor(["p-a", "p-never-bound"])]).toEqual(["file-1"]);
+    });
+
+    it("returns an empty set when nothing is bound or nothing is live", async () => {
+        await loadSync();
+        expect(sync.boundFileIdsFor([]).size).toBe(0);
+        expect(sync.boundFileIdsFor(["p-a"]).size).toBe(0);
+    });
+});
+
 describe("importCloudTripAsProfile", () => {
     // Unlike YAML_A/YAML_B (byte-level fixtures for upload/download tests, never
     // actually parsed), this method runs the downloaded bytes through the same

@@ -459,21 +459,29 @@ export interface YamlBackup {
     yaml: string;
 }
 
-/** Newest first. Unreadable or malformed storage yields []. */
-export function listYamlBackups(): YamlBackup[] {
+/**
+ * A localStorage key holding a JSON array, filtered down to elements `isValid`
+ * accepts. Missing, unparseable, non-array, or otherwise unreadable storage all
+ * come back as `[]` rather than throwing — every caller's storage is optional.
+ */
+export function readJsonArray<T>(key: string, isValid: (value: unknown) => value is T): T[] {
     try {
-        const raw = localStorage.getItem(YAML_BACKUPS_KEY);
+        const raw = localStorage.getItem(key);
         if (!raw) return [];
         const parsed: unknown = JSON.parse(raw);
         if (!Array.isArray(parsed)) return [];
-        return parsed.filter((entry): entry is YamlBackup =>
-            !!entry && typeof entry === "object"
-            && typeof (entry as YamlBackup).savedAt === "string"
-            && typeof (entry as YamlBackup).yaml === "string"
-        );
+        return parsed.filter(isValid);
     } catch {
         return [];
     }
+}
+
+/** Newest first. Unreadable or malformed storage yields []. */
+export function listYamlBackups(): YamlBackup[] {
+    return readJsonArray(YAML_BACKUPS_KEY, (entry): entry is YamlBackup =>
+        !!entry && typeof entry === "object"
+        && typeof (entry as YamlBackup).savedAt === "string"
+        && typeof (entry as YamlBackup).yaml === "string");
 }
 
 /** The localStorage keys the backup ring occupies, for the storage accounting in App 設定. */

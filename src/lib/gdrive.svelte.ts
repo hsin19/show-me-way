@@ -1,3 +1,4 @@
+import { SvelteSet } from "svelte/reactivity";
 import { validateYaml } from "./api";
 import {
     clearCachedAccessToken,
@@ -96,6 +97,22 @@ class GDriveSyncState {
     /** The Drive file a trip is bound to, if any. */
     cloudFileId(tripId: string): string | null {
         return this.trips[tripId]?.fileId ?? null;
+    }
+
+    /**
+     * Of the given trip ids, the Drive file ids they are bound to AND that are
+     * still present in `cloudFiles` (not trashed or otherwise gone from the
+     * list). One place to compute "trip → live Drive binding" so no two callers
+     * can derive it differently and disagree.
+     */
+    boundFileIdsFor(tripIds: string[]): Set<string> {
+        const live = new SvelteSet(this.cloudFiles.map(f => f.id));
+        const bound = new SvelteSet<string>();
+        for (const tripId of tripIds) {
+            const fileId = this.cloudFileId(tripId);
+            if (fileId && live.has(fileId)) bound.add(fileId);
+        }
+        return bound;
     }
 
     private writeRecord(tripId: string, record: TripSyncRecord) {

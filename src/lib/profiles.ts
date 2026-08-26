@@ -6,6 +6,7 @@
 
 import {
     parseYaml,
+    readJsonArray,
     type TripData,
     USER_YAML_KEY,
 } from "./api";
@@ -36,20 +37,11 @@ function genProfileId(): string {
 
 /** Newest first. Unreadable or malformed storage yields []. */
 function readStoredProfiles(): StoredProfile[] {
-    try {
-        const raw = localStorage.getItem(PROFILES_KEY);
-        if (!raw) return [];
-        const parsed: unknown = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return [];
-        return parsed.filter((p): p is StoredProfile =>
-            !!p && typeof p === "object"
-            && typeof (p as StoredProfile).id === "string"
-            && typeof (p as StoredProfile).yaml === "string"
-            && typeof (p as StoredProfile).savedAt === "string"
-        );
-    } catch {
-        return [];
-    }
+    return readJsonArray(PROFILES_KEY, (p): p is StoredProfile =>
+        !!p && typeof p === "object"
+        && typeof (p as StoredProfile).id === "string"
+        && typeof (p as StoredProfile).yaml === "string"
+        && typeof (p as StoredProfile).savedAt === "string");
 }
 
 function writeStoredProfiles(list: StoredProfile[]): void {
