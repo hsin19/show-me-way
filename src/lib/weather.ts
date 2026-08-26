@@ -28,7 +28,9 @@ const GEOCODE_CACHE_KEY = "showmeway_geocode_v1";
 const LEGACY_GEOCODE_CACHE_KEY = "showmeway_geocode";
 const FORECAST_CACHE_KEY = "showmeway_weather";
 // Source models refresh every ~3-6 hours, so refetching sooner buys nothing.
-const FORECAST_TTL = 1000 * 60 * 60 * 3;
+// Exported so a "flag this as stale" threshold elsewhere can be defined relative
+// to it instead of drifting out of sync as an independent literal.
+export const FORECAST_TTL = 1000 * 60 * 60 * 3;
 const GEOCODE_TTL = 1000 * 60 * 60 * 24 * 30;
 const GEOCODE_MISS_TTL = FORECAST_TTL;
 
@@ -252,6 +254,31 @@ export function loadDailyWeather(
     void pending.then(byDate => {
         if (byDate) onUpdate(byDate, Date.now());
     });
+}
+
+// day → trip → none. Blank, whitespace and non-string values (from a
+// hand-written YAML) all count as unset and fall through.
+export function resolveTripCity(dayCity: unknown, tripCity: unknown): string | null {
+    for (const city of [dayCity, tripCity]) {
+        if (typeof city === "string" && city.trim()) return city;
+    }
+    return null;
+}
+
+/**
+ * Hours since `oldestFetchedAt`, but only once that age reaches `staleAfterMs`
+ * — null while still within it. `staleAfterMs` must stay above `FORECAST_TTL`,
+ * or a routine background refresh gets flagged as stale before it has a chance
+ * to run; the default is set well clear of it.
+ */
+export function staleAgeHours(
+    oldestFetchedAt: number | null,
+    now: number,
+    staleAfterMs = FORECAST_TTL * 8,
+): number | null {
+    if (oldestFetchedAt === null) return null;
+    const age = now - oldestFetchedAt;
+    return age >= staleAfterMs ? Math.floor(age / (1000 * 60 * 60)) : null;
 }
 
 export type WeatherIconKind =

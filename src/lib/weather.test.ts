@@ -8,10 +8,61 @@ import {
 } from "vitest";
 import {
     type DailyWeatherByDate,
+    FORECAST_TTL,
     loadDailyWeather,
     resetWeatherCacheForTests,
+    resolveTripCity,
+    staleAgeHours,
     weatherCodeInfo,
 } from "./weather";
+
+describe("resolveTripCity", () => {
+    it("prefers the day's city when set", () => {
+        expect(resolveTripCity("Kyoto", "Tokyo")).toBe("Kyoto");
+    });
+
+    it("falls back to the trip's city when the day has none", () => {
+        expect(resolveTripCity(undefined, "Tokyo")).toBe("Tokyo");
+        expect(resolveTripCity(null, "Tokyo")).toBe("Tokyo");
+    });
+
+    it("treats blank or whitespace-only strings as unset", () => {
+        expect(resolveTripCity("", "Tokyo")).toBe("Tokyo");
+        expect(resolveTripCity("   ", "Tokyo")).toBe("Tokyo");
+    });
+
+    it("treats a non-string value (hand-written YAML) as unset", () => {
+        expect(resolveTripCity(42, "Tokyo")).toBe("Tokyo");
+    });
+
+    it("returns null when neither resolves to a usable city", () => {
+        expect(resolveTripCity(undefined, undefined)).toBeNull();
+        expect(resolveTripCity("  ", "")).toBeNull();
+    });
+});
+
+describe("staleAgeHours", () => {
+    const now = 1_700_000_000_000;
+
+    it("returns null when there is nothing fetched yet", () => {
+        expect(staleAgeHours(null, now)).toBeNull();
+    });
+
+    it("returns null while within the default (8x FORECAST_TTL) window", () => {
+        expect(staleAgeHours(now - FORECAST_TTL * 8 + 1, now)).toBeNull();
+    });
+
+    it("returns the age in whole hours once the default window is reached", () => {
+        const oldest = now - FORECAST_TTL * 8 - 1000 * 60 * 60 * 2;
+        expect(staleAgeHours(oldest, now)).toBe(26);
+    });
+
+    it("honors a caller-supplied threshold instead of the default", () => {
+        const oneHourAgo = now - 1000 * 60 * 60;
+        expect(staleAgeHours(oneHourAgo, now, 1000 * 60 * 30)).toBe(1);
+        expect(staleAgeHours(oneHourAgo, now, 1000 * 60 * 60 * 2)).toBeNull();
+    });
+});
 
 describe("weatherCodeInfo", () => {
     it("maps the main WMO codes to icons and zh-TW labels", () => {
@@ -33,7 +84,6 @@ describe("weatherCodeInfo", () => {
     });
 });
 
-const FORECAST_TTL = 1000 * 60 * 60 * 3;
 const GEOCODE_TTL = 1000 * 60 * 60 * 24 * 30;
 const NOW = new Date("2026-06-11T08:00:00Z").getTime();
 const FORECAST_KEY = "showmeway_weather_tokyo";

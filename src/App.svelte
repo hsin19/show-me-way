@@ -77,6 +77,8 @@ import {
     type DailyWeather,
     type DailyWeatherByDate,
     loadDailyWeather,
+    resolveTripCity,
+    staleAgeHours,
 } from "./lib/weather";
 
 let tripData = $state<TripData | null>(null);
@@ -126,15 +128,6 @@ let prepTotal = $derived(tripData ? tripData.todo.length + tripData.packing.leng
 // Keyed by the exact city string out of the YAML, spelling and all.
 let weatherByCity = $state<Record<string, { byDate: DailyWeatherByDate; fetchedAt: number; }>>({});
 
-// day.city → trip.city → none. Blank, whitespace and non-string values (from a
-// hand-written YAML) all count as unset and fall through.
-function resolveWeatherCity(day: DayItinerary, trip = tripData?.trip): string | null {
-    for (const city of [day.city, trip?.city]) {
-        if (typeof city === "string" && city.trim()) return city;
-    }
-    return null;
-}
-
 // For a different trip, where the previous trip's cities are no longer relevant.
 function loadTripWeather(data: TripData) {
     weatherByCity = {};
@@ -146,7 +139,7 @@ function loadTripWeather(data: TripData) {
 function refreshTripWeather(data: TripData) {
     const cities: string[] = [];
     for (const day of data.days) {
-        const city = resolveWeatherCity(day, data.trip);
+        const city = resolveTripCity(day.city, data.trip.city);
         if (city && !cities.includes(city)) cities.push(city);
     }
     for (const city of cities) {
@@ -179,7 +172,7 @@ function handleVisibilityChange() {
 
 // Null past the 16-day forecast horizon, which hides the badge.
 function weatherForDay(day: DayItinerary): DailyWeather | null {
-    const city = resolveWeatherCity(day);
+    const city = resolveTripCity(day.city, tripData?.trip.city);
     if (!city) return null;
     return weatherByCity[city]?.byDate[day.date] ?? null;
 }
@@ -187,22 +180,18 @@ function weatherForDay(day: DayItinerary): DailyWeather | null {
 // Open-Meteo data is CC BY 4.0 — show the attribution whenever any badge does.
 let showWeatherAttribution = $derived(tripData?.days.some(d => weatherForDay(d)) ?? false);
 
-// Must stay above weather.ts's 3h refresh TTL, or a routine refresh gets flagged
-// as stale. Derived from clockNow so the age advances on ticks and on resume.
-const STALE_WEATHER_MS = 1000 * 60 * 60 * 24;
+// Derived from clockNow so the age advances on ticks and on resume.
 let staleWeatherHours = $derived.by(() => {
     if (!tripData) return null;
     let oldest: number | null = null;
     for (const day of tripData.days) {
-        const city = resolveWeatherCity(day, tripData.trip);
+        const city = resolveTripCity(day.city, tripData.trip.city);
         if (!city) continue;
         const entry = weatherByCity[city];
         if (!entry || !entry.byDate[day.date]) continue;
         if (oldest === null || entry.fetchedAt < oldest) oldest = entry.fetchedAt;
     }
-    if (oldest === null) return null;
-    const age = clockNow.getTime() - oldest;
-    return age >= STALE_WEATHER_MS ? Math.floor(age / (1000 * 60 * 60)) : null;
+    return staleAgeHours(oldest, clockNow.getTime());
 });
 
 onMount(async () => {
