@@ -12,7 +12,6 @@ import Wallet from "@lucide/svelte/icons/wallet";
 import { onMount } from "svelte";
 import {
     backupCurrentYaml,
-    buildLedgerCsv,
     createChecklistItemId,
     createExpenseId,
     type DayItinerary,
@@ -40,7 +39,10 @@ import ToolsTab from "./lib/components/ToolsTab.svelte";
 import type { EnlargedCard } from "./lib/enlarge";
 import { migrateGdriveSyncState } from "./lib/gdrive";
 import { gdriveSync } from "./lib/gdrive.svelte";
-import { parseLegacyExpenses } from "./lib/ledger";
+import {
+    buildLedgerCsv,
+    parseLegacyExpenses,
+} from "./lib/ledger";
 import { getLanguageConfig } from "./lib/phrases";
 import {
     createProfile,

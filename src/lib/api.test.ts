@@ -8,7 +8,6 @@ import {
 } from "vitest";
 import {
     backupCurrentYaml,
-    buildLedgerCsv,
     getYamlBackup,
     listYamlBackups,
     serializeToYaml,
@@ -764,37 +763,6 @@ describe("expenses — YAML round-trip", () => {
     it("rejects a non-object expense entry with a zh-TW message", () => {
         expect(() => validateYaml(tripYaml(validHotel) + "\nexpenses:\n  - 'x'"))
             .toThrow("expenses 第 1 項必須是物件");
-    });
-});
-
-describe("buildLedgerCsv", () => {
-    it("returns null with no records", () => {
-        expect(buildLedgerCsv([])).toBeNull();
-    });
-
-    it("emits a BOM, zh-TW header, type labels and escaped fields", () => {
-        const csv = buildLedgerCsv([
-            { date: "2026-06-11", name: "晚餐", amount: 1200, type: "Cash" },
-            { date: "2026-06-11", name: "WOWPASS 加值", amount: 50000, type: "Deposit-WOWPASS" },
-            { date: "2026-06-12", name: "紀念品, 含稅", amount: 3000, type: "WOWPASS" },
-        ])!;
-        expect(csv.charCodeAt(0)).toBe(0xFEFF);
-        const lines = csv.slice(1).trimEnd().split("\r\n");
-        expect(lines[0]).toBe("日期,項目,金額,類別");
-        expect(lines[1]).toBe("2026-06-11,晚餐,1200,現金支付");
-        expect(lines[2]).toBe("2026-06-11,WOWPASS 加值,50000,WOWPASS 加值");
-        // A comma inside a field forces quoting.
-        expect(lines[3]).toBe('2026-06-12,"紀念品, 含稅",3000,WOWPASS 支付');
-    });
-
-    it("sorts rows by date even though the ledger lists newest first", () => {
-        const csv = buildLedgerCsv([
-            { date: "2026-06-13", name: "門票", amount: 800, type: "Cash" },
-            { date: "2026-06-11", name: "晚餐", amount: 1200, type: "Cash" },
-            { date: "2026-06-12", name: "早餐", amount: 300, type: "Cash" },
-        ])!;
-        const lines = csv.slice(1).trimEnd().split("\r\n");
-        expect(lines.slice(1).map(l => l.split(",")[0])).toEqual(["2026-06-11", "2026-06-12", "2026-06-13"]);
     });
 });
 

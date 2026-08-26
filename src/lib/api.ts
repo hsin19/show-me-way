@@ -2,10 +2,7 @@ import {
     dump as dumpYaml,
     loadAll as loadYamlDocuments,
 } from "js-yaml";
-import {
-    type ExpenseItem,
-    ledgerTypeLabel,
-} from "./ledger";
+import { type ExpenseItem } from "./ledger";
 import {
     addDaysIso,
     parseEventStartMinutes,
@@ -532,32 +529,6 @@ export function downloadTextFile(filename: string, content: string, mimeType: st
     anchor.remove();
     // The download reads the URL asynchronously, so revoking inline would race it.
     window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
-
-function escapeCsvField(value: string): string {
-    return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
-}
-
-/** Spreadsheet export of the ledger, or null when there are no records to export. */
-export function buildLedgerCsv(expenses: ExpenseItem[]): string | null {
-    if (!Array.isArray(expenses) || expenses.length === 0) return null;
-    // The list itself is newest-first insertion order; a spreadsheet wants
-    // chronology. Stable sort, so same-day records keep their relative order.
-    const rows = [...expenses].sort((a, b) => {
-        const dateOf = (i: unknown) => typeof (i as { date?: unknown; })?.date === "string" ? (i as { date: string; }).date : "";
-        return dateOf(a).localeCompare(dateOf(b));
-    });
-    const lines = ["日期,項目,金額,類別"];
-    for (const item of rows as Partial<Record<"date" | "name" | "amount" | "type", unknown>>[]) {
-        lines.push([
-            escapeCsvField(typeof item?.date === "string" ? item.date : ""),
-            escapeCsvField(typeof item?.name === "string" ? item.name : ""),
-            typeof item?.amount === "number" ? String(item.amount) : "",
-            escapeCsvField(ledgerTypeLabel(typeof item?.type === "string" ? item.type : "")),
-        ].join(","));
-    }
-    // Leading BOM: without it Excel decodes the zh-TW headers as mojibake.
-    return "\uFEFF" + lines.join("\r\n") + "\r\n";
 }
 
 /** `_id` for an item created at runtime: unique for the session, and stripped again on save. */
