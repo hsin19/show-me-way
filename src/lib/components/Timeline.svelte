@@ -155,8 +155,6 @@ let expandedAlts = $state<Record<string, boolean>>({});
 
 <div class="relative pl-6 before:content-[''] before:absolute before:top-2 before:left-[7px] before:w-[2px] before:h-[calc(100%-16px)] before:bg-tint-3">
     {#if checkoutHotel}
-        <!-- Deliberately no `data-timeline-event`: ItineraryStrip's auto-scroll
-             counts those positionally, so one extra shifts every target. -->
         <div class="relative mb-6">
             <div class="absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 border-booked z-10"></div>
             <div class="panel rounded-2xl p-4 ml-2.5">
@@ -180,7 +178,7 @@ let expandedAlts = $state<Record<string, boolean>>({});
         <!-- A manual check-in outranks the time-based styling: it reuses the same
              fade as "past" and suppresses the "current" ring, so the two cannot
              contradict each other on one card. -->
-        <div class="relative mb-6 {event.status || timeStatus === 'past' ? 'opacity-60' : ''}" data-timeline-event={i}>
+        <div class="relative mb-6 {event.status || timeStatus === 'past' ? 'opacity-60' : ''}" data-event-id={event._id}>
             <div
                 class="
                     absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 z-10 transition duration-200
@@ -344,7 +342,6 @@ let expandedAlts = $state<Record<string, boolean>>({});
     {/each}
 
     {#if overnightHotel}
-        <!-- No `data-timeline-event` here either, for the same reason as 退房. -->
         <div class="relative mb-6">
             <div class="absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 border-line-emphasis z-10"></div>
             <div class="panel rounded-2xl p-4 ml-2.5">

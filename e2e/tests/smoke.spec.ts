@@ -56,14 +56,14 @@ test("事件打卡：標記完成並於重新載入後保留", async ({ page }) 
     await page.goto("/");
 
     await page.locator("button[data-day]").first().click();
-    const card = page.locator("[data-timeline-event]").first();
+    const card = page.locator("[data-event-id]").first();
     await card.getByRole("button", { name: "標記為已完成" }).click();
     await expect(card.getByRole("button", { name: "取消已完成標記" })).toBeVisible();
 
     await page.reload();
     await page.locator("button[data-day]").first().click();
     await expect(
-        page.locator("[data-timeline-event]").first().getByRole("button", { name: "取消已完成標記" }),
+        page.locator("[data-event-id]").first().getByRole("button", { name: "取消已完成標記" }),
     ).toBeVisible();
 });
 
