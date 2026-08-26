@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import yaml
 from jsonschema import Draft7Validator
@@ -122,9 +122,27 @@ def validate_file(path: Path) -> bool:
 
     if isinstance(data, dict):
         trip = data.get("trip", {})
+        days = data.get("days", [])
+
+        # 2. Parse every day's date up front. `trip.start`/`day` are `deprecated`
+        #    in the schema and the skill tells authors to omit them -- the app
+        #    derives both from days[].date at load time (earliest/latest date,
+        #    sorted position) -- so this validator does the same rather than
+        #    silently skipping every boundary check once those fields are absent,
+        #    which is the normal case for anything this skill produces today.
+        parsed_days = []
+        for idx, day in enumerate(days):
+            day_date_str = day.get("date")
+            try:
+                day_date = datetime.strptime(day_date_str, "%Y-%m-%d").date() if day_date_str else None
+            except ValueError:
+                day_date = None
+            parsed_days.append((idx, day, day_date))
+
+        valid_dates = [d for _, _, d in parsed_days if d is not None]
+
         start_str = trip.get("start")
         end_str = trip.get("end")
-        
         try:
             start_date = datetime.strptime(start_str, "%Y-%m-%d").date() if start_str else None
             end_date = datetime.strptime(end_str, "%Y-%m-%d").date() if end_str else None
@@ -132,10 +150,15 @@ def validate_file(path: Path) -> bool:
             start_date = None
             end_date = None
 
+        if start_date is None and valid_dates:
+            start_date = min(valid_dates)
+        if end_date is None and valid_dates:
+            end_date = max(valid_dates)
+
         if start_date and end_date and start_date > end_date:
             custom_errors.append(f"trip.start ({start_str}) cannot be after trip.end ({end_str})")
 
-        # 2. Check hotel check-in/check-out chronological correctness and boundaries
+        # 3. Check hotel check-in/check-out chronological correctness and boundaries
         hotels = trip.get("hotels", [])
         for idx, hotel in enumerate(hotels):
             h_name = hotel.get("name", f"Hotel #{idx+1}")
@@ -146,47 +169,41 @@ def validate_file(path: Path) -> bool:
                 h_out = datetime.strptime(h_out_str, "%Y-%m-%d").date() if h_out_str else None
             except ValueError:
                 h_in, h_out = None, None
-                
+
             if h_in and h_out:
                 if h_in > h_out:
                     custom_errors.append(f"trip.hotels[{idx}] ({h_name}): checkIn ({h_in_str}) cannot be after checkOut ({h_out_str})")
                 if start_date and h_in < start_date:
-                    custom_errors.append(f"trip.hotels[{idx}] ({h_name}): checkIn ({h_in_str}) is before trip start ({start_str})")
+                    custom_errors.append(f"trip.hotels[{idx}] ({h_name}): checkIn ({h_in_str}) is before the trip's first day ({start_date})")
                 if end_date and h_out > end_date:
-                    custom_errors.append(f"trip.hotels[{idx}] ({h_name}): checkOut ({h_out_str}) is after trip end ({end_str})")
+                    custom_errors.append(f"trip.hotels[{idx}] ({h_name}): checkOut ({h_out_str}) is after the trip's last day ({end_date})")
 
-        # 3. Check days sequencing and date alignment
-        days = data.get("days", [])
-        for idx, day in enumerate(days):
+        # 4. Check days date alignment. `day` is `deprecated` (the app numbers by
+        #    sorted position) and a skipped date is valid -- the app auto-fills it
+        #    as a 自由活動 day -- so a hand-left `day` value is only ever flagged
+        #    when it disagrees with position, never merely for being absent.
+        for idx, day, day_date in parsed_days:
             day_num = day.get("day")
             day_date_str = day.get("date")
-            
-            expected_day_num = idx + 1
-            if day_num != expected_day_num:
-                custom_errors.append(f"days[{idx}].day: Expected {expected_day_num}, but got {day_num}")
-                
-            try:
-                day_date = datetime.strptime(day_date_str, "%Y-%m-%d").date() if day_date_str else None
-            except ValueError:
-                day_date = None
-                
+
+            if day_num is not None:
+                expected_day_num = idx + 1
+                if day_num != expected_day_num:
+                    custom_errors.append(f"days[{idx}].day: Expected {expected_day_num} (or omit it -- it's deprecated), but got {day_num}")
+
             if day_date:
                 if start_date and day_date < start_date:
-                    custom_errors.append(f"days[{idx}].date: Date ({day_date_str}) is before trip start ({start_str})")
+                    custom_errors.append(f"days[{idx}].date: Date ({day_date_str}) is before trip start ({start_date})")
                 if end_date and day_date > end_date:
-                    custom_errors.append(f"days[{idx}].date: Date ({day_date_str}) is after trip end ({end_str})")
-                if start_date and day_num:
-                    expected_date = start_date + timedelta(days=day_num - 1)
-                    if day_date != expected_date:
-                        custom_errors.append(f"days[{idx}].date: Expected {expected_date} for Day {day_num}, but got {day_date_str}")
-            
-            # 4. Check timeline events for forbidden runtime keys (_id)
+                    custom_errors.append(f"days[{idx}].date: Date ({day_date_str}) is after trip end ({end_date})")
+
+            # 5. Check timeline events for forbidden runtime keys (_id)
             timeline = day.get("timeline", [])
             for t_idx, event in enumerate(timeline):
                 if "_id" in event:
                     custom_errors.append(f"days[{idx}].timeline[{t_idx}]: Contains forbidden runtime key '_id'")
 
-        # 5. todo/packing items must not carry id or runtime-only _id keys.
+        # 6. todo/packing items must not carry id or runtime-only _id keys.
         for list_name in ("todo", "packing"):
             for idx, item in enumerate(data.get(list_name) or []):
                 for forbidden in ("id", "_id"):
