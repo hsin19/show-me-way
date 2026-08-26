@@ -21,7 +21,6 @@ import {
 import { fetchDefaultYamlText } from "../api-fetch";
 import { gdriveSync } from "../gdrive.svelte";
 import {
-    createProfile,
     ensureActiveProfileId,
     type ProfileInfo,
     tripNameFromYaml,
@@ -222,25 +221,18 @@ async function takeCloudVersion() {
 }
 
 async function handleLoadFromCloud(fileId: string, cloudName: string) {
-    const pulled = await gdriveSync.loadTripYaml(fileId);
-    if (!pulled) return;
-    const yaml = pulled.yaml;
-    try {
-        validateYaml(yaml);
-    } catch (err) {
-        console.error("Cloud YAML validation failed:", err);
-        yamlInput = yaml;
-        settingsDraft.yaml = yaml;
-        validationError = err instanceof Error ? err.message : "雲端 YAML 格式錯誤，請檢查！";
+    const result = await gdriveSync.importCloudTripAsProfile(fileId);
+    if (!result) return;
+    if (!result.ok) {
+        console.error("Cloud YAML validation failed:", result.error);
+        yamlInput = result.yaml;
+        settingsDraft.yaml = result.yaml;
+        validationError = result.error;
         showToast("此雲端行程格式有誤，已載入編輯器，請修正後再儲存");
         return;
     }
-    const newActiveId = createProfile(yaml);
-    // The bytes just downloaded, not the cached listing's checksum: a stale entry would
-    // record an agreement matching no version and report a conflict nobody caused.
-    gdriveSync.adoptCloudTrip(newActiveId, fileId, yaml, pulled.md5);
-    yamlInput = yaml;
-    yamlSnapshot = yaml;
+    yamlInput = result.yaml;
+    yamlSnapshot = result.yaml;
     settingsDraft.yaml = null;
     validationError = null;
     showToast(`已從 Google Drive 載入「${cloudName}」為新行程`);

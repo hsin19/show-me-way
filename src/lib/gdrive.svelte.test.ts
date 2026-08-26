@@ -16,6 +16,12 @@ import {
     it,
     vi,
 } from "vitest";
+import { USER_YAML_KEY } from "./api";
+import {
+    ensureActiveProfileId,
+    getActiveProfileId,
+    listProfiles,
+} from "./profiles";
 
 type GdriveModule = typeof import("./gdrive");
 type SyncModule = typeof import("./gdrive.svelte");
@@ -378,6 +384,93 @@ describe("record bookkeeping", () => {
 
         expect(sync.cloudFileId("p-a")).toBeNull();
         expect(sync.cloudFileId("p-b")).toBe("file-2");
+    });
+});
+
+describe("importCloudTripAsProfile", () => {
+    // Unlike YAML_A/YAML_B (byte-level fixtures for upload/download tests, never
+    // actually parsed), this method runs the downloaded bytes through the same
+    // `validateYaml` gate the editor and AI edits do, so a success case needs a
+    // structurally valid trip.
+    const VALID_DOWNLOAD = "trip:\n  name: 東京\n  hotels: []\ndays:\n  - date: '2026-10-01'\n    title: Day1\n    timeline: []\n";
+
+    it("returns null when the download itself fails (already toasted by loadTripYaml)", async () => {
+        await loadSync();
+        createDriveStub({ meta: { status: 500 } });
+
+        expect(await sync.importCloudTripAsProfile("file-9")).toBeNull();
+    });
+
+    it("returns the invalid YAML for the caller to show, without creating a profile", async () => {
+        await loadSync();
+        createDriveStub({
+            meta: { body: { id: "file-9", name: "亂寫.yaml", md5Checksum: "md5-9" } },
+            download: "not: a\nvalid: trip",
+        });
+        const profilesBefore = listProfiles().length;
+
+        const result = await sync.importCloudTripAsProfile("file-9");
+
+        expect(result?.ok).toBe(false);
+        if (result?.ok === false) {
+            expect(result.yaml).toBe("not: a\nvalid: trip");
+            expect(result.error).toEqual(expect.any(String));
+        }
+        expect(listProfiles().length).toBe(profilesBefore);
+    });
+
+    it("parks the outgoing trip, adopts the file under the new profile, and reports its id", async () => {
+        await loadSync();
+        const outgoingId = ensureActiveProfileId();
+        localStorage.setItem(USER_YAML_KEY, YAML_B);
+        createDriveStub({
+            meta: { body: { id: "file-9", name: "東京.yaml", md5Checksum: "md5-9" } },
+            download: VALID_DOWNLOAD,
+        });
+
+        const result = await sync.importCloudTripAsProfile("file-9");
+
+        expect(result?.ok).toBe(true);
+        if (result?.ok !== true) throw new Error("expected success");
+        expect(result.yaml).toBe(VALID_DOWNLOAD);
+        expect(result.profileId).not.toBe(outgoingId);
+        // The outgoing active trip is parked as a profile, not dropped.
+        expect(listProfiles().some(p => p.id === outgoingId)).toBe(true);
+        // The new profile is bound to the file that was just downloaded.
+        expect(sync.cloudFileId(result.profileId)).toBe("file-9");
+        expect(getActiveProfileId()).toBe(result.profileId);
+    });
+
+    it("never calls beforeCommit when the download turns out invalid", async () => {
+        await loadSync();
+        const beforeCommit = vi.fn();
+        createDriveStub({ meta: { body: { id: "file-1", name: "無效.yaml" } }, download: "not: valid" });
+
+        await sync.importCloudTripAsProfile("file-1", beforeCommit);
+
+        expect(beforeCommit).not.toHaveBeenCalled();
+    });
+
+    it("runs beforeCommit before createProfile snapshots the outgoing trip", async () => {
+        await loadSync();
+        ensureActiveProfileId();
+        localStorage.setItem(USER_YAML_KEY, "trip:\n  name: 舊版本待更新\ndays: []\n");
+        createDriveStub({
+            meta: { body: { id: "file-2", name: "東京.yaml", md5Checksum: "md5-2" } },
+            download: VALID_DOWNLOAD,
+        });
+        const outgoingId = getActiveProfileId();
+
+        const result = await sync.importCloudTripAsProfile("file-2", () => {
+            // Simulates a caller flushing its own in-memory edits (e.g. App.svelte's
+            // `saveTripData(tripData)`) right before the outgoing trip is parked.
+            localStorage.setItem(USER_YAML_KEY, YAML_B);
+        });
+
+        expect(result?.ok).toBe(true);
+        // createProfile must have parked what beforeCommit just wrote, not the
+        // stale value that was in storage before this call started.
+        expect(listProfiles().find(p => p.id === outgoingId)?.name).toBe("東京改");
     });
 });
 

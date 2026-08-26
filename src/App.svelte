@@ -621,22 +621,16 @@ function handleDeleteProfile(id: string) {
 }
 
 async function handleLoadCloudTrip(fileId: string, fileName: string) {
-    const pulled = await gdriveSync.loadTripYaml(fileId);
-    if (!pulled) return;
-    const yaml = pulled.yaml;
-    try {
-        validateYaml(yaml);
-    } catch (err) {
-        console.error("Cloud YAML validation failed:", err);
+    const result = await gdriveSync.importCloudTripAsProfile(fileId, () => {
+        if (tripData) saveTripData(tripData);
+    });
+    if (!result) return;
+    if (!result.ok) {
+        console.error("Cloud YAML validation failed:", result.error);
         showToast("此雲端行程格式有誤，請到行程管理修正");
         openTools("settings");
         return;
     }
-    if (tripData) {
-        saveTripData(tripData);
-    }
-    const newActiveId = createProfile(yaml);
-    gdriveSync.adoptCloudTrip(newActiveId, fileId, yaml, pulled.md5);
     settingsDraft.yaml = null;
     await loadTripData();
     showToast(`已從 Google Drive 載入「${fileName.replace(/\.ya?ml$/i, "")}」`);

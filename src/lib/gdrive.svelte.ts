@@ -1,3 +1,4 @@
+import { validateYaml } from "./api";
 import {
     clearCachedAccessToken,
     clearGdriveUser,
@@ -23,6 +24,7 @@ import {
     uploadOrUpdateCloudTrip,
     yamlFingerprint,
 } from "./gdrive";
+import { createProfile } from "./profiles";
 import { showToast } from "./toast.svelte";
 
 /** Something the user has to decide before this trip can sync again. */
@@ -395,6 +397,40 @@ class GDriveSyncState {
             this.isSyncing = false;
             this.busy = false;
         }
+    }
+
+    /**
+     * 載入為新行程 — adopts a Drive file as a brand-new local profile: load →
+     * validate → `createProfile` → `adoptCloudTrip`, the one sequence every
+     * "load a cloud trip I am not bound to yet" entry point needs.
+     *
+     * Returns null only when the download itself failed — `loadTripYaml` has
+     * already toasted that. On invalid YAML `yaml` still comes back so a caller
+     * with an editing surface can seed it for correction; a caller without one
+     * can ignore that field. `beforeCommit` runs only once validation succeeds,
+     * right before `createProfile` reads the outgoing trip out of storage — the
+     * one place a caller needs to flush its own in-memory edits first.
+     */
+    async importCloudTripAsProfile(
+        fileId: string,
+        beforeCommit?: () => void,
+    ): Promise<{ ok: true; yaml: string; profileId: string; } | { ok: false; yaml: string; error: string; } | null> {
+        const pulled = await this.loadTripYaml(fileId);
+        if (!pulled) return null;
+        const yaml = pulled.yaml;
+        try {
+            validateYaml(yaml);
+        } catch (err) {
+            const error = err instanceof Error ? err.message : "雲端 YAML 格式錯誤，請檢查！";
+            return { ok: false, yaml, error };
+        }
+        beforeCommit?.();
+        const profileId = createProfile(yaml);
+        // The bytes just downloaded, not the cached listing's checksum: a stale entry
+        // would record an agreement matching no version and report a conflict nobody
+        // caused.
+        this.adoptCloudTrip(profileId, fileId, yaml, pulled.md5);
+        return { ok: true, yaml, profileId };
     }
 
     async deleteTrip(fileId: string): Promise<boolean> {
