@@ -15,34 +15,36 @@ import { onMount } from "svelte";
 import {
     decodeShareToken,
     parseShareToken,
-} from "../../domain/share";
-import { formatBackupTime } from "../../domain/utils";
-import { fetchDefaultYamlText } from "../../infra/api/api-fetch";
-import { importSharedTrip } from "../../infra/api/share-import";
+} from "../../../domain/share";
 import {
-    backupCurrentYaml,
-    getYamlBackup,
-    listYamlBackups,
     serializeToYaml,
     type TripData,
-    USER_YAML_KEY,
     validateYaml,
-    type YamlBackup,
-} from "../../infra/storage/api";
+} from "../../../domain/trip";
+import { formatBackupTime } from "../../../domain/utils";
+import { fetchDefaultYamlText } from "../../../infra/http/http-fetch";
+import { importSharedTrip } from "../../../infra/http/share-import";
 import {
     ensureActiveProfileId,
     isActiveProfile,
     type ProfileInfo,
     tripNameFromYaml,
     tripStartDateFromYaml,
-} from "../../infra/storage/profiles";
-import { gdriveSync } from "../../stores/gdrive.svelte";
-import { settingsDraft } from "../../stores/settings-draft.svelte";
+} from "../../../infra/storage/profiles";
+import {
+    backupCurrentYaml,
+    getYamlBackup,
+    listYamlBackups,
+    USER_YAML_KEY,
+    type YamlBackup,
+} from "../../../infra/storage/yaml-storage";
+import { gdriveSync } from "../../../stores/gdrive.svelte";
+import { settingsDraft } from "../../../stores/settings-draft.svelte";
 import {
     copyToClipboard,
     showToast,
-} from "../../stores/toast.svelte";
-import ConfirmBar from "../shared/ConfirmBar.svelte";
+} from "../../../stores/toast.svelte";
+import ConfirmBar from "../../shared/ConfirmBar.svelte";
 import ProfileManager from "./ProfileManager.svelte";
 
 interface Props {

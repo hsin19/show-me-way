@@ -5,12 +5,9 @@
 // was the one that overwrote a stranger's cloud file.
 
 import {
-    backupCurrentYaml,
-    saveTripData,
     serializeToYaml,
     type TripData,
-    USER_YAML_KEY,
-} from "../storage/api";
+} from "../../domain/trip";
 import {
     createProfile,
     ensureUniqueTripId,
@@ -18,6 +15,11 @@ import {
     getActiveProfileId,
     switchToProfile,
 } from "../storage/profiles";
+import {
+    backupCurrentYaml,
+    saveTripData,
+    USER_YAML_KEY,
+} from "../storage/yaml-storage";
 
 export type ShareImportOutcome =
     /** Replaced this device's copy of that same trip, keeping its profile slot, id, and Drive binding. */

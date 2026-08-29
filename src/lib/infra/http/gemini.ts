@@ -1,11 +1,11 @@
 import {
+    serializeToYaml,
+    type TripData,
+} from "../../domain/trip";
+import {
     splitDayDate,
     toLocalIsoDate,
 } from "../../domain/utils";
-import {
-    serializeToYaml,
-    type TripData,
-} from "../storage/api";
 
 export const GEMINI_API_KEY_STORAGE = "showmeway_gemini_api_key";
 export const GEMINI_MODEL_STORAGE = "showmeway_gemini_model";

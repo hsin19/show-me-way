@@ -1,10 +1,10 @@
 <script lang="ts">
 import X from "@lucide/svelte/icons/x";
 import { fade } from "svelte/transition";
-import type { EnlargedCard } from "../../domain/enlarge";
 import { prefersReducedMotion } from "../../domain/utils";
 import { acquireScreenWakeLock } from "../../infra/pwa/wakelock";
 import { copyToClipboard } from "../../stores/toast.svelte";
+import type { EnlargedCard } from "../shared/enlarge";
 
 interface Props {
     /** Null closes the overlay. Mounted once in App, so two cards can never stack. */

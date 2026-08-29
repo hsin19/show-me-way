@@ -1,5 +1,4 @@
 <script lang="ts">
-import type { EnlargedCard } from "../../domain/enlarge";
 import type { ExpenseItem } from "../../domain/ledger";
 import {
     findCurrentEventIndex,
@@ -8,12 +7,13 @@ import {
     getNextEventInfo,
 } from "../../domain/timeline";
 import { toLocalIsoDate } from "../../domain/utils";
-import type { DailyWeather } from "../../infra/api/weather";
 import type {
     DayItinerary,
     TripData,
-} from "../../infra/storage/api";
+} from "../../infra../../domain/trip";
+import type { DailyWeather } from "../../infra/http/weather";
 import type { ProfileInfo } from "../../infra/storage/profiles";
+import type { EnlargedCard } from "../shared/enlarge";
 import TabPager from "../shared/TabPager.svelte";
 import DayChip from "./DayChip.svelte";
 import Timeline from "./Timeline.svelte";

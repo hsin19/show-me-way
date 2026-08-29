@@ -1,11 +1,11 @@
+import type { DayItinerary } from "../domain/trip";
 import {
     type DailyWeather,
     type DailyWeatherByDate,
     loadDailyWeather,
     resolveTripCity,
     staleAgeHours,
-} from "../infra/api/weather";
-import type { DayItinerary } from "../infra/storage/api";
+} from "../infra/http/weather";
 
 export class WeatherStore {
     byCity = $state<Record<string, { byDate: DailyWeatherByDate; fetchedAt: number; }>>({});
@@ -17,7 +17,7 @@ export class WeatherStore {
     }
 
     /**
-     * Keeps what is already on screen. Cache-first (3h TTL in lib/infra/api/weather.ts),
+     * Keeps what is already on screen. Cache-first (3h TTL in lib/infra/http/weather.ts),
      * so calling it repeatedly costs nothing until the data is actually stale.
      */
     refresh(days: DayItinerary[], defaultCity?: string) {

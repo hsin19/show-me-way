@@ -6,7 +6,7 @@ import {
     it,
     vi,
 } from "vitest";
-import { validateYaml } from "../infra/storage/api";
+import { validateYaml } from "../domain/trip";
 import { TripStore } from "./trip.svelte";
 
 const TEST_YAML = `trip:

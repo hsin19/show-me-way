@@ -7,10 +7,12 @@
 import {
     genTripId,
     parseYaml,
-    readJsonArray,
     type TripData,
+} from "../../domain/trip";
+import {
+    readJsonArray,
     USER_YAML_KEY,
-} from "./api";
+} from "./yaml-storage";
 
 export const PROFILES_KEY = "showmeway_profiles";
 export const ACTIVE_PROFILE_KEY = "showmeway_active_profile";

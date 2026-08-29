@@ -12,18 +12,20 @@ import {
     vi,
 } from "vitest";
 import {
-    listYamlBackups,
     serializeToYaml,
     type TripData,
-    USER_YAML_KEY,
     validateYaml,
-} from "../storage/api";
+} from "../../domain/trip";
 import {
     ACTIVE_PROFILE_KEY,
     getActiveProfileId,
     listProfiles,
     tripIdFromYaml,
 } from "../storage/profiles";
+import {
+    listYamlBackups,
+    USER_YAML_KEY,
+} from "../storage/yaml-storage";
 import { importSharedTrip } from "./share-import";
 
 function createLocalStorageStub() {

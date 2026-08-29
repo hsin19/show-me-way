@@ -13,28 +13,24 @@ import {
 } from "../domain/share";
 import { buildDayReport } from "../domain/timeline";
 import {
-    insertAtClamped,
-    toLocalIsoDate,
-} from "../domain/utils";
-import {
-    fetchDefaultYamlText,
-    fetchItinerary,
-} from "../infra/api/api-fetch";
-import { migrateGdriveSyncState } from "../infra/api/gdrive";
-import { importSharedTrip } from "../infra/api/share-import";
-import {
-    backupCurrentYaml,
     createChecklistItemId,
     createExpenseId,
     type DayItinerary,
-    downloadTextFile,
     genTripId,
-    saveTripData,
     serializeToYaml,
     type TripData,
-    USER_YAML_KEY,
     validateYaml,
-} from "../infra/storage/api";
+} from "../domain/trip";
+import {
+    insertAtClamped,
+    toLocalIsoDate,
+} from "../domain/utils";
+import { migrateGdriveSyncState } from "../infra/http/gdrive";
+import {
+    fetchDefaultYamlText,
+    fetchItinerary,
+} from "../infra/http/http-fetch";
+import { importSharedTrip } from "../infra/http/share-import";
 import {
     createProfile,
     deleteProfile,
@@ -45,6 +41,12 @@ import {
     switchToProfile,
     tripIdFromYaml,
 } from "../infra/storage/profiles";
+import {
+    backupCurrentYaml,
+    downloadTextFile,
+    saveTripData,
+    USER_YAML_KEY,
+} from "../infra/storage/yaml-storage";
 import { gdriveSync } from "./gdrive.svelte";
 import { settingsDraft } from "./settings-draft.svelte";
 import {

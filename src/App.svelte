@@ -10,18 +10,7 @@ import Sparkles from "@lucide/svelte/icons/sparkles";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import Wallet from "@lucide/svelte/icons/wallet";
 import { onMount } from "svelte";
-import type { EnlargedCard } from "./lib/domain/enlarge";
 import { getTodayIsoString } from "./lib/domain/utils";
-import ChatPanel from "./lib/features/ai/ChatPanel.svelte";
-import EnlargedCardOverlay from "./lib/features/itinerary/EnlargedCardOverlay.svelte";
-import ItineraryStrip from "./lib/features/itinerary/ItineraryStrip.svelte";
-import AppSettings from "./lib/features/settings/AppSettings.svelte";
-import SettingsPanel from "./lib/features/settings/SettingsPanel.svelte";
-import Toast from "./lib/features/shared/Toast.svelte";
-import Checklist from "./lib/features/tools/Checklist.svelte";
-import Ledger from "./lib/features/tools/Ledger.svelte";
-import PhraseDeck from "./lib/features/tools/PhraseDeck.svelte";
-import ToolsTab from "./lib/features/tools/ToolsTab.svelte";
 import {
     checkForSwUpdate,
     initServiceWorkerUpdates,
@@ -30,6 +19,17 @@ import { gdriveSync } from "./lib/stores/gdrive.svelte";
 import { initPwaInstallPrompt } from "./lib/stores/pwa-install.svelte";
 import { tripStore } from "./lib/stores/trip.svelte";
 import { weatherStore } from "./lib/stores/weather.svelte";
+import ChatPanel from "./lib/ui/ai/ChatPanel.svelte";
+import EnlargedCardOverlay from "./lib/ui/itinerary/EnlargedCardOverlay.svelte";
+import ItineraryStrip from "./lib/ui/itinerary/ItineraryStrip.svelte";
+import type { EnlargedCard } from "./lib/ui/shared/enlarge";
+import Toast from "./lib/ui/shared/Toast.svelte";
+import Checklist from "./lib/ui/tools/Checklist.svelte";
+import Ledger from "./lib/ui/tools/Ledger.svelte";
+import PhraseDeck from "./lib/ui/tools/PhraseDeck.svelte";
+import AppSettings from "./lib/ui/tools/settings/AppSettings.svelte";
+import SettingsPanel from "./lib/ui/tools/settings/SettingsPanel.svelte";
+import ToolsTab from "./lib/ui/tools/ToolsTab.svelte";
 
 let currentDay = $state(1);
 let activeTab = $state("itinerary"); // itinerary | tools | ai

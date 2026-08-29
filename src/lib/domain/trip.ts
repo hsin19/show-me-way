@@ -2,15 +2,15 @@ import {
     dump as dumpYaml,
     loadAll as loadYamlDocuments,
 } from "js-yaml";
-import { type ExpenseItem } from "../../domain/ledger";
+import { type ExpenseItem } from "./ledger";
 import {
     formatEventMinutes,
     parseEventStartMinutes,
-} from "../../domain/timeline";
+} from "./timeline";
 import {
     addDaysIso,
     toUtcIsoDate,
-} from "../../domain/utils";
+} from "./utils";
 
 export interface ConfirmationInfo {
     /** Numeric codes must be quoted in YAML, or leading zeros are lost to number parsing. */
@@ -56,7 +56,7 @@ export interface DayItinerary {
     day: number;
     date: string;
     title: string;
-    /** Overrides `trip.city` for this day's weather lookup (multi-city trips). See `lib/weather.ts`. */
+    /** Overrides `trip.city` for this day's weather lookup (multi-city trips). See `lib/infra/http/weather.ts`. */
     city?: string;
     pace: string;
     timeline: TimelineEvent[];
@@ -97,7 +97,7 @@ export interface TripData {
         start: string; // YYYY-MM-DD
         end: string; // YYYY-MM-DD
         departure: string; // local date-time, e.g. 2026-06-11T14:00:00
-        /** Selects the built-in phrase set: 'ko', 'ja', 'en' — see `lib/phrases.ts`. */
+        /** Selects the built-in phrase set: 'ko', 'ja', 'en' — see `lib/domain/phrases.ts`. */
         lang?: string;
         /** Ledger currency, e.g. 'KRW', 'JPY', 'USD'. */
         currency?: string;
@@ -110,7 +110,7 @@ export interface TripData {
          * Weather-forecast city, overridable per day via `DayItinerary.city`.
          * English names ('Tokyo', 'Seoul') geocode reliably and only some CJK
          * names resolve; a ', XX' country suffix disambiguates. Unset simply
-         * hides the badge — see `lib/weather.ts`.
+         * hides the badge — see `lib/infra/http/weather.ts`.
          */
         city?: string;
         /** Ledger wallets/cards the trip uses, e.g. 'Suica', 'WOWPASS'. */
@@ -131,8 +131,6 @@ export interface ChecklistItem {
     /** Runtime-only, like `TimelineEvent._id`. */
     _id?: string;
 }
-
-export const USER_YAML_KEY = "showmeway_user_yaml";
 
 /**
  * A fresh identity for a trip or a profile slot. The fallback covers a non-secure context,
@@ -237,10 +235,6 @@ function validateEntryList(
  * wording stays this module's.
  */
 export function parseYaml(yaml: string): unknown {
-    // js-yaml's default maxAliases is unlimited, and share links feed this parser
-    // other people's YAML — without a cap a few-KB billion-laughs document
-    // explodes at parse time, past the size limits share.ts enforces on the
-    // compressed payload. Serialized trips carry no aliases at all (noRefs).
     const docs = loadYamlDocuments(yaml, null, { maxAliases: 100 });
     if (docs.length > 1) throw new Error("YAML 只能包含一份行程 (請移除多餘的 --- 文件分隔)");
     return docs[0];
@@ -257,8 +251,6 @@ const DEFAULT_PACE = "自由安排行程";
  */
 function deriveDeparture(firstDay: DayItinerary): string {
     const minutes = parseEventStartMinutes(firstDay.timeline[0]?.time ?? "") ?? 0;
-    // `parseEventStartMinutes` accepts the after-midnight timetable notation
-    // ("25:30"), which is not a wall-clock hour any Date can hold.
     const wrapped = minutes % (24 * 60);
     return `${firstDay.date}T${formatEventMinutes(wrapped)}:00`;
 }
@@ -290,8 +282,6 @@ function normalizeTripData(raw: unknown): TripData {
             if (value == null) {
                 throw new Error(`hotels 第 ${i + 1} 項缺少 ${field} 屬性`);
             }
-            // js-yaml turns an unquoted YYYY-MM-DD into a UTC-midnight Date. UTC
-            // getters recover the date as written, in any runner timezone.
             if ((field === "checkIn" || field === "checkOut") && value instanceof Date) {
                 fields[field] = toUtcIsoDate(value);
                 continue;
@@ -310,10 +300,6 @@ function normalizeTripData(raw: unknown): TripData {
     }
     validateOptionalString(data.trip.id, "trip", "id");
     for (const [i, day] of data.days.entries()) {
-        // A bare `-` in hand-written YAML parses to null, which would surface as
-        // a cryptic English TypeError out of `attachRuntimeIds` instead. Every
-        // message below counts by list position rather than by the `day` field,
-        // which may itself be missing or renumbered.
         if (!day || typeof day !== "object" || Array.isArray(day)) {
             throw new Error(`days 第 ${i + 1} 項必須是物件 (不可為空白列表項)`);
         }
@@ -322,8 +308,6 @@ function normalizeTripData(raw: unknown): TripData {
         if (dateVal == null) {
             throw new Error(`days 第 ${i + 1} 項缺少 date 屬性`);
         }
-        // An unquoted `2026-10-01` reaches us as a Date, and the dates below drive
-        // the whole sort/gap/day-number derivation, so coerce rather than reject.
         if (dateVal instanceof Date) {
             dateVal = toUtcIsoDate(dateVal);
         }
@@ -384,7 +368,6 @@ function normalizeTripData(raw: unknown): TripData {
             validateOptionalString((item as { text?: unknown; }).text, `${listName} 第 ${j + 1} 項`, "text");
         }
     }
-    // Normally app-generated, but a hand-edited YAML reaches here too.
     if (data.expenses != null) {
         if (!Array.isArray(data.expenses)) {
             throw new Error("expenses 必須是列表");
@@ -396,10 +379,6 @@ function normalizeTripData(raw: unknown): TripData {
         }
     }
 
-    // `trip.start`/`trip.end`/`trip.departure` and `days[].day` are derived, never
-    // authored: one date per day is the only thing the user has to keep consistent.
-    // Sorting by date means `days` can be written in any order, and a skipped date
-    // becomes a free day rather than a hole in the day numbering.
     const sortedDays = [...data.days].sort((a, b) => a.date.localeCompare(b.date));
     const filledDays: DayItinerary[] = [];
     let cursor = sortedDays[0].date;
@@ -415,16 +394,12 @@ function normalizeTripData(raw: unknown): TripData {
 
     const trip: TripData["trip"] = {
         ...data.trip,
-        // Minted only when the document carries none: regenerating one would cut the trip
-        // loose from the Drive file that names it.
         id: data.trip.id?.trim() || genTripId(),
         start: filledDays[0].date,
         end: filledDays[filledDays.length - 1].date,
         departure: deriveDeparture(filledDays[0]),
     };
 
-    // Rebuilt field by field, which is what drops a legacy top-level `phrases`
-    // (now hard-coded per `trip.lang`) instead of round-tripping it back out.
     const normalized: TripData = {
         trip,
         days: filledDays,
@@ -442,15 +417,7 @@ function normalizeTripData(raw: unknown): TripData {
  * do not.
  */
 export function serializeToYaml(data: TripData): string {
-    // JSON round-trip, NOT structuredClone: `data` is usually a Svelte $state
-    // proxy, which structuredClone throws on. Unit tests pass plain objects and
-    // would not catch the swap.
     const clean = JSON.parse(JSON.stringify(data)) as TripData;
-    // Derived on every load (see `normalizeTripData`), so writing them back would
-    // freeze a stale copy the next edit silently contradicts. `trip.id` comes from the
-    // same place and deliberately stays: it is the trip's identity rather than a
-    // restatement of its contents, and stripping it would mint a new one on the next
-    // load and orphan the trip's Drive file.
     const trip = clean.trip as Partial<TripData["trip"]>;
     delete trip.start;
     delete trip.end;
@@ -462,113 +429,19 @@ export function serializeToYaml(data: TripData): string {
             delete ev._id;
         }
     }
-    // The `id`s are from the pre-`_id` checklist schema and the old localStorage
-    // ledger; dropping them here is what finally cleans them out of a saved trip.
     for (const item of [...clean.todo, ...clean.packing, ...clean.expenses]) {
         delete item._id;
         delete (item as { id?: string; }).id;
     }
 
     const body = dumpYaml(clean, {
-        lineWidth: -1, // no folding — long strings stay on one line
+        lineWidth: -1,
         quoteStyle: "single",
         forceQuotes: false,
-        noRefs: true, // never emit &anchor / *alias
+        noRefs: true,
     });
 
     return SCHEMA_LINE + body;
-}
-
-export function saveTripData(data: TripData, yaml: string = serializeToYaml(data)): void {
-    localStorage.setItem(USER_YAML_KEY, yaml);
-}
-
-export const YAML_BACKUPS_KEY = "showmeway_yaml_backups";
-const MAX_YAML_BACKUPS = 5;
-
-export interface YamlBackup {
-    savedAt: string; // ISO date-time
-    yaml: string;
-}
-
-/**
- * A localStorage key holding a JSON array, filtered down to elements `isValid`
- * accepts. Missing, unparseable, non-array, or otherwise unreadable storage all
- * come back as `[]` rather than throwing — every caller's storage is optional.
- */
-export function readJsonArray<T>(key: string, isValid: (value: unknown) => value is T): T[] {
-    try {
-        const raw = localStorage.getItem(key);
-        if (!raw) return [];
-        const parsed: unknown = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return [];
-        return parsed.filter(isValid);
-    } catch {
-        return [];
-    }
-}
-
-/** Newest first. Unreadable or malformed storage yields []. */
-export function listYamlBackups(): YamlBackup[] {
-    return readJsonArray(YAML_BACKUPS_KEY, (entry): entry is YamlBackup =>
-        !!entry && typeof entry === "object"
-        && typeof (entry as YamlBackup).savedAt === "string"
-        && typeof (entry as YamlBackup).yaml === "string");
-}
-
-/** The localStorage keys the backup ring occupies, for the storage accounting in App 設定. */
-export function yamlBackupKeys(): string[] {
-    return localStorage.getItem(YAML_BACKUPS_KEY) === null ? [] : [YAML_BACKUPS_KEY];
-}
-
-/**
- * Irreversible — unlike the caches, nothing refetches these — so callers must
- * confirm first. Returns whether there was anything to drop.
- */
-export function clearYamlBackups(): boolean {
-    const existed = yamlBackupKeys().length > 0;
-    localStorage.removeItem(YAML_BACKUPS_KEY);
-    return existed;
-}
-
-export function getYamlBackup(savedAt: string): string | null {
-    return listYamlBackups().find(b => b.savedAt === savedAt)?.yaml ?? null;
-}
-
-/**
- * Snapshot the user YAML before overwriting it — this ring is the only undo there
- * is, so every destructive path owes it a call. Repeated calls on unchanged
- * content are free, and it never throws: losing a backup must not block the save
- * it was protecting.
- */
-export function backupCurrentYaml(): void {
-    const yaml = localStorage.getItem(USER_YAML_KEY);
-    if (!yaml) return;
-    const backups = listYamlBackups();
-    if (backups[0]?.yaml === yaml) return;
-    backups.unshift({ savedAt: new Date().toISOString(), yaml });
-    try {
-        localStorage.setItem(YAML_BACKUPS_KEY, JSON.stringify(backups.slice(0, MAX_YAML_BACKUPS)));
-    } catch (err) {
-        console.warn("[API] Failed to save YAML backup:", err);
-    }
-}
-
-/**
- * Hand a generated file (YAML export, ledger CSV) to the device — the only way
- * trip data leaves localStorage. On an iOS standalone PWA it arrives via the
- * Files app / share sheet rather than a downloads folder.
- */
-export function downloadTextFile(filename: string, content: string, mimeType: string): void {
-    const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    // The download reads the URL asynchronously, so revoking inline would race it.
-    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 /** `_id` for an item created at runtime: unique for the session, and stripped again on save. */

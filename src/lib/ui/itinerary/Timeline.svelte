@@ -13,7 +13,6 @@ import Play from "@lucide/svelte/icons/play";
 import Share2 from "@lucide/svelte/icons/share-2";
 import SkipForward from "@lucide/svelte/icons/skip-forward";
 import Zap from "@lucide/svelte/icons/zap";
-import type { EnlargedCard } from "../../domain/enlarge";
 import { sanitizeLinkHref } from "../../domain/markdown";
 import {
     classifyTimelineEvents,
@@ -21,11 +20,12 @@ import {
     isOvernightStay,
     mapSearch,
 } from "../../domain/timeline";
-import type { DailyWeather } from "../../infra/api/weather";
 import type {
     DayItinerary,
     HotelInfo,
-} from "../../infra/storage/api";
+} from "../../infra../../domain/trip";
+import type { DailyWeather } from "../../infra/http/weather";
+import type { EnlargedCard } from "../shared/enlarge";
 import GoogleMapsIcon from "../shared/icons/GoogleMapsIcon.svelte";
 import NaverIcon from "../shared/icons/NaverIcon.svelte";
 import RichText from "../shared/RichText.svelte";

@@ -8,9 +8,8 @@ import {
 } from "vitest";
 import {
     serializeToYaml,
-    USER_YAML_KEY,
     validateYaml,
-} from "./api";
+} from "../../domain/trip";
 import {
     ACTIVE_PROFILE_KEY,
     createProfile,
@@ -25,6 +24,7 @@ import {
     tripNameFromYaml,
     tripStartDateFromYaml,
 } from "./profiles";
+import { USER_YAML_KEY } from "./yaml-storage";
 
 // Minimal YAML carrying just a trip.name — tripNameFromYaml parses the raw YAML
 // directly (no full-structure validation), so this is all the swap logic needs.

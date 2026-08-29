@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { createHash } from "node:crypto";
-import { yamlFingerprint } from "../../src/lib/infra/api/gdrive";
+import { yamlFingerprint } from "../../src/lib/infra/http/gdrive";
 import {
     expect,
     FIXTURE_YAML,

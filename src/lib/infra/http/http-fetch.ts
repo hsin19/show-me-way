@@ -3,9 +3,9 @@
 
 import {
     type TripData,
-    USER_YAML_KEY,
     validateYaml,
-} from "../storage/api";
+} from "../../domain/trip";
+import { USER_YAML_KEY } from "../storage/yaml-storage";
 
 /**
  * Null rather than a throw for every "not really there" outcome, so the caller

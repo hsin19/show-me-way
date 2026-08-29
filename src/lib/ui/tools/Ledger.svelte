@@ -25,7 +25,7 @@ import { toLocalIsoDate } from "../../domain/utils";
 import {
     isExchangeRateStale,
     loadExchangeRates,
-} from "../../infra/api/exchange";
+} from "../../infra/http/exchange";
 import { showToast } from "../../stores/toast.svelte";
 import ConfirmBar from "../shared/ConfirmBar.svelte";
 

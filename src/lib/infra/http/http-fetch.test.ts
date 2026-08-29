@@ -6,14 +6,12 @@ import {
     it,
     vi,
 } from "vitest";
-import {
-    USER_YAML_KEY,
-    validateYaml,
-} from "../storage/api";
+import { validateYaml } from "../../domain/trip";
+import { USER_YAML_KEY } from "../storage/yaml-storage";
 import {
     fetchDefaultYamlText,
     fetchItinerary,
-} from "./api-fetch";
+} from "./http-fetch";
 // The bundled default template, read as raw text (the src tsconfig has no node
 // types, so a Vite `?raw` import stands in for readFileSync here).
 import defaultTemplateYaml from "../../../../public/itinerary.yaml?raw";

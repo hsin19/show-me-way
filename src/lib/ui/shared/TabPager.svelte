@@ -1,8 +1,8 @@
 <script lang="ts" generics="T extends string | number">
 import type { Snippet } from "svelte";
 import { fly } from "svelte/transition";
-import { edgeFade } from "../../domain/edge-fade";
 import { prefersReducedMotion } from "../../domain/utils";
+import { edgeFade } from "./edge-fade";
 
 interface Props {
     /** Ordered keys; drives BOTH the chip row and the panel order, so the two cannot drift. */

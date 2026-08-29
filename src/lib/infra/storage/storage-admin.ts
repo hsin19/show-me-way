@@ -14,17 +14,17 @@ import { MANUAL_RATE_KEY_PREFIX } from "../../domain/ledger";
 import {
     clearExchangeCache,
     exchangeCacheKeys,
-} from "../api/exchange";
+} from "../http/exchange";
 import {
     clearWeatherCache,
     weatherCacheKeys,
-} from "../api/weather";
-import { yamlBackupKeys } from "./api";
+} from "../http/weather";
 import { clearStorageCacheMemory } from "./storage-cache";
+import { yamlBackupKeys } from "./yaml-storage";
 
 // Re-exported so the panel has one import for the whole surface, while the
 // removal itself stays with the backup ring's owner.
-export { clearYamlBackups } from "./api";
+export { clearYamlBackups } from "./yaml-storage";
 
 /** Every key this app writes carries this prefix, except the two cases below. */
 const APP_KEY_PREFIX = "showmeway_";

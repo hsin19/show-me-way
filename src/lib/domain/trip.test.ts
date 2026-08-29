@@ -10,11 +10,13 @@ import {
     backupCurrentYaml,
     getYamlBackup,
     listYamlBackups,
-    serializeToYaml,
     USER_YAML_KEY,
-    validateYaml,
     YAML_BACKUPS_KEY,
-} from "./api";
+} from "../infra/storage/yaml-storage";
+import {
+    serializeToYaml,
+    validateYaml,
+} from "./trip";
 
 // Minimal valid itinerary wrapping the given `trip.hotels` YAML list body.
 function tripYaml(hotelsYaml: string): string {

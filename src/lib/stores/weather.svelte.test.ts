@@ -3,7 +3,7 @@ import {
     expect,
     it,
 } from "vitest";
-import type { DayItinerary } from "../infra/storage/api";
+import type { DayItinerary } from "../domain/trip";
 import { WeatherStore } from "./weather.svelte";
 
 describe("WeatherStore", () => {

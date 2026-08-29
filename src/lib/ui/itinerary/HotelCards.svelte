@@ -3,11 +3,11 @@ import BedDouble from "@lucide/svelte/icons/bed-double";
 import Calendar from "@lucide/svelte/icons/calendar";
 import Copy from "@lucide/svelte/icons/copy";
 import Maximize2 from "@lucide/svelte/icons/maximize-2";
-import type { EnlargedCard } from "../../domain/enlarge";
 import { isOvernightStay } from "../../domain/timeline";
 import { splitDayDate } from "../../domain/utils";
-import type { HotelInfo } from "../../infra/storage/api";
+import type { HotelInfo } from "../../infra../../domain/trip";
 import { copyToClipboard } from "../../stores/toast.svelte";
+import type { EnlargedCard } from "../shared/enlarge";
 import ConfirmationChips from "./ConfirmationChips.svelte";
 
 interface Props {

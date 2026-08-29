@@ -1,5 +1,10 @@
 import { SvelteSet } from "svelte/reactivity";
 import {
+    serializeToYaml,
+    type TripData,
+    validateYaml,
+} from "../domain/trip";
+import {
     buildRebindRecord,
     clearCachedAccessToken,
     clearGdriveUser,
@@ -25,12 +30,7 @@ import {
     type TripSyncRecord,
     uploadOrUpdateCloudTrip,
     yamlFingerprint,
-} from "../infra/api/gdrive";
-import {
-    serializeToYaml,
-    type TripData,
-    validateYaml,
-} from "../infra/storage/api";
+} from "../infra/http/gdrive";
 import {
     createProfile,
     ensureUniqueTripId,
