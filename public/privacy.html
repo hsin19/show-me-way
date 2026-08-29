@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>隱私權政策 (Privacy Policy) - ShowMeWay</title>
+        <link rel="icon" type="image/svg+xml" href="icon.svg">
+        <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --border: #334155;
+            --code-bg: #0b1120;
+        }
+        @media (prefers-color-scheme: light) {
+            :root {
+                --bg-color: #f8fafc;
+                --card-bg: #ffffff;
+                --text-main: #0f172a;
+                --text-muted: #64748b;
+                --accent: #0284c7;
+                --border: #e2e8f0;
+                --code-bg: #f1f5f9;
+            }
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.7;
+            padding: 2rem 1rem;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 1rem;
+            padding: 2.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+        header {
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 0.5rem;
+        }
+        .subtitle {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+        }
+        h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin-top: 2rem;
+            margin-bottom: 0.75rem;
+        }
+        p, ul {
+            margin-bottom: 1rem;
+            color: var(--text-main);
+        }
+        ul {
+            padding-left: 1.5rem;
+        }
+        li {
+            margin-bottom: 0.5rem;
+        }
+        a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .highlight-box {
+            background: var(--code-bg);
+            border-left: 4px solid var(--accent);
+            padding: 1rem 1.25rem;
+            border-radius: 0.5rem;
+            margin: 1.25rem 0;
+            font-size: 0.95rem;
+        }
+        code {
+            background: var(--code-bg);
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-size: 0.9em;
+            color: var(--accent);
+        }
+        footer {
+            margin-top: 2.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            text-align: center;
+        }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <h1>ShowMeWay 隱私權政策 (Privacy Policy)</h1>
+                <p class="subtitle">最後更新日期 (Last Updated)：2026 年 8 月</p>
+            </header>
+
+            <section>
+                <h2>1. 簡介 (Introduction)</h2>
+                <p>
+                    歡迎使用 <strong>ShowMeWay</strong>（以下簡稱「本應用程式」，網址：<a href="https://trip.hsin19.com">https://trip.hsin19.com</a>）。 本應用程式是一款純前端運行的旅行行程輔助漸進式網頁應用（PWA）。我們非常重視您的個人隱私，並致力於保護您的個人資料安全。
+                </p>
+            </section>
+
+            <section>
+                <h2>2. 資料收集與儲存方式 (Data Collection & Storage)</h2>
+                <div class="highlight-box">
+                    <strong>重點承諾：</strong>ShowMeWay 是純前端應用程式，我們<strong>沒有運作任何後端伺服器</strong>來收集、記錄、追蹤或轉移您的個人資料與行程內容。
+                </div>
+                <ul>
+                    <li>
+                        <strong>本機儲存 (Local Storage)：</strong>您的所有行程資料（YAML）、待辦與行李清單、記帳紀錄及個人偏好設定，均僅儲存在您裝置的瀏覽器本機儲存空間（<code>localStorage</code>）中。
+                    </li>
+                    <li>
+                        <strong>不進行第三方資料轉移：</strong>除了您主動啟用的 Google 雲端硬碟同步或 AI 功能外，本應用程式不會將任何資料傳送至外部伺服器。
+                    </li>
+                </ul>
+            </section>
+
+            <section>
+                <h2>3. Google 帳號與 Google Drive 授權聲明 (Google API & OAuth)</h2>
+                <p>
+                    當您選擇使用「Google Drive 雲端同步」功能時，本應用程式會請求以下必要的 Google 權限：
+                </p>
+                <ul>
+                    <li>
+                        <code>https://www.googleapis.com/auth/drive.file</code>：僅用於在您自己的 Google Drive 建立與管理名為 <code>ShowMeWay</code> 的專屬資料夾，以備份及同步您的行程檔案。<strong>本應用程式無法且絕不會存取您雲端硬碟中的其他非本應用程式建立的檔案。</strong>
+                    </li>
+                    <li>
+                        <code>https://www.googleapis.com/auth/userinfo.email</code> 與 <code>https://www.googleapis.com/auth/userinfo.profile</code>：僅用於在應用程式介面中顯示您目前登入的 Google 帳號名稱與頭像，以方便您確認同步狀態。
+                    </li>
+                </ul>
+                <div class="highlight-box">
+                    <strong>Google API 政策遵循聲明 (Google API Services User Data Policy Compliance)：</strong><br>
+                    ShowMeWay's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements.
+                </div>
+            </section>
+
+            <section>
+                <h2>4. 第三方服務與外部 API (Third-Party Services)</h2>
+                <ul>
+                    <li>
+                        <strong>Google Gemini API (可選)：</strong>若您自行在設定中填入個人 Gemini API Key 使用 AI 助手功能，對話與行程修改請求將直接由您的瀏覽器端發送至 Google Gemini 官方 API 端點，不經由任何第三方轉發。
+                    </li>
+                    <li>
+                        <strong>天氣資訊 (Open-Meteo)：</strong>本應用程式僅根據您在行程中填寫的城市名稱，向公開的 Open-Meteo API 查詢天氣預報。本應用程式<strong>不會</strong>要求或存取您的裝置 GPS 定位權限，查詢過程亦不包含任何使用者個人資訊。
+                    </li>
+                </ul>
+            </section>
+
+            <section>
+                <h2>5. 資料刪除與權限撤銷 (Data Deletion & Revocation)</h2>
+                <ul>
+                    <li>
+                        <strong>清除本機資料：</strong>您可隨時透過本應用程式「設定」中的「清除本機資料」功能，或直接清除瀏覽器快取與儲存空間，即可徹底刪除裝置上的所有資料。
+                    </li>
+                    <li>
+                        <strong>撤銷 Google 授權：</strong>您可隨時在應用程式設定中點擊「登出」，或前往 <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">Google 帳戶安全性設定</a> 隨時撤銷 ShowMeWay 的存取授權。
+                    </li>
+                </ul>
+            </section>
+
+            <section>
+                <h2>6. 聯絡開發者 (Contact Us)</h2>
+                <p>
+                    若您對本隱私權政策或 ShowMeWay 有任何疑問或建議，歡迎透過以下方式聯絡開發者：
+                </p>
+                <ul>
+                    <li>開發者：Eric Yeh</li>
+                    <li>電子郵件 (Email)：<a href="mailto:eric91343@gmail.com">eric91343@gmail.com</a></li>
+                    <li>專案原始碼 (GitHub)：<a href="https://github.com/hsin19/show-me-way" target="_blank" rel="noopener noreferrer">https://github.com/hsin19/show-me-way</a></li>
+                </ul>
+            </section>
+
+            <footer>
+                &copy; 2026 ShowMeWay. All rights reserved.
+            </footer>
+        </div>
+    </body>
+</html>

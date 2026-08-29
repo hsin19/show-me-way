@@ -567,6 +567,20 @@ function handleFullReset() {
             <GitHubIcon size={16} aria-hidden="true" />
         </a>
     </div>
+    <div class="mb-1.5">
+        <a
+            href="./privacy.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="
+                text-xs text-text-muted hover:text-text-primary transition-colors
+                inline-flex items-center gap-1
+            "
+        >
+            隱私權政策
+            <ExternalLink size={12} aria-hidden="true" />
+        </a>
+    </div>
     <p class="text-[11px] text-text-muted leading-normal">
         版本：{#if commitUrl}<a
                 href={commitUrl}
