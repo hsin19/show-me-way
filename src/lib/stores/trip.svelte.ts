@@ -1,17 +1,16 @@
-import { SvelteDate } from "svelte/reactivity";
 import {
     buildLedgerCsv,
     parseLegacyExpenses,
-} from "../domain/ledger";
-import { getLanguageConfig } from "../domain/phrases";
+} from "$lib/domain/ledger";
+import { getLanguageConfig } from "$lib/domain/phrases";
 import {
     buildShareUrl,
     clearShareHash,
     decodeShareToken,
     isShareSupported,
     readShareTokenFromHash,
-} from "../domain/share";
-import { buildDayReport } from "../domain/timeline";
+} from "$lib/domain/share";
+import { buildDayReport } from "$lib/domain/timeline";
 import {
     createChecklistItemId,
     createExpenseId,
@@ -20,17 +19,17 @@ import {
     serializeToYaml,
     type TripData,
     validateYaml,
-} from "../domain/trip";
+} from "$lib/domain/trip";
 import {
     insertAtClamped,
     toLocalIsoDate,
-} from "../domain/utils";
-import { migrateGdriveSyncState } from "../infra/http/gdrive";
+} from "$lib/domain/utils";
+import { migrateGdriveSyncState } from "$lib/infra/http/gdrive";
 import {
     fetchDefaultYamlText,
     fetchItinerary,
-} from "../infra/http/itinerary-loader";
-import { downloadTextFile } from "../infra/pwa/file-download";
+} from "$lib/infra/http/itinerary-loader";
+import { downloadTextFile } from "$lib/infra/pwa/file-download";
 import {
     createProfile,
     deleteProfile,
@@ -40,13 +39,14 @@ import {
     type ProfileInfo,
     switchToProfile,
     tripIdFromYaml,
-} from "../infra/storage/profiles";
-import { importSharedTrip } from "../infra/storage/share-import";
+} from "$lib/infra/storage/profiles";
+import { importSharedTrip } from "$lib/infra/storage/share-import";
 import {
     backupCurrentYaml,
     saveTripData,
     USER_YAML_KEY,
-} from "../infra/storage/yaml-storage";
+} from "$lib/infra/storage/yaml-storage";
+import { SvelteDate } from "svelte/reactivity";
 import { gdriveSync } from "./gdrive.svelte";
 import { settingsDraft } from "./settings-draft.svelte";
 import {

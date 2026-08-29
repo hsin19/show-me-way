@@ -1,9 +1,9 @@
 <script lang="ts">
+import type { ConfirmationInfo } from "$lib/domain/trip";
+import { copyToClipboard } from "$lib/stores/toast.svelte";
+import type { ConfirmationCard } from "$lib/ui/shared/enlarge";
 import Maximize2 from "@lucide/svelte/icons/maximize-2";
 import Ticket from "@lucide/svelte/icons/ticket";
-import type { ConfirmationInfo } from "../../domain/trip";
-import { copyToClipboard } from "../../stores/toast.svelte";
-import type { ConfirmationCard } from "../shared/enlarge";
 
 interface Props {
     confirmation: ConfirmationInfo;

@@ -1,6 +1,6 @@
 <script lang="ts">
+import { splitDayDate } from "$lib/domain/utils";
 import Plane from "@lucide/svelte/icons/plane";
-import { splitDayDate } from "../../domain/utils";
 
 // Only what a chip looks like — the row around it belongs to TabPager.
 

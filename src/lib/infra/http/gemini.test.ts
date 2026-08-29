@@ -1,3 +1,4 @@
+import type { TripData } from "$lib/domain/trip";
 import {
     afterEach,
     beforeEach,
@@ -6,7 +7,6 @@ import {
     it,
     vi,
 } from "vitest";
-import type { TripData } from "../../domain/trip";
 import {
     clearGeminiApiKey,
     clearGeminiModelsMemory,

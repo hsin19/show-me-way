@@ -6,12 +6,12 @@ export const GDRIVE_AUTO_SYNC_STORAGE = "showmeway_gdrive_auto_sync";
 export const GDRIVE_FOLDER_ID_STORAGE = "showmeway_gdrive_folder_id";
 export const GDRIVE_TRIPS_STORAGE = "showmeway_gdrive_trips";
 
-import { tripStartDateFromYaml } from "../storage/profiles";
+import { tripStartDateFromYaml } from "$lib/infra/storage/profiles";
 import {
     readCachedJson,
     removeCachedKeys,
     writeCachedJson,
-} from "../storage/storage-cache";
+} from "$lib/infra/storage/storage-cache";
 
 export const GDRIVE_FOLDER_NAME = "ShowMeWay";
 /** Checked explicitly after consent; the userinfo scopes fail loudly in `connect()` instead. */

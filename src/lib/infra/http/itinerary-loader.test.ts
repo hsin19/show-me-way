@@ -1,3 +1,5 @@
+import { validateYaml } from "$lib/domain/trip";
+import { USER_YAML_KEY } from "$lib/infra/storage/yaml-storage";
 import {
     afterEach,
     beforeEach,
@@ -6,14 +8,13 @@ import {
     it,
     vi,
 } from "vitest";
-import { validateYaml } from "../../domain/trip";
-import { USER_YAML_KEY } from "../storage/yaml-storage";
 import {
     fetchDefaultYamlText,
     fetchItinerary,
 } from "./itinerary-loader";
 // The bundled default template, read as raw text (the src tsconfig has no node
 // types, so a Vite `?raw` import stands in for readFileSync here).
+// eslint-disable-next-line no-restricted-imports -- public/ fixture sits outside src/lib
 import defaultTemplateYaml from "../../../../public/itinerary.yaml?raw";
 
 // Minimal valid itinerary used as the fetched / stored YAML body.

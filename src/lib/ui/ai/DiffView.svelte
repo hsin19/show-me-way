@@ -1,10 +1,10 @@
 <script lang="ts">
-import ChevronDown from "@lucide/svelte/icons/chevron-down";
-import ChevronUp from "@lucide/svelte/icons/chevron-up";
 import {
     diffLines,
     diffStats,
-} from "../../domain/diff";
+} from "$lib/domain/diff";
+import ChevronDown from "@lucide/svelte/icons/chevron-down";
+import ChevronUp from "@lucide/svelte/icons/chevron-up";
 
 interface Props {
     base: string;

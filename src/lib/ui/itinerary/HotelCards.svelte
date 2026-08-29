@@ -1,13 +1,13 @@
 <script lang="ts">
+import { isOvernightStay } from "$lib/domain/timeline";
+import type { HotelInfo } from "$lib/domain/trip";
+import { splitDayDate } from "$lib/domain/utils";
+import { copyToClipboard } from "$lib/stores/toast.svelte";
+import type { EnlargedCard } from "$lib/ui/shared/enlarge";
 import BedDouble from "@lucide/svelte/icons/bed-double";
 import Calendar from "@lucide/svelte/icons/calendar";
 import Copy from "@lucide/svelte/icons/copy";
 import Maximize2 from "@lucide/svelte/icons/maximize-2";
-import { isOvernightStay } from "../../domain/timeline";
-import type { HotelInfo } from "../../domain/trip";
-import { splitDayDate } from "../../domain/utils";
-import { copyToClipboard } from "../../stores/toast.svelte";
-import type { EnlargedCard } from "../shared/enlarge";
 import ConfirmationChips from "./ConfirmationChips.svelte";
 
 interface Props {

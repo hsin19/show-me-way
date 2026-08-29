@@ -1,4 +1,8 @@
 import {
+    serializeToYaml,
+    validateYaml,
+} from "$lib/domain/trip";
+import {
     afterEach,
     beforeEach,
     describe,
@@ -6,10 +10,6 @@ import {
     it,
     vi,
 } from "vitest";
-import {
-    serializeToYaml,
-    validateYaml,
-} from "../../domain/trip";
 import {
     ACTIVE_PROFILE_KEY,
     createProfile,

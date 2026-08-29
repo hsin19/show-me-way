@@ -1,13 +1,4 @@
 <script lang="ts">
-import ArrowLeftRight from "@lucide/svelte/icons/arrow-left-right";
-import Banknote from "@lucide/svelte/icons/banknote";
-import Calculator from "@lucide/svelte/icons/calculator";
-import CreditCard from "@lucide/svelte/icons/credit-card";
-import Download from "@lucide/svelte/icons/download";
-import Plus from "@lucide/svelte/icons/plus";
-import Trash2 from "@lucide/svelte/icons/trash-2";
-import Wallet from "@lucide/svelte/icons/wallet";
-import { untrack } from "svelte";
 import {
     computeLedgerTotals,
     computeQuickAmounts,
@@ -20,14 +11,23 @@ import {
     ledgerTypeLabel,
     MANUAL_RATE_KEY_PREFIX,
     twdToForeign,
-} from "../../domain/ledger";
-import { toLocalIsoDate } from "../../domain/utils";
+} from "$lib/domain/ledger";
+import { toLocalIsoDate } from "$lib/domain/utils";
 import {
     isExchangeRateStale,
     loadExchangeRates,
-} from "../../infra/http/exchange";
-import { showToast } from "../../stores/toast.svelte";
-import ConfirmBar from "../shared/ConfirmBar.svelte";
+} from "$lib/infra/http/exchange";
+import { showToast } from "$lib/stores/toast.svelte";
+import ConfirmBar from "$lib/ui/shared/ConfirmBar.svelte";
+import ArrowLeftRight from "@lucide/svelte/icons/arrow-left-right";
+import Banknote from "@lucide/svelte/icons/banknote";
+import Calculator from "@lucide/svelte/icons/calculator";
+import CreditCard from "@lucide/svelte/icons/credit-card";
+import Download from "@lucide/svelte/icons/download";
+import Plus from "@lucide/svelte/icons/plus";
+import Trash2 from "@lucide/svelte/icons/trash-2";
+import Wallet from "@lucide/svelte/icons/wallet";
+import { untrack } from "svelte";
 
 interface Props {
     currency?: string;

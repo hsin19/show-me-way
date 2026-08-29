@@ -4,6 +4,11 @@
 // outgoing one's identity — that is what binds a stranger's trip to this device's Drive file.
 
 import {
+    serializeToYaml,
+    type TripData,
+    validateYaml,
+} from "$lib/domain/trip";
+import {
     afterEach,
     beforeEach,
     describe,
@@ -11,11 +16,6 @@ import {
     it,
     vi,
 } from "vitest";
-import {
-    serializeToYaml,
-    type TripData,
-    validateYaml,
-} from "../../domain/trip";
 import {
     ACTIVE_PROFILE_KEY,
     getActiveProfileId,

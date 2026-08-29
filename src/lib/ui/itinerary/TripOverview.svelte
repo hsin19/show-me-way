@@ -1,4 +1,24 @@
 <script lang="ts">
+import {
+    computeLedgerTotals,
+    type ExpenseItem,
+    formatAmount,
+    getCurrencyConfig,
+} from "$lib/domain/ledger";
+import { getLanguageConfig } from "$lib/domain/phrases";
+import { isOvernightStay } from "$lib/domain/timeline";
+import type {
+    DayItinerary,
+    TripData,
+} from "$lib/domain/trip";
+import {
+    formatDateRange,
+    splitDayDate,
+} from "$lib/domain/utils";
+import type { DailyWeather } from "$lib/infra/http/weather";
+import type { ProfileInfo } from "$lib/infra/storage/profiles";
+import type { EnlargedCard } from "$lib/ui/shared/enlarge";
+import ProfileManager from "$lib/ui/tools/settings/ProfileManager.svelte";
 import BedDouble from "@lucide/svelte/icons/bed-double";
 import CalendarRange from "@lucide/svelte/icons/calendar-range";
 import ChevronDown from "@lucide/svelte/icons/chevron-down";
@@ -8,26 +28,6 @@ import ListChecks from "@lucide/svelte/icons/list-checks";
 import Maximize2 from "@lucide/svelte/icons/maximize-2";
 import Share2 from "@lucide/svelte/icons/share-2";
 import Wallet from "@lucide/svelte/icons/wallet";
-import {
-    computeLedgerTotals,
-    type ExpenseItem,
-    formatAmount,
-    getCurrencyConfig,
-} from "../../domain/ledger";
-import { getLanguageConfig } from "../../domain/phrases";
-import { isOvernightStay } from "../../domain/timeline";
-import type {
-    DayItinerary,
-    TripData,
-} from "../../domain/trip";
-import {
-    formatDateRange,
-    splitDayDate,
-} from "../../domain/utils";
-import type { DailyWeather } from "../../infra/http/weather";
-import type { ProfileInfo } from "../../infra/storage/profiles";
-import type { EnlargedCard } from "../shared/enlarge";
-import ProfileManager from "../tools/settings/ProfileManager.svelte";
 import HotelCards from "./HotelCards.svelte";
 import WeatherBadge from "./WeatherBadge.svelte";
 

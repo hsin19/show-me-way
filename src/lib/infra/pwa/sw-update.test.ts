@@ -33,7 +33,7 @@ const { registerSWMock, updateSWMock, getRegisterOptions } = vi.hoisted(() => {
 vi.mock("virtual:pwa-register", () => ({ registerSW: registerSWMock }));
 
 type SwUpdateModule = typeof import("./sw-update");
-type ToastModule = typeof import("../../stores/toast.svelte");
+type ToastModule = typeof import("$lib/stores/toast.svelte");
 
 let swUpdate: SwUpdateModule;
 let toastModule: ToastModule;
@@ -71,15 +71,15 @@ async function loadModule() {
     registerSWMock.mockClear();
     updateSWMock.mockClear();
     swUpdate = await import("./sw-update");
-    toastModule = await import("../../stores/toast.svelte");
+    toastModule = await import("$lib/stores/toast.svelte");
 }
 
 describe("sw-update module", () => {
     beforeEach(async () => {
-        vi.useFakeTimers();
         stubWindow();
         vi.stubGlobal("navigator", { onLine: true });
         await loadModule();
+        vi.useFakeTimers();
     });
 
     afterEach(() => {

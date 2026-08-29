@@ -1,6 +1,6 @@
 <script lang="ts">
+import TabPager from "$lib/ui/shared/TabPager.svelte";
 import type { Snippet } from "svelte";
-import TabPager from "../shared/TabPager.svelte";
 
 // `settings` is the trip-level 行程管理 page; `prefs` is the app-level App 設定 page.
 type ToolTabId = "prep" | "ledger" | "phrases" | "settings" | "prefs";

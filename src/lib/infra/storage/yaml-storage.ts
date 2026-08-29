@@ -1,7 +1,7 @@
 import {
     serializeToYaml,
     type TripData,
-} from "../../domain/trip";
+} from "$lib/domain/trip";
 
 export const USER_YAML_KEY = "showmeway_user_yaml";
 export const YAML_BACKUPS_KEY = "showmeway_yaml_backups";

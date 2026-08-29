@@ -1,6 +1,10 @@
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { execSync } from "node:child_process";
+import {
+    fileURLToPath,
+    URL,
+} from "node:url";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
@@ -28,6 +32,11 @@ const buildTime = new Date().toISOString();
 
 export default defineConfig({
     base,
+    resolve: {
+        alias: {
+            $lib: fileURLToPath(new URL("./src/lib", import.meta.url)),
+        },
+    },
     define: {
         __APP_VERSION__: JSON.stringify(appVersion),
         __BUILD_TIME__: JSON.stringify(buildTime),

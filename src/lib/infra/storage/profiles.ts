@@ -8,7 +8,7 @@ import {
     genTripId,
     parseYaml,
     type TripData,
-} from "../../domain/trip";
+} from "$lib/domain/trip";
 import {
     readJsonArray,
     USER_YAML_KEY,

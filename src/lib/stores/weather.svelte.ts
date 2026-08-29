@@ -1,11 +1,11 @@
-import type { DayItinerary } from "../domain/trip";
+import type { DayItinerary } from "$lib/domain/trip";
 import {
     type DailyWeather,
     type DailyWeatherByDate,
     loadDailyWeather,
     resolveTripCity,
     staleAgeHours,
-} from "../infra/http/weather";
+} from "$lib/infra/http/weather";
 
 export class WeatherStore {
     byCity = $state<Record<string, { byDate: DailyWeatherByDate; fetchedAt: number; }>>({});

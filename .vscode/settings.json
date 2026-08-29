@@ -4,5 +4,6 @@
   },
   "cSpell.words": [
     "gdrive"
-  ]
+  ],
+  "js/ts.preferences.importModuleSpecifier": "non-relative"
 }

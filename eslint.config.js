@@ -39,4 +39,44 @@ export default defineConfig(
             },
         },
     },
+    {
+        files: ["src/**/*.{ts,js,svelte}", "e2e/**/*.ts"],
+        rules: {
+            "no-restricted-imports": [
+                "error",
+                {
+                    patterns: [
+                        {
+                            group: ["../*"],
+                            message: "Use '$lib/...' instead of cross-directory relative paths ('../'). Sibling imports may use './'.",
+                        },
+                    ],
+                },
+            ],
+        },
+    },
+    {
+        files: ["src/lib/domain/**/*.{ts,js}"],
+        rules: {
+            "no-restricted-imports": [
+                "error",
+                {
+                    patterns: [
+                        {
+                            group: [
+                                "../*",
+                                "$lib/infra",
+                                "$lib/infra/*",
+                                "$lib/stores",
+                                "$lib/stores/*",
+                                "$lib/ui",
+                                "$lib/ui/*",
+                            ],
+                            message: "domain/ is a pure calculation layer and must not depend on outer modules ($lib/infra, $lib/stores, $lib/ui).",
+                        },
+                    ],
+                },
+            ],
+        },
+    },
 );

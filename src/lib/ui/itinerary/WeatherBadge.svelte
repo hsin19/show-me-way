@@ -1,4 +1,9 @@
 <script lang="ts">
+import {
+    type DailyWeather,
+    weatherCodeInfo,
+    type WeatherIconKind,
+} from "$lib/infra/http/weather";
 import Cloud from "@lucide/svelte/icons/cloud";
 import CloudDrizzle from "@lucide/svelte/icons/cloud-drizzle";
 import CloudFog from "@lucide/svelte/icons/cloud-fog";
@@ -8,11 +13,6 @@ import CloudSnow from "@lucide/svelte/icons/cloud-snow";
 import CloudSun from "@lucide/svelte/icons/cloud-sun";
 import Droplets from "@lucide/svelte/icons/droplets";
 import Sun from "@lucide/svelte/icons/sun";
-import {
-    type DailyWeather,
-    weatherCodeInfo,
-    type WeatherIconKind,
-} from "../../infra/http/weather";
 
 interface Props {
     weather: DailyWeather;

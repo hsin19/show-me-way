@@ -1,20 +1,20 @@
 <script lang="ts">
-import type { ExpenseItem } from "../../domain/ledger";
+import type { ExpenseItem } from "$lib/domain/ledger";
 import {
     findScrollTargetEventIndex,
     formatNextEventLabel,
     getCountdownText,
     getNextEventInfo,
-} from "../../domain/timeline";
+} from "$lib/domain/timeline";
 import type {
     DayItinerary,
     TripData,
-} from "../../domain/trip";
-import { toLocalIsoDate } from "../../domain/utils";
-import type { DailyWeather } from "../../infra/http/weather";
-import type { ProfileInfo } from "../../infra/storage/profiles";
-import type { EnlargedCard } from "../shared/enlarge";
-import TabPager from "../shared/TabPager.svelte";
+} from "$lib/domain/trip";
+import { toLocalIsoDate } from "$lib/domain/utils";
+import type { DailyWeather } from "$lib/infra/http/weather";
+import type { ProfileInfo } from "$lib/infra/storage/profiles";
+import type { EnlargedCard } from "$lib/ui/shared/enlarge";
+import TabPager from "$lib/ui/shared/TabPager.svelte";
 import DayChip from "./DayChip.svelte";
 import Timeline from "./Timeline.svelte";
 import TripOverview from "./TripOverview.svelte";

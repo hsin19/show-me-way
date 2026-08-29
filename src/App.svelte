@@ -1,4 +1,24 @@
 <script lang="ts">
+import { getTodayIsoString } from "$lib/domain/utils";
+import {
+    checkForSwUpdate,
+    initServiceWorkerUpdates,
+} from "$lib/infra/pwa/sw-update";
+import { gdriveSync } from "$lib/stores/gdrive.svelte";
+import { initPwaInstallPrompt } from "$lib/stores/pwa-install.svelte";
+import { tripStore } from "$lib/stores/trip.svelte";
+import { weatherStore } from "$lib/stores/weather.svelte";
+import ChatPanel from "$lib/ui/ai/ChatPanel.svelte";
+import EnlargedCardOverlay from "$lib/ui/itinerary/EnlargedCardOverlay.svelte";
+import ItineraryStrip from "$lib/ui/itinerary/ItineraryStrip.svelte";
+import type { EnlargedCard } from "$lib/ui/shared/enlarge";
+import Toast from "$lib/ui/shared/Toast.svelte";
+import Checklist from "$lib/ui/tools/Checklist.svelte";
+import Ledger from "$lib/ui/tools/Ledger.svelte";
+import PhraseDeck from "$lib/ui/tools/PhraseDeck.svelte";
+import AppSettings from "$lib/ui/tools/settings/AppSettings.svelte";
+import SettingsPanel from "$lib/ui/tools/settings/SettingsPanel.svelte";
+import ToolsTab from "$lib/ui/tools/ToolsTab.svelte";
 import Calendar from "@lucide/svelte/icons/calendar";
 import LayoutGrid from "@lucide/svelte/icons/layout-grid";
 import ListChecks from "@lucide/svelte/icons/list-checks";
@@ -10,26 +30,6 @@ import Sparkles from "@lucide/svelte/icons/sparkles";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import Wallet from "@lucide/svelte/icons/wallet";
 import { onMount } from "svelte";
-import { getTodayIsoString } from "./lib/domain/utils";
-import {
-    checkForSwUpdate,
-    initServiceWorkerUpdates,
-} from "./lib/infra/pwa/sw-update";
-import { gdriveSync } from "./lib/stores/gdrive.svelte";
-import { initPwaInstallPrompt } from "./lib/stores/pwa-install.svelte";
-import { tripStore } from "./lib/stores/trip.svelte";
-import { weatherStore } from "./lib/stores/weather.svelte";
-import ChatPanel from "./lib/ui/ai/ChatPanel.svelte";
-import EnlargedCardOverlay from "./lib/ui/itinerary/EnlargedCardOverlay.svelte";
-import ItineraryStrip from "./lib/ui/itinerary/ItineraryStrip.svelte";
-import type { EnlargedCard } from "./lib/ui/shared/enlarge";
-import Toast from "./lib/ui/shared/Toast.svelte";
-import Checklist from "./lib/ui/tools/Checklist.svelte";
-import Ledger from "./lib/ui/tools/Ledger.svelte";
-import PhraseDeck from "./lib/ui/tools/PhraseDeck.svelte";
-import AppSettings from "./lib/ui/tools/settings/AppSettings.svelte";
-import SettingsPanel from "./lib/ui/tools/settings/SettingsPanel.svelte";
-import ToolsTab from "./lib/ui/tools/ToolsTab.svelte";
 
 let currentDay = $state(1);
 let activeTab = $state("itinerary"); // itinerary | tools | ai

@@ -9,6 +9,12 @@
 // `getValidToken` from ever reaching Google Identity Services.
 
 import {
+    ensureActiveProfileId,
+    getActiveProfileId,
+    listProfiles,
+} from "$lib/infra/storage/profiles";
+import { USER_YAML_KEY } from "$lib/infra/storage/yaml-storage";
+import {
     afterEach,
     beforeEach,
     describe,
@@ -16,14 +22,8 @@ import {
     it,
     vi,
 } from "vitest";
-import {
-    ensureActiveProfileId,
-    getActiveProfileId,
-    listProfiles,
-} from "../infra/storage/profiles";
-import { USER_YAML_KEY } from "../infra/storage/yaml-storage";
 
-type GdriveModule = typeof import("../infra/http/gdrive");
+type GdriveModule = typeof import("$lib/infra/http/gdrive");
 type SyncModule = typeof import("./gdrive.svelte");
 
 let gdrive: GdriveModule;
@@ -99,7 +99,7 @@ beforeEach(async () => {
     // Silences the toast service without pulling its timers into these tests.
     vi.doMock("./toast.svelte", () => ({ showToast: vi.fn() }));
 
-    gdrive = await import("../infra/http/gdrive");
+    gdrive = await import("$lib/infra/http/gdrive");
     // Signed in, with a token that has not expired, so no GIS popup is ever attempted.
     gdrive.saveGdriveUser({ email: "a@example.com", name: "A" });
     gdrive.setCachedAccessToken("token-1", 3600);

@@ -1,4 +1,41 @@
 <script lang="ts">
+import {
+    APP_VERSION,
+    formatBuildDate,
+    REPO_URL,
+    versionCommitUrl,
+} from "$lib/domain/version";
+import {
+    clearGeminiApiKey,
+    type GeminiModelFilterMode,
+    loadGeminiApiKey,
+    loadGeminiModelFilter,
+    saveGeminiApiKey,
+    saveGeminiModelFilter,
+} from "$lib/infra/http/gemini";
+import {
+    clearApiCache,
+    clearAppLocalStorage,
+    clearYamlBackups,
+    formatBytes,
+    getStorageSummary,
+} from "$lib/infra/storage/storage-admin";
+import { gdriveSync } from "$lib/stores/gdrive.svelte";
+import { createModelPicker } from "$lib/stores/gemini-models.svelte";
+import {
+    canPromptPwaInstall,
+    isIosDevice,
+    isStandaloneMode,
+    promptPwaInstall,
+} from "$lib/stores/pwa-install.svelte";
+import {
+    setThemePref,
+    theme,
+    type ThemePref,
+} from "$lib/stores/theme.svelte";
+import { showToast } from "$lib/stores/toast.svelte";
+import ConfirmBar from "$lib/ui/shared/ConfirmBar.svelte";
+import GitHubIcon from "$lib/ui/shared/icons/GitHubIcon.svelte";
 import Check from "@lucide/svelte/icons/check";
 import Cloud from "@lucide/svelte/icons/cloud";
 import CloudOff from "@lucide/svelte/icons/cloud-off";
@@ -20,43 +57,6 @@ import SquarePlus from "@lucide/svelte/icons/square-plus";
 import Sun from "@lucide/svelte/icons/sun";
 import Trash2 from "@lucide/svelte/icons/trash-2";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
-import {
-    APP_VERSION,
-    formatBuildDate,
-    REPO_URL,
-    versionCommitUrl,
-} from "../../../domain/version";
-import {
-    clearGeminiApiKey,
-    type GeminiModelFilterMode,
-    loadGeminiApiKey,
-    loadGeminiModelFilter,
-    saveGeminiApiKey,
-    saveGeminiModelFilter,
-} from "../../../infra/http/gemini";
-import {
-    clearApiCache,
-    clearAppLocalStorage,
-    clearYamlBackups,
-    formatBytes,
-    getStorageSummary,
-} from "../../../infra/storage/storage-admin";
-import { gdriveSync } from "../../../stores/gdrive.svelte";
-import { createModelPicker } from "../../../stores/gemini-models.svelte";
-import {
-    canPromptPwaInstall,
-    isIosDevice,
-    isStandaloneMode,
-    promptPwaInstall,
-} from "../../../stores/pwa-install.svelte";
-import {
-    setThemePref,
-    theme,
-    type ThemePref,
-} from "../../../stores/theme.svelte";
-import { showToast } from "../../../stores/toast.svelte";
-import ConfirmBar from "../../shared/ConfirmBar.svelte";
-import GitHubIcon from "../../shared/icons/GitHubIcon.svelte";
 
 // Everything here is a property of the device, not of a trip: nothing on this
 // page travels with a profile. Trip-level settings are 行程管理.

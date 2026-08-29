@@ -1,4 +1,20 @@
 <script lang="ts">
+import { sanitizeLinkHref } from "$lib/domain/markdown";
+import {
+    classifyTimelineEvents,
+    isCheckoutDay,
+    isOvernightStay,
+    mapSearch,
+} from "$lib/domain/timeline";
+import type {
+    DayItinerary,
+    HotelInfo,
+} from "$lib/domain/trip";
+import type { DailyWeather } from "$lib/infra/http/weather";
+import type { EnlargedCard } from "$lib/ui/shared/enlarge";
+import GoogleMapsIcon from "$lib/ui/shared/icons/GoogleMapsIcon.svelte";
+import NaverIcon from "$lib/ui/shared/icons/NaverIcon.svelte";
+import RichText from "$lib/ui/shared/RichText.svelte";
 import BedDouble from "@lucide/svelte/icons/bed-double";
 import CalendarCheck from "@lucide/svelte/icons/calendar-check";
 import Check from "@lucide/svelte/icons/check";
@@ -13,22 +29,6 @@ import Play from "@lucide/svelte/icons/play";
 import Share2 from "@lucide/svelte/icons/share-2";
 import SkipForward from "@lucide/svelte/icons/skip-forward";
 import Zap from "@lucide/svelte/icons/zap";
-import { sanitizeLinkHref } from "../../domain/markdown";
-import {
-    classifyTimelineEvents,
-    isCheckoutDay,
-    isOvernightStay,
-    mapSearch,
-} from "../../domain/timeline";
-import type {
-    DayItinerary,
-    HotelInfo,
-} from "../../domain/trip";
-import type { DailyWeather } from "../../infra/http/weather";
-import type { EnlargedCard } from "../shared/enlarge";
-import GoogleMapsIcon from "../shared/icons/GoogleMapsIcon.svelte";
-import NaverIcon from "../shared/icons/NaverIcon.svelte";
-import RichText from "../shared/RichText.svelte";
 import ConfirmationChips from "./ConfirmationChips.svelte";
 import WeatherBadge from "./WeatherBadge.svelte";
 

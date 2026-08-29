@@ -1,6 +1,12 @@
 // `createModelPicker` registers an `$effect`, so every test mounts it inside an
 // `$effect.root` and drives it with `flushSync` — the `.svelte.` infix in this
 // filename is what makes the plugin compile those runes.
+import {
+    clearGeminiModelsMemory,
+    GEMINI_MODEL_STORAGE,
+    type GeminiModelFilterMode,
+    loadGeminiModel,
+} from "$lib/infra/http/gemini";
 import { flushSync } from "svelte";
 import {
     afterEach,
@@ -10,12 +16,6 @@ import {
     it,
     vi,
 } from "vitest";
-import {
-    clearGeminiModelsMemory,
-    GEMINI_MODEL_STORAGE,
-    type GeminiModelFilterMode,
-    loadGeminiModel,
-} from "../infra/http/gemini";
 import { createModelPicker } from "./gemini-models.svelte";
 
 function createLocalStorageStub() {

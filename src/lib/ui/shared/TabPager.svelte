@@ -1,7 +1,7 @@
 <script lang="ts" generics="T extends string | number">
+import { prefersReducedMotion } from "$lib/domain/utils";
 import type { Snippet } from "svelte";
 import { fly } from "svelte/transition";
-import { prefersReducedMotion } from "../../domain/utils";
 import { edgeFade } from "./edge-fade";
 
 interface Props {

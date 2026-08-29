@@ -7,8 +7,8 @@
 // Offline — the flagship scenario — update() rejects; swallow it and retry on
 // the next check.
 
+import { showToast } from "$lib/stores/toast.svelte";
 import { registerSW } from "virtual:pwa-register";
-import { showToast } from "../../stores/toast.svelte";
 
 const SW_UPDATE_CHECK_MS = 60 * 60 * 1000;
 

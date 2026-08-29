@@ -1,9 +1,9 @@
+import type { DayItinerary } from "$lib/domain/trip";
 import {
     describe,
     expect,
     it,
 } from "vitest";
-import type { DayItinerary } from "../domain/trip";
 import { WeatherStore } from "./weather.svelte";
 
 describe("WeatherStore", () => {

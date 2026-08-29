@@ -10,15 +10,15 @@
 // *project* site, so the origin is shared with every other project on the
 // account and a blanket clear would take their data too.
 
-import { MANUAL_RATE_KEY_PREFIX } from "../../domain/ledger";
+import { MANUAL_RATE_KEY_PREFIX } from "$lib/domain/ledger";
 import {
     clearExchangeCache,
     exchangeCacheKeys,
-} from "../http/exchange";
+} from "$lib/infra/http/exchange";
 import {
     clearWeatherCache,
     weatherCacheKeys,
-} from "../http/weather";
+} from "$lib/infra/http/weather";
 import { clearStorageCacheMemory } from "./storage-cache";
 import { yamlBackupKeys } from "./yaml-storage";
 

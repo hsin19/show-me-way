@@ -3,8 +3,8 @@
 import {
     type TripData,
     validateYaml,
-} from "../../domain/trip";
-import { USER_YAML_KEY } from "../storage/yaml-storage";
+} from "$lib/domain/trip";
+import { USER_YAML_KEY } from "$lib/infra/storage/yaml-storage";
 
 /**
  * Null rather than a throw for every "not really there" outcome, so the caller

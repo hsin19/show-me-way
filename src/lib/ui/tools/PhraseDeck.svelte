@@ -1,11 +1,11 @@
 <script lang="ts">
-import Copy from "@lucide/svelte/icons/copy";
 import type {
     PhraseCategory,
     PhraseInfo,
-} from "../../domain/phrases";
-import { copyToClipboard } from "../../stores/toast.svelte";
-import { edgeFade } from "../shared/edge-fade";
+} from "$lib/domain/phrases";
+import { copyToClipboard } from "$lib/stores/toast.svelte";
+import { edgeFade } from "$lib/ui/shared/edge-fade";
+import Copy from "@lucide/svelte/icons/copy";
 
 interface Props {
     phrases: PhraseInfo[];

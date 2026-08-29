@@ -1,4 +1,15 @@
 <script lang="ts">
+import {
+    compareTripDates,
+    formatYearMonth,
+    isTripLongPast,
+} from "$lib/domain/utils";
+import {
+    getActiveProfileId,
+    type ProfileInfo,
+} from "$lib/infra/storage/profiles";
+import { gdriveSync } from "$lib/stores/gdrive.svelte";
+import ConfirmBar from "$lib/ui/shared/ConfirmBar.svelte";
 import ChevronDown from "@lucide/svelte/icons/chevron-down";
 import Cloud from "@lucide/svelte/icons/cloud";
 import CloudOff from "@lucide/svelte/icons/cloud-off";
@@ -8,17 +19,6 @@ import LogIn from "@lucide/svelte/icons/log-in";
 import Plus from "@lucide/svelte/icons/plus";
 import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 import Trash2 from "@lucide/svelte/icons/trash-2";
-import {
-    compareTripDates,
-    formatYearMonth,
-    isTripLongPast,
-} from "../../../domain/utils";
-import {
-    getActiveProfileId,
-    type ProfileInfo,
-} from "../../../infra/storage/profiles";
-import { gdriveSync } from "../../../stores/gdrive.svelte";
-import ConfirmBar from "../../shared/ConfirmBar.svelte";
 
 // Rendered by two hosts, so an edit here changes both: collapsed at the top of
 // 行程管理, where it owns `expanded`, and forced open in TripOverview's drawer,

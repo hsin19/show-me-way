@@ -1,9 +1,18 @@
 import { svelte } from "@sveltejs/vite-plugin-svelte";
+import {
+    fileURLToPath,
+    URL,
+} from "node:url";
 import { defineConfig } from "vitest/config";
 
 // Standalone test config so the app's Vite/PWA plugins aren't loaded for unit tests.
 // The svelte plugin is still required to compile $state runes in .svelte.ts modules.
 export default defineConfig({
+    resolve: {
+        alias: {
+            $lib: fileURLToPath(new URL("./src/lib", import.meta.url)),
+        },
+    },
     // Vitest's node environment runs everything through the SSR pipeline, under
     // which `$effect` and `flushSync` are silent no-ops — an `$effect`-driven
     // module (gemini-models.svelte.ts) would "pass" without its effect ever

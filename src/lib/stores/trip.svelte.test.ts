@@ -1,3 +1,4 @@
+import { validateYaml } from "$lib/domain/trip";
 import {
     afterEach,
     beforeEach,
@@ -6,7 +7,6 @@ import {
     it,
     vi,
 } from "vitest";
-import { validateYaml } from "../domain/trip";
 import { TripStore } from "./trip.svelte";
 
 const TEST_YAML = `trip:

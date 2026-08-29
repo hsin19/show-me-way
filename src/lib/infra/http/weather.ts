@@ -9,7 +9,7 @@ import {
     readCachedJson,
     removeCachedKeys,
     writeCachedJson,
-} from "../storage/storage-cache";
+} from "$lib/infra/storage/storage-cache";
 
 export interface DailyWeather {
     /** WMO weather interpretation code — see `weatherCodeInfo`. */

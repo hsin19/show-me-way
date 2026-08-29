@@ -1,4 +1,17 @@
 <script lang="ts">
+import {
+    type TripData,
+    validateYaml,
+} from "$lib/domain/trip";
+import {
+    buildItineraryContext,
+    type ChatMessage,
+    loadGeminiApiKey,
+    sendChatMessage,
+} from "$lib/infra/http/gemini";
+import { createModelPicker } from "$lib/stores/gemini-models.svelte";
+import ConfirmBar from "$lib/ui/shared/ConfirmBar.svelte";
+import { edgeFade } from "$lib/ui/shared/edge-fade";
 import Check from "@lucide/svelte/icons/check";
 import KeyRound from "@lucide/svelte/icons/key-round";
 import Loader2 from "@lucide/svelte/icons/loader-2";
@@ -9,19 +22,6 @@ import Sparkles from "@lucide/svelte/icons/sparkles";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import WandSparkles from "@lucide/svelte/icons/wand-sparkles";
 import { tick } from "svelte";
-import {
-    type TripData,
-    validateYaml,
-} from "../../domain/trip";
-import {
-    buildItineraryContext,
-    type ChatMessage,
-    loadGeminiApiKey,
-    sendChatMessage,
-} from "../../infra/http/gemini";
-import { createModelPicker } from "../../stores/gemini-models.svelte";
-import ConfirmBar from "../shared/ConfirmBar.svelte";
-import { edgeFade } from "../shared/edge-fade";
 import DiffView from "./DiffView.svelte";
 
 interface Props {

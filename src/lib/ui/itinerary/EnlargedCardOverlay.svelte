@@ -1,10 +1,10 @@
 <script lang="ts">
+import { prefersReducedMotion } from "$lib/domain/utils";
+import { acquireScreenWakeLock } from "$lib/infra/pwa/wakelock";
+import { copyToClipboard } from "$lib/stores/toast.svelte";
+import type { EnlargedCard } from "$lib/ui/shared/enlarge";
 import X from "@lucide/svelte/icons/x";
 import { fade } from "svelte/transition";
-import { prefersReducedMotion } from "../../domain/utils";
-import { acquireScreenWakeLock } from "../../infra/pwa/wakelock";
-import { copyToClipboard } from "../../stores/toast.svelte";
-import type { EnlargedCard } from "../shared/enlarge";
 
 interface Props {
     /** Null closes the overlay. Mounted once in App, so two cards can never stack. */

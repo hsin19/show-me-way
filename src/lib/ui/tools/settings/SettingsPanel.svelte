@@ -1,4 +1,37 @@
 <script lang="ts">
+import {
+    decodeShareToken,
+    parseShareToken,
+} from "$lib/domain/share";
+import {
+    serializeToYaml,
+    type TripData,
+    validateYaml,
+} from "$lib/domain/trip";
+import { formatBackupTime } from "$lib/domain/utils";
+import { fetchDefaultYamlText } from "$lib/infra/http/itinerary-loader";
+import {
+    ensureActiveProfileId,
+    isActiveProfile,
+    type ProfileInfo,
+    tripNameFromYaml,
+    tripStartDateFromYaml,
+} from "$lib/infra/storage/profiles";
+import { importSharedTrip } from "$lib/infra/storage/share-import";
+import {
+    backupCurrentYaml,
+    getYamlBackup,
+    listYamlBackups,
+    USER_YAML_KEY,
+    type YamlBackup,
+} from "$lib/infra/storage/yaml-storage";
+import { gdriveSync } from "$lib/stores/gdrive.svelte";
+import { settingsDraft } from "$lib/stores/settings-draft.svelte";
+import {
+    copyToClipboard,
+    showToast,
+} from "$lib/stores/toast.svelte";
+import ConfirmBar from "$lib/ui/shared/ConfirmBar.svelte";
 import CloudAlert from "@lucide/svelte/icons/cloud-alert";
 import CloudDownload from "@lucide/svelte/icons/cloud-download";
 import CloudOff from "@lucide/svelte/icons/cloud-off";
@@ -12,39 +45,6 @@ import Link2 from "@lucide/svelte/icons/link-2";
 import Sliders from "@lucide/svelte/icons/sliders";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import { onMount } from "svelte";
-import {
-    decodeShareToken,
-    parseShareToken,
-} from "../../../domain/share";
-import {
-    serializeToYaml,
-    type TripData,
-    validateYaml,
-} from "../../../domain/trip";
-import { formatBackupTime } from "../../../domain/utils";
-import { fetchDefaultYamlText } from "../../../infra/http/itinerary-loader";
-import {
-    ensureActiveProfileId,
-    isActiveProfile,
-    type ProfileInfo,
-    tripNameFromYaml,
-    tripStartDateFromYaml,
-} from "../../../infra/storage/profiles";
-import { importSharedTrip } from "../../../infra/storage/share-import";
-import {
-    backupCurrentYaml,
-    getYamlBackup,
-    listYamlBackups,
-    USER_YAML_KEY,
-    type YamlBackup,
-} from "../../../infra/storage/yaml-storage";
-import { gdriveSync } from "../../../stores/gdrive.svelte";
-import { settingsDraft } from "../../../stores/settings-draft.svelte";
-import {
-    copyToClipboard,
-    showToast,
-} from "../../../stores/toast.svelte";
-import ConfirmBar from "../../shared/ConfirmBar.svelte";
 import ProfileManager from "./ProfileManager.svelte";
 
 interface Props {

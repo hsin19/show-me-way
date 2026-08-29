@@ -5,8 +5,8 @@ import { mount } from "svelte";
 import "@fontsource-variable/plus-jakarta-sans/index.css";
 import "@fontsource-variable/noto-sans-tc/index.css";
 import "./app.css";
+import { initTheme } from "$lib/stores/theme.svelte";
 import App from "./App.svelte";
-import { initTheme } from "./lib/stores/theme.svelte";
 
 // Before mount, so no component ever renders against an unresolved theme.
 initTheme();

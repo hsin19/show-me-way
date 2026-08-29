@@ -7,7 +7,7 @@
 import {
     serializeToYaml,
     type TripData,
-} from "../../domain/trip";
+} from "$lib/domain/trip";
 import {
     createProfile,
     ensureUniqueTripId,
