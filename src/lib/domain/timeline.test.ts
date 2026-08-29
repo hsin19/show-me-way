@@ -7,6 +7,7 @@ import {
     buildDayReport,
     classifyTimelineEvents,
     findCurrentEventIndex,
+    findScrollTargetEventIndex,
     formatNextEventLabel,
     getCountdownText,
     getNextEventInfo,
@@ -207,6 +208,42 @@ describe("getNextEventInfo / formatNextEventLabel", () => {
             .toBe("接下來 14:00 景福宮");
         expect(formatNextEventLabel({ kind: "current", title: "景福宮", time: "14:00" }))
             .toBe("進行中：景福宮");
+    });
+});
+
+describe("findScrollTargetEventIndex", () => {
+    const today = "2026-06-11";
+
+    it("returns null when dayDate is not today", () => {
+        const events = [{ time: "08:00" }, { time: "12:00" }];
+        expect(findScrollTargetEventIndex(events, "2026-06-12", new Date(2026, 5, 11, 14, 30))).toBeNull();
+    });
+
+    it("returns null before the first event has started", () => {
+        const events = [{ time: "08:00" }, { time: "12:00" }];
+        expect(findScrollTargetEventIndex(events, today, new Date(2026, 5, 11, 6, 0))).toBeNull();
+    });
+
+    it("returns the current event when it is unresolved", () => {
+        const events = [{ time: "08:00" }, { time: "12:00" }];
+        expect(findScrollTargetEventIndex(events, today, new Date(2026, 5, 11, 14, 0))).toBe(1);
+    });
+
+    it("skips forward past resolved (done/skipped) events", () => {
+        const events = [
+            { time: "08:00", status: "done" as const },
+            { time: "12:00", status: "skipped" as const },
+            { time: "18:00" },
+        ];
+        expect(findScrollTargetEventIndex(events, today, new Date(2026, 5, 11, 14, 30))).toBe(2);
+    });
+
+    it("returns null when every event from the current one onward is resolved", () => {
+        const events = [
+            { time: "08:00", status: "done" as const },
+            { time: "12:00", status: "skipped" as const },
+        ];
+        expect(findScrollTargetEventIndex(events, today, new Date(2026, 5, 11, 23, 0))).toBeNull();
     });
 });
 

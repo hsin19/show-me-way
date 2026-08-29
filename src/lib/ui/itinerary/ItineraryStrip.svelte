@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { ExpenseItem } from "../../domain/ledger";
 import {
-    findCurrentEventIndex,
+    findScrollTargetEventIndex,
     formatNextEventLabel,
     getCountdownText,
     getNextEventInfo,
@@ -95,15 +95,7 @@ let currentDayData = $derived(days.find(d => d.day === currentDay) ?? null);
 function positionPanel(day: number, panel: HTMLElement) {
     const dayData = days.find(d => d.day === day);
     if (!dayData) return; // the overview; a fresh panel is already at 0
-    const now = new Date();
-    let eventIdx = dayData.date === toLocalIsoDate(now)
-        ? findCurrentEventIndex(dayData.timeline, now)
-        : null;
-    // Skip past resolved events rather than open on a struck-through card — the
-    // same rule the header capsule follows.
-    while (eventIdx !== null && dayData.timeline[eventIdx].status) {
-        eventIdx = eventIdx + 1 < dayData.timeline.length ? eventIdx + 1 : null;
-    }
+    const eventIdx = findScrollTargetEventIndex(dayData.timeline, dayData.date);
     if (eventIdx === null) return;
     const targetId = dayData.timeline[eventIdx]._id;
     const card = targetId ? panel.querySelector<HTMLElement>(`[data-event-id="${targetId}"]`) : null;

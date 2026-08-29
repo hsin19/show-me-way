@@ -22,7 +22,7 @@ import {
     validateYaml,
 } from "../../../domain/trip";
 import { formatBackupTime } from "../../../domain/utils";
-import { fetchDefaultYamlText } from "../../../infra/http/http-fetch";
+import { fetchDefaultYamlText } from "../../../infra/http/itinerary-loader";
 import {
     ensureActiveProfileId,
     isActiveProfile,

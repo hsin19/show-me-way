@@ -165,6 +165,26 @@ export function formatNextEventLabel(info: NextEventInfo): string {
 }
 
 /**
+ * The event a freshly-opened day panel should auto-scroll to: the current one,
+ * skipped forward past anything already resolved (done/skipped) rather than
+ * opening on a struck-through card — the same rule `getNextEventInfo` follows
+ * for the header capsule. Null when `dayDate` is not today, nothing has started
+ * yet, or every event from the current one onward is resolved.
+ */
+export function findScrollTargetEventIndex(
+    events: ReadonlyArray<{ time: string; status?: "done" | "skipped"; }>,
+    dayDate: string,
+    now: Date = new Date(),
+): number | null {
+    if (dayDate !== toLocalIsoDate(now)) return null;
+    let eventIdx = findCurrentEventIndex(events, now);
+    while (eventIdx !== null && events[eventIdx].status) {
+        eventIdx = eventIdx + 1 < events.length ? eventIdx + 1 : null;
+    }
+    return eventIdx;
+}
+
+/**
  * Is `date` a night spent at this hotel? Check-in day yes, checkout day no — the
  * two hotels share a changeover date and the night belongs to the new one, which
  * is what stops both from highlighting. Every 今晚住宿 answer in the app comes

@@ -29,7 +29,7 @@ import { migrateGdriveSyncState } from "../infra/http/gdrive";
 import {
     fetchDefaultYamlText,
     fetchItinerary,
-} from "../infra/http/http-fetch";
+} from "../infra/http/itinerary-loader";
 import { downloadTextFile } from "../infra/pwa/file-download";
 import {
     createProfile,

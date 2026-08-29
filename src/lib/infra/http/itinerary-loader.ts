@@ -47,7 +47,7 @@ export async function fetchItinerary(): Promise<TripData> {
         const yamlContent = localStorage.getItem(USER_YAML_KEY) || await fetchDefaultYamlText();
         return validateYaml(yamlContent);
     } catch (error) {
-        console.error("[http-fetch] Error parsing YAML itinerary:", error);
+        console.error("[itinerary-loader] Error parsing YAML itinerary:", error);
         throw error;
     }
 }
