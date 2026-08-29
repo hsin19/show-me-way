@@ -20,14 +20,14 @@ import {
     ledgerTypeLabel,
     MANUAL_RATE_KEY_PREFIX,
     twdToForeign,
-} from "../domain/ledger";
-import { toLocalIsoDate } from "../domain/utils";
+} from "../../domain/ledger";
+import { toLocalIsoDate } from "../../domain/utils";
 import {
     isExchangeRateStale,
     loadExchangeRates,
-} from "../infra/api/exchange";
-import { showToast } from "../stores/toast.svelte";
-import ConfirmBar from "./ConfirmBar.svelte";
+} from "../../infra/api/exchange";
+import { showToast } from "../../stores/toast.svelte";
+import ConfirmBar from "../shared/ConfirmBar.svelte";
 
 interface Props {
     currency?: string;

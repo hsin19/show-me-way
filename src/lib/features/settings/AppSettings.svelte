@@ -25,7 +25,7 @@ import {
     formatBuildDate,
     REPO_URL,
     versionCommitUrl,
-} from "../domain/version";
+} from "../../domain/version";
 import {
     clearGeminiApiKey,
     type GeminiModelFilterMode,
@@ -33,30 +33,30 @@ import {
     loadGeminiModelFilter,
     saveGeminiApiKey,
     saveGeminiModelFilter,
-} from "../infra/api/gemini";
+} from "../../infra/api/gemini";
 import {
     clearApiCache,
     clearAppLocalStorage,
     clearYamlBackups,
     formatBytes,
     getStorageSummary,
-} from "../infra/storage/storage-admin";
-import { gdriveSync } from "../stores/gdrive.svelte";
-import { createModelPicker } from "../stores/gemini-models.svelte";
+} from "../../infra/storage/storage-admin";
+import { gdriveSync } from "../../stores/gdrive.svelte";
+import { createModelPicker } from "../../stores/gemini-models.svelte";
 import {
     canPromptPwaInstall,
     isIosDevice,
     isStandaloneMode,
     promptPwaInstall,
-} from "../stores/pwa-install.svelte";
+} from "../../stores/pwa-install.svelte";
 import {
     setThemePref,
     theme,
     type ThemePref,
-} from "../stores/theme.svelte";
-import { showToast } from "../stores/toast.svelte";
-import ConfirmBar from "./ConfirmBar.svelte";
-import GitHubIcon from "./icons/GitHubIcon.svelte";
+} from "../../stores/theme.svelte";
+import { showToast } from "../../stores/toast.svelte";
+import ConfirmBar from "../shared/ConfirmBar.svelte";
+import GitHubIcon from "../shared/icons/GitHubIcon.svelte";
 
 // Everything here is a property of the device, not of a trip: nothing on this
 // page travels with a profile. Trip-level settings are 行程管理.

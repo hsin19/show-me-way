@@ -8,27 +8,27 @@ import ListChecks from "@lucide/svelte/icons/list-checks";
 import Maximize2 from "@lucide/svelte/icons/maximize-2";
 import Share2 from "@lucide/svelte/icons/share-2";
 import Wallet from "@lucide/svelte/icons/wallet";
-import type { EnlargedCard } from "../domain/enlarge";
+import type { EnlargedCard } from "../../domain/enlarge";
 import {
     computeLedgerTotals,
     type ExpenseItem,
     formatAmount,
     getCurrencyConfig,
-} from "../domain/ledger";
-import { getLanguageConfig } from "../domain/phrases";
-import { isOvernightStay } from "../domain/timeline";
+} from "../../domain/ledger";
+import { getLanguageConfig } from "../../domain/phrases";
+import { isOvernightStay } from "../../domain/timeline";
 import {
     formatDateRange,
     splitDayDate,
-} from "../domain/utils";
-import type { DailyWeather } from "../infra/api/weather";
+} from "../../domain/utils";
+import type { DailyWeather } from "../../infra/api/weather";
 import type {
     DayItinerary,
     TripData,
-} from "../infra/storage/api";
-import type { ProfileInfo } from "../infra/storage/profiles";
+} from "../../infra/storage/api";
+import type { ProfileInfo } from "../../infra/storage/profiles";
+import ProfileManager from "../settings/ProfileManager.svelte";
 import HotelCards from "./HotelCards.svelte";
-import ProfileManager from "./ProfileManager.svelte";
 import WeatherBadge from "./WeatherBadge.svelte";
 
 interface Props {

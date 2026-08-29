@@ -4,7 +4,7 @@ import ChevronUp from "@lucide/svelte/icons/chevron-up";
 import {
     diffLines,
     diffStats,
-} from "../domain/diff";
+} from "../../domain/diff";
 
 interface Props {
     base: string;

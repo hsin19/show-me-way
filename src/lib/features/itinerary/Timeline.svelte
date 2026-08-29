@@ -13,23 +13,23 @@ import Play from "@lucide/svelte/icons/play";
 import Share2 from "@lucide/svelte/icons/share-2";
 import SkipForward from "@lucide/svelte/icons/skip-forward";
 import Zap from "@lucide/svelte/icons/zap";
-import type { EnlargedCard } from "../domain/enlarge";
-import { sanitizeLinkHref } from "../domain/markdown";
+import type { EnlargedCard } from "../../domain/enlarge";
+import { sanitizeLinkHref } from "../../domain/markdown";
 import {
     classifyTimelineEvents,
     isCheckoutDay,
     isOvernightStay,
     mapSearch,
-} from "../domain/timeline";
-import type { DailyWeather } from "../infra/api/weather";
+} from "../../domain/timeline";
+import type { DailyWeather } from "../../infra/api/weather";
 import type {
     DayItinerary,
     HotelInfo,
-} from "../infra/storage/api";
+} from "../../infra/storage/api";
+import GoogleMapsIcon from "../shared/icons/GoogleMapsIcon.svelte";
+import NaverIcon from "../shared/icons/NaverIcon.svelte";
+import RichText from "../shared/RichText.svelte";
 import ConfirmationChips from "./ConfirmationChips.svelte";
-import GoogleMapsIcon from "./icons/GoogleMapsIcon.svelte";
-import NaverIcon from "./icons/NaverIcon.svelte";
-import RichText from "./RichText.svelte";
 import WeatherBadge from "./WeatherBadge.svelte";
 
 interface Props {

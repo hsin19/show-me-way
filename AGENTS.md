@@ -18,17 +18,13 @@ This repository is a Svelte 5 travel itinerary PWA. Agents should treat local sk
 - `infra/api/`: External service clients (`gdrive.ts`, `gemini.ts`, `weather.ts`, `exchange.ts`, `api-fetch.ts`, `share-import.ts`).
 - `infra/pwa/`: Browser hardware & PWA adapters (`sw-update.ts`, `wakelock.ts`).
 
-### Key Components (`src/lib/components/`)
+### Key Features & Components (`src/lib/features/`)
 
-- `ItineraryStrip.svelte`: Composition root for the itinerary tab; manages day navigation and auto-scrolling to current events.
-- `TripOverview.svelte`: Day 0 overview hero, phase helper card, hotel cards, and trip switcher drawer entry.
-- `Timeline.svelte`: Daily timeline renderer (dynamically synthesizes checkout and overnight hotel nodes).
-- `TabPager.svelte`: Shared horizontal chip pager with directional slide transitions and `.edge-fade` support.
-- `ToolsTab.svelte`: Host for tool sub-tabs (Checklist, Ledger, PhraseDeck, SettingsPanel, AppSettings).
-- `SettingsPanel.svelte`: Trip-level management (YAML editor, cloud backup/load, file export, backups).
-- `AppSettings.svelte`: Global preferences (theme, Gemini API key, Google Drive connection, local storage usage).
-- `EnlargedCardOverlay.svelte`: Fullscreen high-contrast card for taxi drivers or hotel/flight confirmation codes.
-- `ChatPanel.svelte` / `DiffView.svelte`: AI assistant chat, diff inspection, and itinerary edit application.
+- `itinerary/`: `ItineraryStrip.svelte` (composition root), `TripOverview.svelte`, `Timeline.svelte` (dynamic timeline), `HotelCards.svelte`, `EnlargedCardOverlay.svelte`, `DayChip.svelte`, `WeatherBadge.svelte`.
+- `tools/`: `ToolsTab.svelte` (sub-tabs host), `Checklist.svelte` (packing & todo), `Ledger.svelte` (currency & expenses), `PhraseDeck.svelte` (offline phrases).
+- `settings/`: `SettingsPanel.svelte` (trip-level YAML & cloud sync), `AppSettings.svelte` (global prefs), `ProfileManager.svelte` (multi-trip switcher).
+- `ai/`: `ChatPanel.svelte`, `DiffView.svelte` (AI assistant chat, diff inspection, and itinerary edit application).
+- `shared/`: `TabPager.svelte` (shared swipe/chip pager), `ConfirmBar.svelte`, `RichText.svelte` (safe AST Markdown renderer), `Toast.svelte`.
 
 ## Core Invariants & Guardrails
 

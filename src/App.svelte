@@ -10,18 +10,18 @@ import Sparkles from "@lucide/svelte/icons/sparkles";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import Wallet from "@lucide/svelte/icons/wallet";
 import { onMount } from "svelte";
-import AppSettings from "./lib/components/AppSettings.svelte";
-import ChatPanel from "./lib/components/ChatPanel.svelte";
-import Checklist from "./lib/components/Checklist.svelte";
-import EnlargedCardOverlay from "./lib/components/EnlargedCardOverlay.svelte";
-import ItineraryStrip from "./lib/components/ItineraryStrip.svelte";
-import Ledger from "./lib/components/Ledger.svelte";
-import PhraseDeck from "./lib/components/PhraseDeck.svelte";
-import SettingsPanel from "./lib/components/SettingsPanel.svelte";
-import Toast from "./lib/components/Toast.svelte";
-import ToolsTab from "./lib/components/ToolsTab.svelte";
 import type { EnlargedCard } from "./lib/domain/enlarge";
 import { getTodayIsoString } from "./lib/domain/utils";
+import ChatPanel from "./lib/features/ai/ChatPanel.svelte";
+import EnlargedCardOverlay from "./lib/features/itinerary/EnlargedCardOverlay.svelte";
+import ItineraryStrip from "./lib/features/itinerary/ItineraryStrip.svelte";
+import AppSettings from "./lib/features/settings/AppSettings.svelte";
+import SettingsPanel from "./lib/features/settings/SettingsPanel.svelte";
+import Toast from "./lib/features/shared/Toast.svelte";
+import Checklist from "./lib/features/tools/Checklist.svelte";
+import Ledger from "./lib/features/tools/Ledger.svelte";
+import PhraseDeck from "./lib/features/tools/PhraseDeck.svelte";
+import ToolsTab from "./lib/features/tools/ToolsTab.svelte";
 import {
     checkForSwUpdate,
     initServiceWorkerUpdates,

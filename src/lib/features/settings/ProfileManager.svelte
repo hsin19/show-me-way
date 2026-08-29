@@ -12,13 +12,13 @@ import {
     compareTripDates,
     formatYearMonth,
     isTripLongPast,
-} from "../domain/utils";
+} from "../../domain/utils";
 import {
     getActiveProfileId,
     type ProfileInfo,
-} from "../infra/storage/profiles";
-import { gdriveSync } from "../stores/gdrive.svelte";
-import ConfirmBar from "./ConfirmBar.svelte";
+} from "../../infra/storage/profiles";
+import { gdriveSync } from "../../stores/gdrive.svelte";
+import ConfirmBar from "../shared/ConfirmBar.svelte";
 
 // Rendered by two hosts, so an edit here changes both: collapsed at the top of
 // 行程管理, where it owns `expanded`, and forced open in TripOverview's drawer,
