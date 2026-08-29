@@ -20,7 +20,12 @@ import SquarePlus from "@lucide/svelte/icons/square-plus";
 import Sun from "@lucide/svelte/icons/sun";
 import Trash2 from "@lucide/svelte/icons/trash-2";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
-import { gdriveSync } from "../gdrive.svelte";
+import {
+    APP_VERSION,
+    formatBuildDate,
+    REPO_URL,
+    versionCommitUrl,
+} from "../domain/version";
 import {
     clearGeminiApiKey,
     type GeminiModelFilterMode,
@@ -28,33 +33,28 @@ import {
     loadGeminiModelFilter,
     saveGeminiApiKey,
     saveGeminiModelFilter,
-} from "../gemini";
-import { createModelPicker } from "../gemini-models.svelte";
-import {
-    canPromptPwaInstall,
-    isIosDevice,
-    isStandaloneMode,
-    promptPwaInstall,
-} from "../pwa-install.svelte";
+} from "../infra/api/gemini";
 import {
     clearApiCache,
     clearAppLocalStorage,
     clearYamlBackups,
     formatBytes,
     getStorageSummary,
-} from "../storage-admin";
+} from "../infra/storage/storage-admin";
+import { gdriveSync } from "../stores/gdrive.svelte";
+import { createModelPicker } from "../stores/gemini-models.svelte";
+import {
+    canPromptPwaInstall,
+    isIosDevice,
+    isStandaloneMode,
+    promptPwaInstall,
+} from "../stores/pwa-install.svelte";
 import {
     setThemePref,
     theme,
     type ThemePref,
-} from "../theme.svelte";
-import { showToast } from "../toast.svelte";
-import {
-    APP_VERSION,
-    formatBuildDate,
-    REPO_URL,
-    versionCommitUrl,
-} from "../version";
+} from "../stores/theme.svelte";
+import { showToast } from "../stores/toast.svelte";
 import ConfirmBar from "./ConfirmBar.svelte";
 import GitHubIcon from "./icons/GitHubIcon.svelte";
 

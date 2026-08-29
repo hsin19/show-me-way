@@ -17,13 +17,13 @@ import {
     type TripData,
     USER_YAML_KEY,
     validateYaml,
-} from "./api";
+} from "../storage/api";
 import {
     ACTIVE_PROFILE_KEY,
     getActiveProfileId,
     listProfiles,
     tripIdFromYaml,
-} from "./profiles";
+} from "../storage/profiles";
 import { importSharedTrip } from "./share-import";
 
 function createLocalStorageStub() {

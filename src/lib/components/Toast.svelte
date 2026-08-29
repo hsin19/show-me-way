@@ -5,12 +5,12 @@ import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 import X from "@lucide/svelte/icons/x";
 import { flip } from "svelte/animate";
 import { fly } from "svelte/transition";
+import { prefersReducedMotion } from "../domain/utils";
 import {
     dismissToast,
     runToastAction,
     toast,
-} from "../toast.svelte";
-import { prefersReducedMotion } from "../utils";
+} from "../stores/toast.svelte";
 
 const ICONS = { success: CheckCircle, update: RefreshCw, download: Download };
 

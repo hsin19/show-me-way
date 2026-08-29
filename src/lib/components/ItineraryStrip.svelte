@@ -1,19 +1,19 @@
 <script lang="ts">
-import type {
-    DayItinerary,
-    TripData,
-} from "../api";
-import type { EnlargedCard } from "../enlarge";
-import type { ExpenseItem } from "../ledger";
-import type { ProfileInfo } from "../profiles";
+import type { EnlargedCard } from "../domain/enlarge";
+import type { ExpenseItem } from "../domain/ledger";
 import {
     findCurrentEventIndex,
     formatNextEventLabel,
     getCountdownText,
     getNextEventInfo,
-} from "../timeline";
-import { toLocalIsoDate } from "../utils";
-import type { DailyWeather } from "../weather";
+} from "../domain/timeline";
+import { toLocalIsoDate } from "../domain/utils";
+import type { DailyWeather } from "../infra/api/weather";
+import type {
+    DayItinerary,
+    TripData,
+} from "../infra/storage/api";
+import type { ProfileInfo } from "../infra/storage/profiles";
 import DayChip from "./DayChip.svelte";
 import TabPager from "./TabPager.svelte";
 import Timeline from "./Timeline.svelte";

@@ -16,14 +16,14 @@ import {
     it,
     vi,
 } from "vitest";
-import { USER_YAML_KEY } from "./api";
+import { USER_YAML_KEY } from "../infra/storage/api";
 import {
     ensureActiveProfileId,
     getActiveProfileId,
     listProfiles,
-} from "./profiles";
+} from "../infra/storage/profiles";
 
-type GdriveModule = typeof import("./gdrive");
+type GdriveModule = typeof import("../infra/api/gdrive");
 type SyncModule = typeof import("./gdrive.svelte");
 
 let gdrive: GdriveModule;
@@ -99,7 +99,7 @@ beforeEach(async () => {
     // Silences the toast service without pulling its timers into these tests.
     vi.doMock("./toast.svelte", () => ({ showToast: vi.fn() }));
 
-    gdrive = await import("./gdrive");
+    gdrive = await import("../infra/api/gdrive");
     // Signed in, with a token that has not expired, so no GIS popup is ever attempted.
     gdrive.saveGdriveUser({ email: "a@example.com", name: "A" });
     gdrive.setCachedAccessToken("token-1", 3600);

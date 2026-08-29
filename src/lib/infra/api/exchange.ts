@@ -5,7 +5,7 @@ import {
     readCachedJson,
     removeCachedKeys,
     writeCachedJson,
-} from "./storage-cache";
+} from "../storage/storage-cache";
 
 export interface ExchangeRates {
     date: string;

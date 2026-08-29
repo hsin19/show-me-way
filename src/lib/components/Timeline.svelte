@@ -13,19 +13,19 @@ import Play from "@lucide/svelte/icons/play";
 import Share2 from "@lucide/svelte/icons/share-2";
 import SkipForward from "@lucide/svelte/icons/skip-forward";
 import Zap from "@lucide/svelte/icons/zap";
-import type {
-    DayItinerary,
-    HotelInfo,
-} from "../api";
-import type { EnlargedCard } from "../enlarge";
-import { sanitizeLinkHref } from "../markdown";
+import type { EnlargedCard } from "../domain/enlarge";
+import { sanitizeLinkHref } from "../domain/markdown";
 import {
     classifyTimelineEvents,
     isCheckoutDay,
     isOvernightStay,
     mapSearch,
-} from "../timeline";
-import type { DailyWeather } from "../weather";
+} from "../domain/timeline";
+import type { DailyWeather } from "../infra/api/weather";
+import type {
+    DayItinerary,
+    HotelInfo,
+} from "../infra/storage/api";
 import ConfirmationChips from "./ConfirmationChips.svelte";
 import GoogleMapsIcon from "./icons/GoogleMapsIcon.svelte";
 import NaverIcon from "./icons/NaverIcon.svelte";

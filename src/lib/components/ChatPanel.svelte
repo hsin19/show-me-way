@@ -9,18 +9,18 @@ import Sparkles from "@lucide/svelte/icons/sparkles";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import WandSparkles from "@lucide/svelte/icons/wand-sparkles";
 import { tick } from "svelte";
-import {
-    type TripData,
-    validateYaml,
-} from "../api";
-import { edgeFade } from "../edge-fade";
+import { edgeFade } from "../domain/edge-fade";
 import {
     buildItineraryContext,
     type ChatMessage,
     loadGeminiApiKey,
     sendChatMessage,
-} from "../gemini";
-import { createModelPicker } from "../gemini-models.svelte";
+} from "../infra/api/gemini";
+import {
+    type TripData,
+    validateYaml,
+} from "../infra/storage/api";
+import { createModelPicker } from "../stores/gemini-models.svelte";
 import ConfirmBar from "./ConfirmBar.svelte";
 import DiffView from "./DiffView.svelte";
 

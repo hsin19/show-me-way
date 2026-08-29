@@ -12,7 +12,7 @@ import {
     type DailyWeather,
     weatherCodeInfo,
     type WeatherIconKind,
-} from "../weather";
+} from "../infra/api/weather";
 
 interface Props {
     weather: DailyWeather;

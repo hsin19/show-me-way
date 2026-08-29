@@ -10,17 +10,17 @@
 // *project* site, so the origin is shared with every other project on the
 // account and a blanket clear would take their data too.
 
-import { yamlBackupKeys } from "./api";
+import { MANUAL_RATE_KEY_PREFIX } from "../../domain/ledger";
 import {
     clearExchangeCache,
     exchangeCacheKeys,
-} from "./exchange";
-import { MANUAL_RATE_KEY_PREFIX } from "./ledger";
-import { clearStorageCacheMemory } from "./storage-cache";
+} from "../api/exchange";
 import {
     clearWeatherCache,
     weatherCacheKeys,
-} from "./weather";
+} from "../api/weather";
+import { yamlBackupKeys } from "./api";
+import { clearStorageCacheMemory } from "./storage-cache";
 
 // Re-exported so the panel has one import for the whole surface, while the
 // removal itself stays with the backup ring's owner.

@@ -9,10 +9,6 @@ import Trash2 from "@lucide/svelte/icons/trash-2";
 import Wallet from "@lucide/svelte/icons/wallet";
 import { untrack } from "svelte";
 import {
-    isExchangeRateStale,
-    loadExchangeRates,
-} from "../exchange";
-import {
     computeLedgerTotals,
     computeQuickAmounts,
     computeWalletBalances,
@@ -24,9 +20,13 @@ import {
     ledgerTypeLabel,
     MANUAL_RATE_KEY_PREFIX,
     twdToForeign,
-} from "../ledger";
-import { showToast } from "../toast.svelte";
-import { toLocalIsoDate } from "../utils";
+} from "../domain/ledger";
+import { toLocalIsoDate } from "../domain/utils";
+import {
+    isExchangeRateStale,
+    loadExchangeRates,
+} from "../infra/api/exchange";
+import { showToast } from "../stores/toast.svelte";
 import ConfirmBar from "./ConfirmBar.svelte";
 
 interface Props {

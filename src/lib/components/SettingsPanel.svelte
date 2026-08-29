@@ -13,6 +13,13 @@ import Sliders from "@lucide/svelte/icons/sliders";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import { onMount } from "svelte";
 import {
+    decodeShareToken,
+    parseShareToken,
+} from "../domain/share";
+import { formatBackupTime } from "../domain/utils";
+import { fetchDefaultYamlText } from "../infra/api/api-fetch";
+import { importSharedTrip } from "../infra/api/share-import";
+import {
     backupCurrentYaml,
     getYamlBackup,
     listYamlBackups,
@@ -21,27 +28,20 @@ import {
     USER_YAML_KEY,
     validateYaml,
     type YamlBackup,
-} from "../api";
-import { fetchDefaultYamlText } from "../api-fetch";
-import { gdriveSync } from "../gdrive.svelte";
+} from "../infra/storage/api";
 import {
     ensureActiveProfileId,
     isActiveProfile,
     type ProfileInfo,
     tripNameFromYaml,
     tripStartDateFromYaml,
-} from "../profiles";
-import { settingsDraft } from "../settings-draft.svelte";
-import {
-    decodeShareToken,
-    parseShareToken,
-} from "../share";
-import { importSharedTrip } from "../share-import";
+} from "../infra/storage/profiles";
+import { gdriveSync } from "../stores/gdrive.svelte";
+import { settingsDraft } from "../stores/settings-draft.svelte";
 import {
     copyToClipboard,
     showToast,
-} from "../toast.svelte";
-import { formatBackupTime } from "../utils";
+} from "../stores/toast.svelte";
 import ConfirmBar from "./ConfirmBar.svelte";
 import ProfileManager from "./ProfileManager.svelte";
 

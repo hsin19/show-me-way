@@ -6,7 +6,7 @@ import {
     it,
     vi,
 } from "vitest";
-import type { TripData } from "./api";
+import type { TripData } from "../storage/api";
 import {
     clearGeminiApiKey,
     clearGeminiModelsMemory,

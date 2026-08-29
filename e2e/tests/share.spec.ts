@@ -2,7 +2,7 @@ import type {
     BrowserContext,
     Page,
 } from "@playwright/test";
-import { encodeShareToken } from "../../src/lib/share";
+import { encodeShareToken } from "../../src/lib/domain/share";
 import {
     expect,
     FIXTURE_YAML,

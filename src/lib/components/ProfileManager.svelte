@@ -8,16 +8,16 @@ import LogIn from "@lucide/svelte/icons/log-in";
 import Plus from "@lucide/svelte/icons/plus";
 import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 import Trash2 from "@lucide/svelte/icons/trash-2";
-import { gdriveSync } from "../gdrive.svelte";
-import {
-    getActiveProfileId,
-    type ProfileInfo,
-} from "../profiles";
 import {
     compareTripDates,
     formatYearMonth,
     isTripLongPast,
-} from "../utils";
+} from "../domain/utils";
+import {
+    getActiveProfileId,
+    type ProfileInfo,
+} from "../infra/storage/profiles";
+import { gdriveSync } from "../stores/gdrive.svelte";
 import ConfirmBar from "./ConfirmBar.svelte";
 
 // Rendered by two hosts, so an edit here changes both: collapsed at the top of

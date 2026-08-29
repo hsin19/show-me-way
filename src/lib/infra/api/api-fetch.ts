@@ -5,7 +5,7 @@ import {
     type TripData,
     USER_YAML_KEY,
     validateYaml,
-} from "./api";
+} from "../storage/api";
 
 /**
  * Null rather than a throw for every "not really there" outcome, so the caller

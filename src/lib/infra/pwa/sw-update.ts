@@ -8,7 +8,7 @@
 // the next check.
 
 import { registerSW } from "virtual:pwa-register";
-import { showToast } from "./toast.svelte";
+import { showToast } from "../../stores/toast.svelte";
 
 const SW_UPDATE_CHECK_MS = 60 * 60 * 1000;
 

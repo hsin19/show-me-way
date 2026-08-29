@@ -2,15 +2,15 @@ import {
     dump as dumpYaml,
     loadAll as loadYamlDocuments,
 } from "js-yaml";
-import { type ExpenseItem } from "./ledger";
+import { type ExpenseItem } from "../../domain/ledger";
 import {
     formatEventMinutes,
     parseEventStartMinutes,
-} from "./timeline";
+} from "../../domain/timeline";
 import {
     addDaysIso,
     toUtcIsoDate,
-} from "./utils";
+} from "../../domain/utils";
 
 export interface ConfirmationInfo {
     /** Numeric codes must be quoted in YAML, or leading zeros are lost to number parsing. */

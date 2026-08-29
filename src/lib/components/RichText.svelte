@@ -2,7 +2,7 @@
 import {
     type InlineNode,
     parseInline,
-} from "../markdown";
+} from "../domain/markdown";
 
 interface Props {
     /** Inline Markdown, per `lib/markdown.ts`. Undefined renders nothing — these fields are optional at the gate. */

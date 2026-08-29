@@ -5,7 +5,7 @@ import {
     loadGeminiModel,
     pickDefaultModel,
     saveGeminiModel,
-} from "./gemini";
+} from "../infra/api/gemini";
 
 // Last-resort id for when a send happens with no list to choose from — only
 // reachable if the models call failed but the user got to a composer anyway.

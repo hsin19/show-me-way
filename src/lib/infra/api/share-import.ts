@@ -10,14 +10,14 @@ import {
     serializeToYaml,
     type TripData,
     USER_YAML_KEY,
-} from "./api";
+} from "../storage/api";
 import {
     createProfile,
     ensureUniqueTripId,
     findProfileByTripId,
     getActiveProfileId,
     switchToProfile,
-} from "./profiles";
+} from "../storage/profiles";
 
 export type ShareImportOutcome =
     /** Replaced this device's copy of that same trip, keeping its profile slot, id, and Drive binding. */

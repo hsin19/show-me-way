@@ -12,19 +12,11 @@ This repository is a Svelte 5 travel itinerary PWA. Agents should treat local sk
 
 ### Key Modules (`src/lib/`)
 
-- `api.ts` / `api-fetch.ts`: YAML load/save/validate/serialize logic, trip backups, and schema normalization.
-- `profiles.ts`: Multiple trip profile management (active profile in `showmeway_user_yaml`, parked profiles in `showmeway_profiles`).
-- `utils.ts`: Date/time calculation, map link generation, timeline event classification, `insertAtClamped`, and motion preference helpers.
-- `gdrive.ts` / `gdrive.svelte.ts`: Google Drive sync via GIS token client and Drive API v3 (`drive.file` scope).
-- `gemini.ts` / `gemini-models.svelte.ts`: Gemini AI chat & itinerary editing via Interactions API (`update_itinerary` function tool).
-- `storage-cache.ts` / `storage-admin.ts`: Cache abstraction for weather/exchange rates, localStorage quota measurement, and scoped reset.
-- `weather.ts` / `exchange.ts`: Open-Meteo weather forecast cache and exchange rate fetching/caching.
-- `ledger.ts`: Currency conversion, deposit/wallet math, quick amount calculations, and CSV export logic.
-- `share.ts`: Itinerary compression into URL fragments (`#s=`) using DEFLATE + Base64url.
-- `markdown.ts` / `RichText.svelte`: AST-based safe inline Markdown parser and renderer (strictly no `{@html}`).
-- `toast.svelte.ts` / `Toast.svelte`: App-global notification and undo service.
-- `pwa-install.svelte.ts`: PWA installation prompt coordinator.
-- `theme.svelte.ts`: Light / dark / system theme management.
+- `domain/`: Pure domain calculation and utilities (`timeline.ts`, `ledger.ts`, `phrases.ts`, `markdown.ts`, `diff.ts`, `share.ts`, `utils.ts`).
+- `stores/`: Reactive Svelte 5 runes stores (`toast.svelte.ts`, `theme.svelte.ts`, `gdrive.svelte.ts`, `gemini-models.svelte.ts`, `pwa-install.svelte.ts`, `settings-draft.svelte.ts`).
+- `infra/storage/`: Storage adapters & persistence (`api.ts`, `profiles.ts`, `storage-admin.ts`, `storage-cache.ts`).
+- `infra/api/`: External service clients (`gdrive.ts`, `gemini.ts`, `weather.ts`, `exchange.ts`, `api-fetch.ts`, `share-import.ts`).
+- `infra/pwa/`: Browser hardware & PWA adapters (`sw-update.ts`, `wakelock.ts`).
 
 ### Key Components (`src/lib/components/`)
 

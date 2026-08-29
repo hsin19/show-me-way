@@ -15,7 +15,7 @@ import {
     GEMINI_MODEL_STORAGE,
     type GeminiModelFilterMode,
     loadGeminiModel,
-} from "./gemini";
+} from "../infra/api/gemini";
 import { createModelPicker } from "./gemini-models.svelte";
 
 function createLocalStorageStub() {

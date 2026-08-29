@@ -9,14 +9,14 @@ import {
 import {
     USER_YAML_KEY,
     validateYaml,
-} from "./api";
+} from "../storage/api";
 import {
     fetchDefaultYamlText,
     fetchItinerary,
 } from "./api-fetch";
 // The bundled default template, read as raw text (the src tsconfig has no node
 // types, so a Vite `?raw` import stands in for readFileSync here).
-import defaultTemplateYaml from "../../public/itinerary.yaml?raw";
+import defaultTemplateYaml from "../../../../public/itinerary.yaml?raw";
 
 // Minimal valid itinerary used as the fetched / stored YAML body.
 const minimalYaml = [

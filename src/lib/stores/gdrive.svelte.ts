@@ -1,10 +1,5 @@
 import { SvelteSet } from "svelte/reactivity";
 import {
-    serializeToYaml,
-    type TripData,
-    validateYaml,
-} from "./api";
-import {
     buildRebindRecord,
     clearCachedAccessToken,
     clearGdriveUser,
@@ -30,14 +25,19 @@ import {
     type TripSyncRecord,
     uploadOrUpdateCloudTrip,
     yamlFingerprint,
-} from "./gdrive";
+} from "../infra/api/gdrive";
+import {
+    serializeToYaml,
+    type TripData,
+    validateYaml,
+} from "../infra/storage/api";
 import {
     createProfile,
     ensureUniqueTripId,
     listLocalTrips,
     tripIdFromYaml,
     tripNameFromYaml,
-} from "./profiles";
+} from "../infra/storage/profiles";
 import { showToast } from "./toast.svelte";
 
 /** Something the user has to decide before this trip can sync again. */

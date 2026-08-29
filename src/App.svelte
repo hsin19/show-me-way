@@ -10,6 +10,52 @@ import Sparkles from "@lucide/svelte/icons/sparkles";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import Wallet from "@lucide/svelte/icons/wallet";
 import { onMount } from "svelte";
+import AppSettings from "./lib/components/AppSettings.svelte";
+import ChatPanel from "./lib/components/ChatPanel.svelte";
+import Checklist from "./lib/components/Checklist.svelte";
+import EnlargedCardOverlay from "./lib/components/EnlargedCardOverlay.svelte";
+import ItineraryStrip from "./lib/components/ItineraryStrip.svelte";
+import Ledger from "./lib/components/Ledger.svelte";
+import PhraseDeck from "./lib/components/PhraseDeck.svelte";
+import SettingsPanel from "./lib/components/SettingsPanel.svelte";
+import Toast from "./lib/components/Toast.svelte";
+import ToolsTab from "./lib/components/ToolsTab.svelte";
+import type { EnlargedCard } from "./lib/domain/enlarge";
+import {
+    buildLedgerCsv,
+    parseLegacyExpenses,
+} from "./lib/domain/ledger";
+import { getLanguageConfig } from "./lib/domain/phrases";
+import {
+    buildShareUrl,
+    clearShareHash,
+    decodeShareToken,
+    isShareSupported,
+    readShareTokenFromHash,
+} from "./lib/domain/share";
+import { buildDayReport } from "./lib/domain/timeline";
+import {
+    getTodayIsoString,
+    insertAtClamped,
+    toLocalIsoDate,
+} from "./lib/domain/utils";
+import {
+    fetchDefaultYamlText,
+    fetchItinerary,
+} from "./lib/infra/api/api-fetch";
+import { migrateGdriveSyncState } from "./lib/infra/api/gdrive";
+import { importSharedTrip } from "./lib/infra/api/share-import";
+import {
+    type DailyWeather,
+    type DailyWeatherByDate,
+    loadDailyWeather,
+    resolveTripCity,
+    staleAgeHours,
+} from "./lib/infra/api/weather";
+import {
+    checkForSwUpdate,
+    initServiceWorkerUpdates,
+} from "./lib/infra/pwa/sw-update";
 import {
     backupCurrentYaml,
     createChecklistItemId,
@@ -22,29 +68,7 @@ import {
     type TripData,
     USER_YAML_KEY,
     validateYaml,
-} from "./lib/api";
-import {
-    fetchDefaultYamlText,
-    fetchItinerary,
-} from "./lib/api-fetch";
-import AppSettings from "./lib/components/AppSettings.svelte";
-import ChatPanel from "./lib/components/ChatPanel.svelte";
-import Checklist from "./lib/components/Checklist.svelte";
-import EnlargedCardOverlay from "./lib/components/EnlargedCardOverlay.svelte";
-import ItineraryStrip from "./lib/components/ItineraryStrip.svelte";
-import Ledger from "./lib/components/Ledger.svelte";
-import PhraseDeck from "./lib/components/PhraseDeck.svelte";
-import SettingsPanel from "./lib/components/SettingsPanel.svelte";
-import Toast from "./lib/components/Toast.svelte";
-import ToolsTab from "./lib/components/ToolsTab.svelte";
-import type { EnlargedCard } from "./lib/enlarge";
-import { migrateGdriveSyncState } from "./lib/gdrive";
-import { gdriveSync } from "./lib/gdrive.svelte";
-import {
-    buildLedgerCsv,
-    parseLegacyExpenses,
-} from "./lib/ledger";
-import { getLanguageConfig } from "./lib/phrases";
+} from "./lib/infra/storage/api";
 import {
     createProfile,
     deleteProfile,
@@ -54,38 +78,14 @@ import {
     type ProfileInfo,
     switchToProfile,
     tripIdFromYaml,
-} from "./lib/profiles";
-import { initPwaInstallPrompt } from "./lib/pwa-install.svelte";
-import { settingsDraft } from "./lib/settings-draft.svelte";
-import {
-    buildShareUrl,
-    clearShareHash,
-    decodeShareToken,
-    isShareSupported,
-    readShareTokenFromHash,
-} from "./lib/share";
-import { importSharedTrip } from "./lib/share-import";
-import {
-    checkForSwUpdate,
-    initServiceWorkerUpdates,
-} from "./lib/sw-update";
-import { buildDayReport } from "./lib/timeline";
+} from "./lib/infra/storage/profiles";
+import { gdriveSync } from "./lib/stores/gdrive.svelte";
+import { initPwaInstallPrompt } from "./lib/stores/pwa-install.svelte";
+import { settingsDraft } from "./lib/stores/settings-draft.svelte";
 import {
     shareOrCopyToClipboard,
     showToast,
-} from "./lib/toast.svelte";
-import {
-    getTodayIsoString,
-    insertAtClamped,
-    toLocalIsoDate,
-} from "./lib/utils";
-import {
-    type DailyWeather,
-    type DailyWeatherByDate,
-    loadDailyWeather,
-    resolveTripCity,
-    staleAgeHours,
-} from "./lib/weather";
+} from "./lib/stores/toast.svelte";
 
 let tripData = $state<TripData | null>(null);
 let currentDay = $state(1);

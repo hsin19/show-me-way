@@ -4,7 +4,7 @@ import Plus from "@lucide/svelte/icons/plus";
 import Trash2 from "@lucide/svelte/icons/trash-2";
 import type { Component } from "svelte";
 
-import type { ChecklistItem } from "../api";
+import type { ChecklistItem } from "../infra/storage/api";
 import RichText from "./RichText.svelte";
 
 interface Props {
