@@ -23,7 +23,6 @@ import {
 } from "../../../domain/trip";
 import { formatBackupTime } from "../../../domain/utils";
 import { fetchDefaultYamlText } from "../../../infra/http/http-fetch";
-import { importSharedTrip } from "../../../infra/http/share-import";
 import {
     ensureActiveProfileId,
     isActiveProfile,
@@ -31,6 +30,7 @@ import {
     tripNameFromYaml,
     tripStartDateFromYaml,
 } from "../../../infra/storage/profiles";
+import { importSharedTrip } from "../../../infra/storage/share-import";
 import {
     backupCurrentYaml,
     getYamlBackup,

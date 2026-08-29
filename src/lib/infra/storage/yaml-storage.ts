@@ -71,26 +71,10 @@ export function backupCurrentYaml(): void {
     try {
         localStorage.setItem(YAML_BACKUPS_KEY, JSON.stringify(backups.slice(0, MAX_YAML_BACKUPS)));
     } catch (err) {
-        console.warn("[API] Failed to save YAML backup:", err);
+        console.warn("[yaml-storage] Failed to save YAML backup:", err);
     }
 }
 
 export function saveTripData(data: TripData, yaml: string = serializeToYaml(data)): void {
     localStorage.setItem(USER_YAML_KEY, yaml);
-}
-
-/**
- * Hand a generated file (YAML export, ledger CSV) to the device — the only way
- * trip data leaves localStorage. On an iOS standalone PWA it arrives via the
- * Files app / share sheet rather than a downloads folder.
- */
-export function downloadTextFile(filename: string, content: string, mimeType: string): void {
-    const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

@@ -16,14 +16,14 @@ import {
 } from "../../domain/ledger";
 import { getLanguageConfig } from "../../domain/phrases";
 import { isOvernightStay } from "../../domain/timeline";
+import type {
+    DayItinerary,
+    TripData,
+} from "../../domain/trip";
 import {
     formatDateRange,
     splitDayDate,
 } from "../../domain/utils";
-import type {
-    DayItinerary,
-    TripData,
-} from "../../infra../../domain/trip";
 import type { DailyWeather } from "../../infra/http/weather";
 import type { ProfileInfo } from "../../infra/storage/profiles";
 import type { EnlargedCard } from "../shared/enlarge";

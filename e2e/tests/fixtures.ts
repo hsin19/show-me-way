@@ -6,7 +6,7 @@ import {
 
 const BASE_ORIGIN = "http://localhost:8046";
 
-// Minimal itinerary that passes normalizeTripData (src/lib/api.ts). Dates are
+// Minimal itinerary that passes normalizeTripData (src/lib/domain/trip.ts). Dates are
 // far-future on purpose: no day ever equals "today", so the app always lands on
 // the day-0 overview and never shows time-dependent UI (countdown badges,
 // aria-current chips). No trip.city / trip.currency — that keeps the weather

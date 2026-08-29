@@ -14,12 +14,12 @@ import {
     findProfileByTripId,
     getActiveProfileId,
     switchToProfile,
-} from "../storage/profiles";
+} from "./profiles";
 import {
     backupCurrentYaml,
     saveTripData,
     USER_YAML_KEY,
-} from "../storage/yaml-storage";
+} from "./yaml-storage";
 
 export type ShareImportOutcome =
     /** Replaced this device's copy of that same trip, keeping its profile slot, id, and Drive binding. */

@@ -21,12 +21,12 @@ import {
     getActiveProfileId,
     listProfiles,
     tripIdFromYaml,
-} from "../storage/profiles";
+} from "./profiles";
+import { importSharedTrip } from "./share-import";
 import {
     listYamlBackups,
     USER_YAML_KEY,
-} from "../storage/yaml-storage";
-import { importSharedTrip } from "./share-import";
+} from "./yaml-storage";
 
 function createLocalStorageStub() {
     const store = new Map<string, string>();

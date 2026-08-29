@@ -9,7 +9,7 @@ import {
 // `days[].region` 是 `days[].title` 的舊名。已安裝的 PWA 在 localStorage
 // (`showmeway_user_yaml`) 裡存的是舊 YAML，升級後不能壞掉：normalizeTripData
 // 會把 region 讀成 title，而下一次寫回時 serializeToYaml 只輸出 title。
-// 這支測試守的是 localStorage 這條真實路徑（單元測試 api.test.ts 只走
+// 這支測試守的是 localStorage 這條真實路徑（單元測試 src/lib/domain/trip.test.ts 只走
 // validateYaml），因為使用者不會為了升級去手動改檔案。
 
 // 只替換 4 空格縮排的 day 標題 — timeline 事件的 `title` 縮排是 8 空格，

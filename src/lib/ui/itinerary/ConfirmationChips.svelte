@@ -1,7 +1,7 @@
 <script lang="ts">
 import Maximize2 from "@lucide/svelte/icons/maximize-2";
 import Ticket from "@lucide/svelte/icons/ticket";
-import type { ConfirmationInfo } from "../../infra../../domain/trip";
+import type { ConfirmationInfo } from "../../domain/trip";
 import { copyToClipboard } from "../../stores/toast.svelte";
 import type { ConfirmationCard } from "../shared/enlarge";
 

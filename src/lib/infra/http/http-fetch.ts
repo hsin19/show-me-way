@@ -1,5 +1,4 @@
-// How an itinerary gets onto a device that doesn't have one yet — split from
-// api.ts so the parser/storage side stays free of network concerns.
+// How an itinerary gets onto a device that doesn't have one yet — keeps network concerns separate from pure parsing/storage.
 
 import {
     type TripData,
@@ -48,7 +47,7 @@ export async function fetchItinerary(): Promise<TripData> {
         const yamlContent = localStorage.getItem(USER_YAML_KEY) || await fetchDefaultYamlText();
         return validateYaml(yamlContent);
     } catch (error) {
-        console.error("[API] Error parsing YAML itinerary:", error);
+        console.error("[http-fetch] Error parsing YAML itinerary:", error);
         throw error;
     }
 }

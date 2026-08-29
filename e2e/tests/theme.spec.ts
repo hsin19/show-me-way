@@ -8,7 +8,7 @@ import {
 // inline boot script in index.html sets it before first paint, and app.css
 // overrides the design tokens under `:root[data-theme="light"]`. That boot
 // script deliberately duplicates readThemePref/resolveTheme from
-// src/lib/theme.svelte.ts (a module script would run too late and flash), so
+// src/lib/stores/theme.svelte.ts (a module script would run too late and flash), so
 // these tests exist mainly to keep the two copies agreeing.
 
 const THEME_KEY = "showmeway_theme";

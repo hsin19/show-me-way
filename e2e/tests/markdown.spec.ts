@@ -5,7 +5,7 @@ import {
     test,
 } from "./fixtures";
 
-// Inline Markdown in itinerary prose (src/lib/markdown.ts, rendered by
+// Inline Markdown in itinerary prose (src/lib/domain/markdown.ts, rendered by
 // RichText.svelte). The parsing rules have unit coverage; what only e2e can
 // show is that the markup reaches the DOM as real elements, that a hostile
 // href never becomes a live link, and that a link inside a checklist row does
@@ -143,7 +143,7 @@ test("links 的 tel: 仍可用（改用白名單後不能把電話 chip 弄不�
 });
 
 test("links 缺少 url 時在載入這關就被擋下，而不是渲染時炸掉", async ({ page }) => {
-    // 開機路徑把訊息收斂成一句通用文案（確切訊息由 api.test.ts 斷言），這裡要證的
+    // 開機路徑把訊息收斂成一句通用文案（確切訊息由 src/lib/domain/trip.test.ts 斷言），這裡要證的
     // 是「擋在 validateYaml，不是讓 undefined 走到 sanitizeLinkHref」。
     const errors: string[] = [];
     page.on("pageerror", e => errors.push(e.message));

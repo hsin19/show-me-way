@@ -6,11 +6,11 @@ import {
     getCountdownText,
     getNextEventInfo,
 } from "../../domain/timeline";
-import { toLocalIsoDate } from "../../domain/utils";
 import type {
     DayItinerary,
     TripData,
-} from "../../infra../../domain/trip";
+} from "../../domain/trip";
+import { toLocalIsoDate } from "../../domain/utils";
 import type { DailyWeather } from "../../infra/http/weather";
 import type { ProfileInfo } from "../../infra/storage/profiles";
 import type { EnlargedCard } from "../shared/enlarge";

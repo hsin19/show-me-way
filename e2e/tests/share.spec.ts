@@ -10,7 +10,7 @@ import {
     test,
 } from "./fixtures";
 
-// Share-link flows (src/lib/share.ts + maybeImportSharedItinerary in App.svelte):
+// Share-link flows (src/lib/domain/share.ts + maybeImportSharedItinerary in src/lib/stores/trip.svelte.ts):
 // a `#s=<token>` hash carries a whole compressed itinerary. An unrecognised trip is
 // imported non-destructively — the current trip is parked as a profile, never
 // overwritten — while a link carrying a trip this device already holds (same trip.id)

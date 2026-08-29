@@ -30,7 +30,7 @@ import {
     fetchDefaultYamlText,
     fetchItinerary,
 } from "../infra/http/http-fetch";
-import { importSharedTrip } from "../infra/http/share-import";
+import { downloadTextFile } from "../infra/pwa/file-download";
 import {
     createProfile,
     deleteProfile,
@@ -41,9 +41,9 @@ import {
     switchToProfile,
     tripIdFromYaml,
 } from "../infra/storage/profiles";
+import { importSharedTrip } from "../infra/storage/share-import";
 import {
     backupCurrentYaml,
-    downloadTextFile,
     saveTripData,
     USER_YAML_KEY,
 } from "../infra/storage/yaml-storage";

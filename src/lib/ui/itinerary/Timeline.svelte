@@ -23,7 +23,7 @@ import {
 import type {
     DayItinerary,
     HotelInfo,
-} from "../../infra../../domain/trip";
+} from "../../domain/trip";
 import type { DailyWeather } from "../../infra/http/weather";
 import type { EnlargedCard } from "../shared/enlarge";
 import GoogleMapsIcon from "../shared/icons/GoogleMapsIcon.svelte";
