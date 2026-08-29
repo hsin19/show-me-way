@@ -290,6 +290,25 @@ describe("validateYaml — 結構與其餘 zh-TW 驗證", () => {
             .toThrow("packing 第 1 項必須是物件 (例如 - text: '項目內容')");
     });
 
+    it("拒絕非文字的 trip.id", () => {
+        expect(() => validateYaml([validTripBlock, "  id: 123", validDaysBlock].join("\n")))
+            .toThrow("trip的 id 必須是文字");
+    });
+
+    it("保留既有的 trip.id，沒有時才產生一個，且存檔時不會被剝掉", () => {
+        const authored = validateYaml([validTripBlock, "  id: 'trip-abc'", validDaysBlock].join("\n"));
+        expect(authored.trip.id).toBe("trip-abc");
+        // The identity is what re-binds a trip to its Drive file, so a save must not drop
+        // it the way it drops start/end/departure.
+        expect(serializeToYaml(authored)).toContain("trip-abc");
+        expect(validateYaml(serializeToYaml(authored)).trip.id).toBe("trip-abc");
+
+        const minted = validateYaml([validTripBlock, validDaysBlock].join("\n"));
+        expect(minted.trip.id).toBeTruthy();
+        // Minting on every load would orphan the trip's cloud copy on the next sync.
+        expect(validateYaml(serializeToYaml(minted)).trip.id).toBe(minted.trip.id);
+    });
+
     it("拒絕非文字的 trip.city 與 days[].city", () => {
         expect(() => validateYaml([validTripBlock, "  city: 123", validDaysBlock].join("\n")))
             .toThrow("trip.city 必須是文字 (例如 'Tokyo')");

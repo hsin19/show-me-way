@@ -5,6 +5,7 @@
 // the YAML (the ledger's working rate, say) is not swapped.
 
 import {
+    genTripId,
     parseYaml,
     readJsonArray,
     type TripData,
@@ -28,13 +29,6 @@ export interface ProfileInfo {
     startDate?: string;
 }
 
-function genProfileId(): string {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-        return crypto.randomUUID();
-    }
-    return `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
 /** Newest first. Unreadable or malformed storage yields []. */
 function readStoredProfiles(): StoredProfile[] {
     return readJsonArray(PROFILES_KEY, (p): p is StoredProfile =>
@@ -52,64 +46,141 @@ export function getActiveProfileId(): string | null {
     return localStorage.getItem(ACTIVE_PROFILE_KEY);
 }
 
+/**
+ * Whether `id` is still the active trip. For guarding a callback that resolves after an
+ * await (an undo toast, a pulled sync result) against writing over a trip the user has
+ * since switched away from — those closures keep running after their owning component
+ * unmounts, so nothing else stops them from persisting against the wrong trip.
+ */
+export function isActiveProfile(id: string): boolean {
+    return getActiveProfileId() === id;
+}
+
 /** The active trip's id, minted and persisted on first call (an install predating profiles has none). */
 export function ensureActiveProfileId(): string {
     let id = getActiveProfileId();
     if (!id) {
-        id = genProfileId();
+        id = genTripId();
         localStorage.setItem(ACTIVE_PROFILE_KEY, id);
     }
     return id;
 }
 
-/** Display label for a stored trip. Falls back to 未命名行程 rather than throwing, so an unparseable profile is still listable. */
-export function tripNameFromYaml(yaml: string): string {
-    try {
-        const data = parseYaml(yaml) as Partial<TripData> | null;
-        const name = data?.trip?.name;
-        if (typeof name === "string" && name.trim()) return name.trim();
-    } catch {
-        // fall through to the placeholder
-    }
+function nameFromParsed(data: Partial<TripData> | null): string {
+    const name = data?.trip?.name;
+    if (typeof name === "string" && name.trim()) return name.trim();
     return "未命名行程";
 }
 
 /**
- * The trip's first day, read straight from raw YAML without normalizing it.
- *
  * Takes the earliest `days[].date` rather than the first listed one: `normalizeTripData`
  * sorts before every save, so persisted trips are already in order, but an unsaved editor
  * draft is not — and this value becomes a sort key and the Drive file's `startDate`.
  */
-export function tripStartDateFromYaml(yaml: string): string | null {
-    try {
-        const data = parseYaml(yaml) as Partial<TripData> | null;
-        if (data?.days && Array.isArray(data.days) && data.days.length > 0) {
-            const dates = data.days
-                .map(day => day?.date)
-                .filter((date): date is string => typeof date === "string" && !!date.trim())
-                .map(date => date.trim());
-            if (dates.length > 0) {
-                return dates.reduce((earliest, date) => (date < earliest ? date : earliest));
-            }
+function startDateFromParsed(data: Partial<TripData> | null): string | null {
+    if (data?.days && Array.isArray(data.days) && data.days.length > 0) {
+        const dates = data.days
+            .map(day => day?.date)
+            .filter((date): date is string => typeof date === "string" && !!date.trim())
+            .map(date => date.trim());
+        if (dates.length > 0) {
+            return dates.reduce((earliest, date) => (date < earliest ? date : earliest));
         }
-        if (data?.trip && typeof (data.trip as { start?: string; }).start === "string") {
-            return (data.trip as { start: string; }).start.trim();
-        }
-    } catch {
-        // ignore
+    }
+    if (data?.trip && typeof (data.trip as { start?: string; }).start === "string") {
+        return (data.trip as { start: string; }).start.trim();
     }
     return null;
 }
 
+/** Display label for a stored trip. Falls back to 未命名行程 rather than throwing, so an unparseable profile is still listable. */
+export function tripNameFromYaml(yaml: string): string {
+    try {
+        return nameFromParsed(parseYaml(yaml) as Partial<TripData> | null);
+    } catch {
+        return "未命名行程";
+    }
+}
+
+/** The trip's first day, read straight from raw YAML without normalizing it. */
+export function tripStartDateFromYaml(yaml: string): string | null {
+    try {
+        return startDateFromParsed(parseYaml(yaml) as Partial<TripData> | null);
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The trip's own id, read straight from raw YAML. Null for a document written before ids
+ * existed — `normalizeTripData` mints one the next time it is loaded, so this only ever
+ * reports the gap, never fills it.
+ */
+export function tripIdFromYaml(yaml: string): string | null {
+    try {
+        const id = (parseYaml(yaml) as Partial<TripData> | null)?.trip?.id;
+        return typeof id === "string" && id.trim() ? id.trim() : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Every trip on this device, the active one first: the profile slot holding it and its
+ * raw YAML. For work that has to reach across all of them at once — matching them against
+ * a cloud listing, say — rather than only the parked ones `listProfiles` reports.
+ *
+ * Mints the active profile id if this install never had one, since a caller keying
+ * anything by slot needs it to exist.
+ */
+export function listLocalTrips(): { profileId: string; yaml: string; }[] {
+    const activeYaml = localStorage.getItem(USER_YAML_KEY);
+    return [
+        ...(activeYaml == null ? [] : [{ profileId: ensureActiveProfileId(), yaml: activeYaml }]),
+        ...readStoredProfiles().map(p => ({ profileId: p.id, yaml: p.yaml })),
+    ];
+}
+
+/**
+ * The profile slot holding the trip with this id, or null. A slot rather than the trip
+ * itself, because that is what everything else here — switching, parking, the Drive
+ * binding — is keyed by.
+ */
+export function findProfileByTripId(tripId: string): string | null {
+    return listLocalTrips().find(trip => tripIdFromYaml(trip.yaml) === tripId)?.profileId ?? null;
+}
+
+/**
+ * Re-mint `data.trip.id` if this device already holds that trip, and report whether it
+ * did. An imported copy keeps its identity by default — that is what lets two devices
+ * recognise the same trip in Drive — so this is only about the one case where keeping it
+ * would be wrong: importing a trip alongside the copy it came from, where the two are
+ * separate trips from here on and must not compete for one cloud file.
+ *
+ * Mutates `data` in place, so call it before serializing.
+ */
+export function ensureUniqueTripId(data: TripData): boolean {
+    if (findProfileByTripId(data.trip.id) === null) return false;
+    data.trip.id = genTripId();
+    return true;
+}
+
 /** Parked trips only, newest first — the active one lives in USER_YAML_KEY. */
 export function listProfiles(): ProfileInfo[] {
-    return readStoredProfiles().map(p => ({
-        id: p.id,
-        name: tripNameFromYaml(p.yaml),
-        savedAt: p.savedAt,
-        startDate: tripStartDateFromYaml(p.yaml) ?? undefined,
-    }));
+    return readStoredProfiles().map(p => {
+        let data: Partial<TripData> | null = null;
+        try {
+            data = parseYaml(p.yaml) as Partial<TripData> | null;
+        } catch {
+            // fall through to defaults below
+        }
+        return {
+            id: p.id,
+            name: nameFromParsed(data),
+            savedAt: p.savedAt,
+            startDate: startDateFromParsed(data) ?? undefined,
+        };
+    });
 }
 
 /**
@@ -142,7 +213,7 @@ export function createProfile(yaml: string): string {
         list.unshift({ id: activeId, yaml: activeYaml, savedAt: new Date().toISOString() });
         writeStoredProfiles(list);
     }
-    const id = genProfileId();
+    const id = genTripId();
     localStorage.setItem(USER_YAML_KEY, yaml);
     localStorage.setItem(ACTIVE_PROFILE_KEY, id);
     return id;

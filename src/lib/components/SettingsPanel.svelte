@@ -1,4 +1,7 @@
 <script lang="ts">
+import CloudAlert from "@lucide/svelte/icons/cloud-alert";
+import CloudDownload from "@lucide/svelte/icons/cloud-download";
+import CloudOff from "@lucide/svelte/icons/cloud-off";
 import CloudSync from "@lucide/svelte/icons/cloud-sync";
 import CloudUpload from "@lucide/svelte/icons/cloud-upload";
 import Copy from "@lucide/svelte/icons/copy";
@@ -14,6 +17,7 @@ import {
     getYamlBackup,
     listYamlBackups,
     serializeToYaml,
+    type TripData,
     USER_YAML_KEY,
     validateYaml,
     type YamlBackup,
@@ -22,6 +26,7 @@ import { fetchDefaultYamlText } from "../api-fetch";
 import { gdriveSync } from "../gdrive.svelte";
 import {
     ensureActiveProfileId,
+    isActiveProfile,
     type ProfileInfo,
     tripNameFromYaml,
     tripStartDateFromYaml,
@@ -31,6 +36,7 @@ import {
     decodeShareToken,
     parseShareToken,
 } from "../share";
+import { importSharedTrip } from "../share-import";
 import {
     copyToClipboard,
     showToast,
@@ -50,6 +56,8 @@ interface Props {
     onSwitchProfile: (id: string) => void;
     onCreateProfile: () => void;
     onDeleteProfile: (id: string, name: string) => void;
+    /** 兩份都留: park `yaml` as a trip of its own. Called only once the cloud copy has landed. */
+    onBranchLocalCopy: (yaml: string) => Promise<void>;
     onExportYaml: () => void;
     onExportUrl: () => void;
 }
@@ -62,6 +70,7 @@ let {
     onSwitchProfile,
     onCreateProfile,
     onDeleteProfile,
+    onBranchLocalCopy,
     onExportYaml,
     onExportUrl,
 }: Props = $props();
@@ -99,27 +108,56 @@ function markDraft() {
 async function save() {
     try {
         const token = parseShareToken(yamlInput);
-        const source = token ? await decodeShareToken(token) : yamlInput;
-        const parsed = validateYaml(source);
+        const parsed = validateYaml(token ? await decodeShareToken(token) : yamlInput);
+        if (!stillActive()) return;
+        if (token) {
+            await landSharedLink(parsed);
+            return;
+        }
         // Store what was parsed, not what was typed, so the editor shows the
         // canonical form from here on.
         const tidied = serializeToYaml(parsed);
-        backupCurrentYaml();
-        localStorage.setItem(USER_YAML_KEY, tidied);
+        if (!safeSetUserYaml(tidied)) return;
         yamlInput = tidied;
         yamlSnapshot = tidied;
         settingsDraft.yaml = null;
         validationError = null;
 
-        gdriveSync.scheduleSync(parsed.trip?.name ?? "未命名行程", tidied, activeTripId);
+        gdriveSync.scheduleSync(tidied, activeTripId);
 
-        showToast(token ? "已從分享連結載入行程！" : "自訂 YAML 行程儲存成功！");
+        showToast("自訂 YAML 行程儲存成功！");
         await onReload();
         onDone();
     } catch (err) {
         console.error("YAML Validation failed:", err);
         validationError = err instanceof Error ? err.message : "YAML 格式錯誤，請檢查縮排！";
     }
+}
+
+/**
+ * A share link pasted into the editor is a whole trip with its own identity, not new
+ * contents for this slot — so it goes through the same branching as the `#s=` hash rather
+ * than being written straight into `USER_YAML_KEY`, which would leave the incoming trip
+ * wearing this one's Drive binding and PATCH a stranger's cloud file on the next sync.
+ */
+async function landSharedLink(parsed: TripData) {
+    const outcome = importSharedTrip(parsed);
+    if (outcome.kind === "declined") return;
+    yamlInput = outcome.yaml;
+    yamlSnapshot = outcome.yaml;
+    settingsDraft.yaml = null;
+    validationError = null;
+    yamlBackups = listYamlBackups();
+    // `outcome.profileId`, never `activeTripId`: an import moves the active slot, and
+    // that const was captured before it did.
+    gdriveSync.scheduleSync(outcome.yaml, outcome.profileId);
+    showToast(
+        outcome.kind === "overwritten"
+            ? "已用分享連結更新行程，可在行程管理還原前一版"
+            : "已從分享連結匯入為新行程",
+    );
+    await onReload();
+    onDone();
 }
 
 // ensureActiveProfileId, matching persistTripData: this id keys the trip's Drive binding
@@ -131,9 +169,92 @@ const activeTripId = ensureActiveProfileId();
 // From the persisted copy, not the live editor value: this is a full js-yaml parse, and
 // binding it to the textarea ran one per keystroke to move a year-month label.
 let activeTripStartDate = $derived(tripStartDateFromYaml(yamlSnapshot) ?? undefined);
-let isBoundToCloud = $derived(
-    gdriveSync.isConnected && gdriveSync.boundFileIdsFor([activeTripId]).size > 0,
-);
+
+/** Login is this tap's whole job — whatever the button turns into next (上傳/同步/下載) is a separate, explicit tap once connected. */
+async function loginToCloud() {
+    await gdriveSync.connect();
+}
+
+/** Only asks Drive and updates the button (or the conflict strip below) — never transfers anything itself. */
+async function checkCloudStatus() {
+    await gdriveSync.sync(yamlInput, activeTripId, { checkOnly: true });
+}
+
+/**
+ * What "上傳" and "下載" both actually do: the same plain `sync()`. It re-decides from
+ * scratch and acts, so a still-safe push/pull goes through, and anything that moved out
+ * from under it (e.g. an edit typed while "下載" was on offer) turns into a `conflict`
+ * instead of blindly transferring — one reconcile covers both directions.
+ */
+async function reconcileCloudTrip() {
+    const res = await gdriveSync.sync(yamlInput, activeTripId);
+    if (res?.action === "pulled" && res.yaml && await landPulled(res.yaml)) res.commit?.();
+}
+
+/**
+ * The UI half of the header's cloud button: `cloudActionFor` decides what the next tap
+ * means, this maps that decision onto icon, label, and handler — computed once so the
+ * template and `handleCloudAction` both read the same answer. `run` is `null` exactly
+ * when `disabled` is true: those states have nothing a tap could do.
+ */
+let cloudButton = $derived.by(() => {
+    const action = gdriveSync.cloudActionFor(activeTripId, yamlInput);
+    switch (action.kind) {
+        case "connecting":
+            return { icon: CloudSync, iconClass: "animate-spin text-accent", disabled: true, label: "連線 Google 雲端硬碟中…", run: null };
+        case "busy": {
+            const icon = action.phase === "pushing" ? CloudUpload : action.phase === "pulling" ? CloudDownload : CloudSync;
+            const label = action.phase === "pushing"
+                ? "正在上傳到 Google Drive…"
+                : action.phase === "pulling"
+                ? "正在從 Google Drive 下載…"
+                : "正在比對雲端版本…";
+            return { icon, iconClass: "animate-spin text-accent", disabled: true, label, run: null };
+        }
+        case "conflict":
+            return { icon: CloudAlert, iconClass: "text-danger", disabled: true, label: "請先在下方解決雲端衝突", run: null };
+        case "login":
+            return { icon: CloudOff, iconClass: "", disabled: false, label: "登入 Google 雲端硬碟", run: loginToCloud };
+        case "upload":
+            return {
+                icon: CloudUpload,
+                iconClass: action.overwrite ? "text-accent" : "",
+                disabled: false,
+                label: action.overwrite ? "上傳本機異動到 Google Drive (覆蓋雲端版本)" : "上傳此行程至 Google Drive (建立新檔案)",
+                run: reconcileCloudTrip,
+            };
+        case "download":
+            return { icon: CloudDownload, iconClass: "text-accent", disabled: false, label: "下載雲端最新版本 (覆蓋本機)", run: reconcileCloudTrip };
+        case "check":
+            return { icon: CloudSync, iconClass: "text-accent", disabled: false, label: "同步行程 (比對本地與雲端內容差異)", run: checkCloudStatus };
+    }
+});
+
+/**
+ * Whether it is still safe for this panel's pending async work to write the active trip:
+ * every function below runs across at least one `await`, and `activeTripId` — fixed at
+ * mount — cannot itself notice a profile switch that happened during that gap (switching
+ * normally unmounts this panel, but an already-in-flight closure keeps running regardless).
+ * Call this again right before every `USER_YAML_KEY` write, not just once up front.
+ */
+function stillActive(): boolean {
+    if (isActiveProfile(activeTripId)) return true;
+    showToast("行程已切換，此操作已取消");
+    return false;
+}
+
+/** The one place that writes USER_YAML_KEY, so a quota/storage failure is always reported instead of left as an unhandled rejection. */
+function safeSetUserYaml(yaml: string): boolean {
+    try {
+        backupCurrentYaml();
+        localStorage.setItem(USER_YAML_KEY, yaml);
+        return true;
+    } catch (err) {
+        console.error("Failed to persist YAML:", err);
+        showToast("儲存失敗，請稍後再試");
+        return false;
+    }
+}
 
 /**
  * Persists an unsaved editor draft before anything uploads it. Returns false when the
@@ -145,17 +266,22 @@ let isBoundToCloud = $derived(
  */
 async function landDraft(): Promise<boolean> {
     if (yamlInput === yamlSnapshot) return true;
+    let tidied: string;
     try {
-        validateYaml(yamlInput);
+        // Serialized, not stored as typed, for the same reason `save()` does it — and
+        // here it is load-bearing rather than cosmetic: a hand-written trip has no
+        // `trip.id` until `normalizeTripData` mints one, and uploading those raw bytes
+        // puts a file on Drive with no identity for `reconcileBindings` to ever match.
+        tidied = serializeToYaml(validateYaml(yamlInput));
     } catch (err) {
         console.error("Draft YAML Validation failed:", err);
         validationError = err instanceof Error ? err.message : "YAML 格式錯誤，請修正後再同步！";
         showToast("請先修正編輯器中的 YAML 格式錯誤");
         return false;
     }
-    backupCurrentYaml();
-    localStorage.setItem(USER_YAML_KEY, yamlInput);
-    yamlSnapshot = yamlInput;
+    if (!stillActive() || !safeSetUserYaml(tidied)) return false;
+    yamlInput = tidied;
+    yamlSnapshot = tidied;
     settingsDraft.yaml = null;
     validationError = null;
     yamlBackups = listYamlBackups();
@@ -166,23 +292,11 @@ async function landDraft(): Promise<boolean> {
 async function handleCloudAction() {
     // An unsaved draft is what the user means by "this trip".
     if (!await landDraft()) return;
-
-    const tripName = tripNameFromYaml(yamlInput);
-
-    // 2. Connect if not connected yet
-    if (!gdriveSync.isConnected) {
-        const connected = await gdriveSync.connect();
-        if (!connected) return;
-    }
-
-    // 3. One reconcile. A divergence comes back as `conflict` and changes nothing — the
-    //    strip below is where the user picks a side.
-    const res = await gdriveSync.sync(tripName, yamlInput, activeTripId);
-    if (res?.action === "pulled" && res.yaml) await landPulled(res.yaml);
+    await cloudButton.run?.();
 }
 
-/** Persists a copy `sync` pulled from Drive, backing up what it replaces. */
-async function landPulled(yaml: string) {
+/** Persists a copy `sync` pulled from Drive, backing up what it replaces. False when nothing was written. */
+async function landPulled(yaml: string): Promise<boolean> {
     try {
         validateYaml(yaml);
     } catch (e) {
@@ -193,16 +307,19 @@ async function landPulled(yaml: string) {
         settingsDraft.yaml = yaml;
         validationError = e instanceof Error ? e.message : "雲端 YAML 格式錯誤，請檢查！";
         showToast("下載的雲端行程格式有誤，已載入編輯器，請修正後再儲存");
-        return;
+        return false;
     }
-    backupCurrentYaml();
-    localStorage.setItem(USER_YAML_KEY, yaml);
+    // The realistic case for this guard: sync() ran across a real network round trip,
+    // during which the user switched to a different trip via the still-mounted
+    // ProfileManager above — landing the pulled bytes now would overwrite that trip.
+    if (!stillActive() || !safeSetUserYaml(yaml)) return false;
     yamlInput = yaml;
     yamlSnapshot = yaml;
     settingsDraft.yaml = null;
     validationError = null;
     yamlBackups = listYamlBackups();
     await onReload();
+    return true;
 }
 
 async function keepLocalVersion() {
@@ -210,13 +327,37 @@ async function keepLocalVersion() {
     // Through landDraft, so what overwrites the cloud copy is the trip the app is
     // actually running rather than an unvalidated editor buffer.
     if (!await landDraft()) return;
-    await gdriveSync.sync(tripNameFromYaml(yamlInput), yamlInput, activeTripId, { force: "local" });
+    await gdriveSync.sync(yamlInput, activeTripId, { force: "local" });
 }
 
 async function takeCloudVersion() {
     confirmingConflictSide = null;
-    const res = await gdriveSync.sync(tripNameFromYaml(yamlInput), yamlInput, activeTripId, { force: "remote" });
-    if (res?.action === "pulled" && res.yaml) await landPulled(res.yaml);
+    const res = await gdriveSync.sync(yamlInput, activeTripId, { force: "remote" });
+    if (res?.action === "pulled" && res.yaml && await landPulled(res.yaml)) res.commit?.();
+}
+
+/**
+ * 兩份都留 — the resolution that discards neither side. The cloud copy takes this trip's
+ * slot, keeping its id and Drive binding, and what was here is parked as a trip of its own.
+ *
+ * Order is the whole trick: the local YAML is read out of storage before the pull
+ * overwrites it, and the branch only happens once those cloud bytes have actually landed —
+ * a pull that failed validation, or a trip switched out from under the round trip, must
+ * leave one copy rather than fork off a second.
+ */
+async function keepBothVersions() {
+    confirmingConflictSide = null;
+    // Through landDraft, so the copy being preserved is the trip the app is running.
+    if (!await landDraft()) return;
+    const localYaml = localStorage.getItem(USER_YAML_KEY);
+    if (localYaml === null) return;
+    const res = await gdriveSync.sync(yamlInput, activeTripId, { force: "remote" });
+    if (res?.action !== "pulled" || !res.yaml) return;
+    if (!await landPulled(res.yaml)) return;
+    res.commit?.();
+    await onBranchLocalCopy(localYaml);
+    // The editor still shows the copy that just became the parked one.
+    onDone();
 }
 
 async function handleLoadFromCloud(fileId: string, cloudName: string) {
@@ -243,10 +384,8 @@ async function handleDeleteCloudTrip(fileId: string) {
     await gdriveSync.deleteTrip(fileId);
 }
 
-let confirmingConflictSide = $state<"local" | "remote" | null>(null);
-let activeConflict = $derived(
-    gdriveSync.conflict?.tripId === activeTripId ? gdriveSync.conflict : null,
-);
+let confirmingConflictSide = $state<"local" | "remote" | "both" | null>(null);
+let activeConflict = $derived(gdriveSync.conflictFor(activeTripId));
 
 let confirmingBackupSavedAt = $state<string | null>(null);
 
@@ -274,8 +413,7 @@ async function executeRestore(savedAt: string) {
         showToast("此備份內容無效，已載入編輯器，請修正後再儲存");
         return;
     }
-    backupCurrentYaml();
-    localStorage.setItem(USER_YAML_KEY, yaml);
+    if (!stillActive() || !safeSetUserYaml(yaml)) return;
     settingsDraft.yaml = null;
     validationError = null;
     showToast("已還原備份的行程");
@@ -287,8 +425,15 @@ let confirmingReset = $state(false);
 
 async function handleReset() {
     confirmingReset = false;
-    backupCurrentYaml();
-    localStorage.removeItem(USER_YAML_KEY);
+    if (!stillActive()) return;
+    try {
+        backupCurrentYaml();
+        localStorage.removeItem(USER_YAML_KEY);
+    } catch (err) {
+        console.error("Failed to reset trip data:", err);
+        showToast("重設失敗，請稍後再試");
+        return;
+    }
     // Unbind rather than mark dirty: this discards the trip, and marking it dirty would
     // arm an auto-sync that pushes the bundled default template over the user's cloud
     // itinerary. The Drive copy survives and reappears in the 雲端行程 list.
@@ -333,27 +478,13 @@ function discardDraft() {
     <div class="flex items-center gap-1.5 shrink-0">
         <button
             type="button"
-            disabled={gdriveSync.isSyncing || gdriveSync.isConnecting}
+            disabled={cloudButton.disabled}
             onclick={handleCloudAction}
-            aria-label={!gdriveSync.isConnected
-            ? "登入 Google 雲端硬碟並上傳"
-            : isBoundToCloud
-            ? "同步行程 (比對本地與雲端內容差異)"
-            : "上傳此行程至 Google Drive (建立新檔案)"}
-            title={!gdriveSync.isConnected
-            ? "登入 Google 雲端硬碟並上傳"
-            : isBoundToCloud
-            ? "同步行程 (比對本地與雲端內容差異)"
-            : "上傳此行程至 Google Drive (建立新檔案)"}
+            aria-label={cloudButton.label}
+            title={cloudButton.label}
             class="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer disabled:opacity-40"
         >
-            {#if gdriveSync.isSyncing || gdriveSync.isConnecting}
-                <CloudSync size={18} class="animate-spin text-accent" aria-hidden="true" />
-            {:else if isBoundToCloud}
-                <CloudSync size={18} class="text-accent" aria-hidden="true" />
-            {:else}
-                <CloudUpload size={18} aria-hidden="true" />
-            {/if}
+            <cloudButton.icon size={18} class={cloudButton.iconClass} aria-hidden="true" />
         </button>
     </div>
 </div>
@@ -365,6 +496,13 @@ function discardDraft() {
                 message={`確定以本機版本覆蓋雲端的「${activeConflict.fileName}」嗎？其他裝置寫入雲端的修改會被取代。`}
                 confirmLabel="覆蓋雲端"
                 onconfirm={() => void keepLocalVersion()}
+                oncancel={() => (confirmingConflictSide = null)}
+            />
+        {:else if confirmingConflictSide === "both"}
+            <ConfirmBar
+                message={`確定兩份都留嗎？這台裝置的版本會另存成一個新行程，雲端的「${activeConflict.fileName}」則成為這趟行程的內容。`}
+                confirmLabel="兩份都留"
+                onconfirm={() => void keepBothVersions()}
                 oncancel={() => (confirmingConflictSide = null)}
             />
         {:else if confirmingConflictSide === "remote"}
@@ -406,6 +544,19 @@ function discardDraft() {
                         保留本機版本
                     </button>
                 </div>
+                {#if activeConflict.kind === "both-changed"}
+                    <!-- Only for a real divergence: `remote-newer` means this device changed
+                         nothing, so there is no second version to keep. Full width below the
+                         pair rather than a third column, which would not fit a phone. -->
+                    <button
+                        type="button"
+                        disabled={gdriveSync.isSyncing}
+                        onclick={() => (confirmingConflictSide = "both")}
+                        class="mt-2 w-full min-h-[44px] rounded-lg bg-tint-1 text-text-secondary text-xs font-bold border border-card-border hover:bg-tint-2 transition duration-200 cursor-pointer disabled:opacity-40"
+                    >
+                        兩份都留（本機版另存為新行程）
+                    </button>
+                {/if}
             </div>
         {/if}
     </div>

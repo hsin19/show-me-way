@@ -7,6 +7,7 @@ import {
     vi,
 } from "vitest";
 import {
+    buildRebindRecord,
     clearCachedAccessToken,
     clearGdriveUser,
     decideSyncAction,
@@ -72,9 +73,10 @@ describe("yamlFingerprint", () => {
 describe("decideSyncAction", () => {
     // Both sides agreed on md5-a / hash-a at the last sync.
     const agreed = {
-        record: { fileId: "file-1", remoteMd5: "md5-a", localHash: "hash-a" },
+        record: { fileId: "file-1", remoteMd5: "md5-a", localHash: "hash-a", remoteHash: "hash-a" },
         remoteExists: true,
         remoteMd5: "md5-a",
+        remoteHash: "hash-a",
         localHash: "hash-a",
     };
 
@@ -86,40 +88,146 @@ describe("decideSyncAction", () => {
         expect(decideSyncAction({ ...agreed, remoteExists: false })).toBe("push");
     });
 
-    it("pushes a record migrated from the timestamp scheme, which has no agreed checksum", () => {
+    it("pushes a record migrated from the timestamp scheme, which agreed on nothing", () => {
         // The one case that can overwrite a remote another device advanced — documented.
         expect(decideSyncAction({ ...agreed, record: { fileId: "file-1" } })).toBe("push");
     });
 
-    it("pushes local changes when the remote still matches", () => {
-        expect(decideSyncAction({ ...agreed, localHash: "hash-b" })).toBe("push");
+    it("compares the recorded hashes when the record predates md5 but has one", () => {
+        // Narrower than "no remoteMd5 means push": a hash on both sides is a usable base.
+        const record = { fileId: "file-1", localHash: "hash-a", remoteHash: "hash-a" };
+        expect(decideSyncAction({ ...agreed, record, remoteMd5: null })).toBe("up_to_date");
+        expect(decideSyncAction({ ...agreed, record, remoteMd5: null, remoteHash: "hash-b", localHash: "hash-b" }))
+            .toBe("up_to_date");
     });
 
-    it("pulls when only the remote moved", () => {
-        expect(decideSyncAction({ ...agreed, remoteMd5: "md5-b" })).toBe("pull");
+    describe("with md5 saying the remote moved", () => {
+        const moved = { ...agreed, remoteMd5: "md5-b" };
+
+        it("pulls when only the remote moved, whatever the remote hash claims", () => {
+            // Rule 1 outranks rule 2: equal hashes against a moved md5 means the hash is
+            // stale — someone wrote the file outside this app — and the bytes win.
+            expect(decideSyncAction({ ...moved, remoteHash: "hash-a" })).toBe("pull");
+            expect(decideSyncAction({ ...moved, remoteHash: "hash-b" })).toBe("pull");
+            expect(decideSyncAction({ ...moved, remoteHash: null })).toBe("pull");
+        });
+
+        it("resolves to up_to_date when both sides moved to identical content", () => {
+            expect(decideSyncAction({ ...moved, remoteHash: "hash-b", localHash: "hash-b" })).toBe("up_to_date");
+        });
+
+        it("reports a conflict when both sides moved apart", () => {
+            expect(decideSyncAction({ ...moved, remoteHash: "hash-c", localHash: "hash-b" })).toBe("conflict");
+            expect(decideSyncAction({ ...moved, remoteHash: null, localHash: "hash-b" })).toBe("conflict");
+        });
     });
 
-    it("reports a conflict when both sides moved", () => {
-        expect(decideSyncAction({ ...agreed, remoteMd5: "md5-b", localHash: "hash-b" })).toBe("conflict");
+    describe("with md5 saying the remote stood still", () => {
+        it("does nothing when neither side moved", () => {
+            expect(decideSyncAction(agreed)).toBe("up_to_date");
+        });
+
+        it("pushes local changes", () => {
+            expect(decideSyncAction({ ...agreed, localHash: "hash-b" })).toBe("push");
+            expect(decideSyncAction({ ...agreed, localHash: "hash-b", remoteHash: null })).toBe("push");
+        });
+
+        it("skips the upload when the local edit landed back on the remote's content", () => {
+            expect(decideSyncAction({
+                ...agreed,
+                record: { ...agreed.record, localHash: "hash-b", remoteHash: "hash-a" },
+            })).toBe("up_to_date");
+        });
     });
 
-    it("does nothing when neither side moved", () => {
-        expect(decideSyncAction(agreed)).toBe("up_to_date");
+    describe("with the remote's movement unknowable", () => {
+        // Drive reporting no md5 for a live file, and no recorded hash to fall back on.
+        const unknowable = { ...agreed, remoteMd5: null, record: { fileId: "file-1", remoteMd5: "md5-a", localHash: "hash-a" } };
+
+        it("derives the direction from the content comparison when it can", () => {
+            // An agreement is only ever recorded from bytes both sides hold, so local
+            // standing still while the contents differ can only mean the remote moved.
+            expect(decideSyncAction({ ...unknowable, remoteHash: "hash-b" })).toBe("pull");
+            expect(decideSyncAction({ ...unknowable, remoteHash: "hash-b", localHash: "hash-b" })).toBe("up_to_date");
+            expect(decideSyncAction({ ...unknowable, remoteHash: "hash-c", localHash: "hash-b" })).toBe("conflict");
+        });
+
+        it("never pushes blind with nothing at all to compare", () => {
+            // Unknowable, not unchanged — pushing here would be last-writer-wins.
+            expect(decideSyncAction({ ...unknowable, remoteHash: null, localHash: "hash-b" })).toBe("conflict");
+            expect(decideSyncAction({ ...unknowable, remoteHash: null })).toBe("up_to_date");
+        });
     });
 
     it("treats a record with no local fingerprint as locally changed", () => {
-        expect(decideSyncAction({ ...agreed, record: { fileId: "file-1", remoteMd5: "md5-a" } })).toBe("push");
-        expect(decideSyncAction({
-            ...agreed,
-            record: { fileId: "file-1", remoteMd5: "md5-a" },
-            remoteMd5: "md5-b",
-        })).toBe("conflict");
+        const record = { fileId: "file-1", remoteMd5: "md5-a" };
+        expect(decideSyncAction({ ...agreed, record, remoteHash: null })).toBe("push");
+        expect(decideSyncAction({ ...agreed, record, remoteMd5: "md5-b", remoteHash: null })).toBe("conflict");
     });
 
-    it("never pushes blind when Drive reports no checksum for the remote", () => {
-        // Unknowable, not unchanged — pushing here would be last-writer-wins.
-        expect(decideSyncAction({ ...agreed, remoteMd5: null, localHash: "hash-b" })).toBe("conflict");
-        expect(decideSyncAction({ ...agreed, remoteMd5: null })).toBe("up_to_date");
+    describe("with an unresolved rebind on the record", () => {
+        // What buildRebindRecord writes when the two copies differ: a binding, no base.
+        const rebound = { fileId: "file-1", remoteMd5: "md5-a", remoteHash: "hash-a", diverged: true };
+
+        it("refuses to push past it even though nothing moved since", () => {
+            // The whole point: without the flag this is indistinguishable from a legacy
+            // record, and "assume local moved" would overwrite a cloud copy the user has
+            // never seen. It has to survive the reload that drops any in-memory conflict.
+            expect(decideSyncAction({ ...agreed, record: rebound, localHash: "hash-b" })).toBe("conflict");
+        });
+
+        it("still refuses when only the remote has moved on", () => {
+            expect(decideSyncAction({ ...agreed, record: rebound, remoteMd5: "md5-b", remoteHash: "hash-c", localHash: "hash-b" }))
+                .toBe("conflict");
+        });
+
+        it("settles itself when the two sides turn out to hold the same content", () => {
+            // The one resolution that needs no decision — nothing would be discarded.
+            expect(decideSyncAction({ ...agreed, record: rebound, remoteHash: "hash-b", localHash: "hash-b" }))
+                .toBe("up_to_date");
+        });
+
+        it("leaves a legacy record without one pushing as before", () => {
+            // Records migrated from the timestamp scheme also lack a localHash; only the
+            // flag distinguishes them, and their documented behaviour is to push.
+            const legacy = { fileId: "file-1", remoteMd5: "md5-a", remoteHash: "hash-a" };
+            expect(decideSyncAction({ ...agreed, record: legacy, localHash: "hash-b" })).toBe("push");
+        });
+    });
+});
+
+describe("buildRebindRecord", () => {
+    const file = { id: "file-1", md5Checksum: "md5-a", contentHash: "hash-a" };
+
+    it("records a complete agreement when the two copies match", () => {
+        // The payoff of publishing contentHash: a full merge base without downloading.
+        expect(buildRebindRecord(file, "hash-a")).toEqual({
+            fileId: "file-1",
+            remoteMd5: "md5-a",
+            remoteHash: "hash-a",
+            localHash: "hash-a",
+        });
+    });
+
+    it("binds the file but marks it diverged when the two copies differ", () => {
+        // A localHash here would claim the two sides once shared contents they never did,
+        // and the next sync would read that as up_to_date. `diverged` is what holds it
+        // instead, and it is on the record so a reload cannot lose it.
+        expect(buildRebindRecord(file, "hash-b")).toEqual({
+            fileId: "file-1",
+            remoteMd5: "md5-a",
+            remoteHash: "hash-a",
+            diverged: true,
+        });
+    });
+
+    it("cannot agree with a file that published no hash", () => {
+        expect(buildRebindRecord({ id: "file-1", md5Checksum: "md5-a" }, "hash-a")).toEqual({
+            fileId: "file-1",
+            remoteMd5: "md5-a",
+            remoteHash: undefined,
+            diverged: true,
+        });
     });
 });
 
@@ -277,7 +385,7 @@ describe("gdrive module", () => {
 
         it("lists cloud trip files", async () => {
             const mockFiles = [
-                { id: "f1", name: "東京五日.yaml", modifiedTime: "2026-08-23T10:00:00Z", size: "1234", appProperties: { showmewayTripId: "p1" } },
+                { id: "f1", name: "東京五日.yaml", modifiedTime: "2026-08-23T10:00:00Z", size: "1234", appProperties: { showmewayTripId: "p1", contentHash: "h1" } },
                 { id: "f2", name: "京都散策.yml", modifiedTime: "2026-08-22T10:00:00Z", size: "2345" },
             ];
             vi.stubGlobal(
@@ -290,7 +398,7 @@ describe("gdrive module", () => {
 
             const trips = await listCloudTrips("token", "folder-123");
             expect(trips).toEqual([
-                { id: "f1", name: "東京五日", modifiedTime: "2026-08-23T10:00:00Z", size: 1234, tripId: "p1" },
+                { id: "f1", name: "東京五日", modifiedTime: "2026-08-23T10:00:00Z", size: 1234, tripId: "p1", contentHash: "h1" },
                 { id: "f2", name: "京都散策", modifiedTime: "2026-08-22T10:00:00Z", size: 2345, tripId: undefined },
             ]);
         });
@@ -371,6 +479,24 @@ describe("gdrive module", () => {
             expect(result.startDate).toBe("2026-10-01");
         });
 
+        it("publishes the content fingerprint alongside the bytes it describes", async () => {
+            vi.stubGlobal(
+                "fetch",
+                vi.fn().mockResolvedValue({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({ id: "file-x", name: "東京.yaml", modifiedTime: "2026-08-24T00:00:00Z" }),
+                }),
+            );
+
+            const yaml = "trip:\n  name: 東京\n";
+            const result = await uploadOrUpdateCloudTrip("token", "東京", yaml, { folderId: "f", tripId: "p-1" });
+
+            // One request, so a reader can never see the hash without the content it names.
+            expect(fetchCall(0).body).toContain(`"contentHash":"${yamlFingerprint(yaml)}"`);
+            expect(result.contentHash).toBe(yamlFingerprint(yaml));
+        });
+
         it("downloads yaml content", async () => {
             vi.stubGlobal(
                 "fetch",
@@ -428,6 +554,7 @@ describe("gdrive module", () => {
                             name: "東京五日.yaml",
                             modifiedTime: "2026-08-24T08:00:00Z",
                             md5Checksum: "md5-abc-123",
+                            appProperties: { contentHash: "hash-abc-123" },
                         }),
                 }),
             );
@@ -437,6 +564,7 @@ describe("gdrive module", () => {
             expect(meta?.id).toBe("file-meta");
             expect(meta?.name).toBe("東京五日");
             expect(meta?.md5Checksum).toBe("md5-abc-123");
+            expect(meta?.contentHash).toBe("hash-abc-123");
         });
     });
 });

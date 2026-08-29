@@ -3,7 +3,10 @@ import {
     loadAll as loadYamlDocuments,
 } from "js-yaml";
 import { type ExpenseItem } from "./ledger";
-import { parseEventStartMinutes } from "./timeline";
+import {
+    formatEventMinutes,
+    parseEventStartMinutes,
+} from "./timeline";
 import {
     addDaysIso,
     toUtcIsoDate,
@@ -75,6 +78,18 @@ export interface TripData {
     trip: {
         name: string;
         /**
+         * The trip's own identity, minted by `normalizeTripData` when absent and — unlike
+         * the derived fields below — kept in the saved YAML, so it travels with an export,
+         * a share link and the Drive copy. That is what lets a device that has lost its
+         * local sync state work out which cloud file is this trip again.
+         *
+         * Machine-managed: never authored, never edited by hand, and never regenerated for
+         * a trip that already has one. A trip that loses it becomes a stranger to its own
+         * Drive file, so every path that rewrites the whole document (the AI editor) has to
+         * carry it across.
+         */
+        id: string;
+        /**
          * Derived from `days`, not authored: the first and last dates present, and
          * day 1's first event as the countdown target. Always set on a loaded trip
          * and always absent from saved YAML -- see `normalizeTripData`.
@@ -118,6 +133,18 @@ export interface ChecklistItem {
 }
 
 export const USER_YAML_KEY = "showmeway_user_yaml";
+
+/**
+ * A fresh identity for a trip or a profile slot. The fallback covers a non-secure context,
+ * where `crypto.randomUUID` is undefined; uniqueness within one device is all either use
+ * needs.
+ */
+export function genTripId(): string {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return crypto.randomUUID();
+    }
+    return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 // Absolute URL, not a relative one: an exported or shared YAML has to resolve
 // the schema from wherever it is opened, not just from the deployed site.
@@ -233,9 +260,7 @@ function deriveDeparture(firstDay: DayItinerary): string {
     // `parseEventStartMinutes` accepts the after-midnight timetable notation
     // ("25:30"), which is not a wall-clock hour any Date can hold.
     const wrapped = minutes % (24 * 60);
-    const hh = String(Math.floor(wrapped / 60)).padStart(2, "0");
-    const mm = String(wrapped % 60).padStart(2, "0");
-    return `${firstDay.date}T${hh}:${mm}:00`;
+    return `${firstDay.date}T${formatEventMinutes(wrapped)}:00`;
 }
 
 /** The only real gate on itinerary data; its zh-TW messages are shown to the user verbatim. */
@@ -268,7 +293,7 @@ function normalizeTripData(raw: unknown): TripData {
             // js-yaml turns an unquoted YYYY-MM-DD into a UTC-midnight Date. UTC
             // getters recover the date as written, in any runner timezone.
             if ((field === "checkIn" || field === "checkOut") && value instanceof Date) {
-                fields[field] = `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, "0")}-${String(value.getUTCDate()).padStart(2, "0")}`;
+                fields[field] = toUtcIsoDate(value);
                 continue;
             }
             if (typeof value !== "string") {
@@ -283,6 +308,7 @@ function normalizeTripData(raw: unknown): TripData {
     if (data.trip.city != null && typeof data.trip.city !== "string") {
         throw new Error("trip.city 必須是文字 (例如 'Tokyo')");
     }
+    validateOptionalString(data.trip.id, "trip", "id");
     for (const [i, day] of data.days.entries()) {
         // A bare `-` in hand-written YAML parses to null, which would surface as
         // a cryptic English TypeError out of `attachRuntimeIds` instead. Every
@@ -389,6 +415,9 @@ function normalizeTripData(raw: unknown): TripData {
 
     const trip: TripData["trip"] = {
         ...data.trip,
+        // Minted only when the document carries none: regenerating one would cut the trip
+        // loose from the Drive file that names it.
+        id: data.trip.id?.trim() || genTripId(),
         start: filledDays[0].date,
         end: filledDays[filledDays.length - 1].date,
         departure: deriveDeparture(filledDays[0]),
@@ -418,7 +447,10 @@ export function serializeToYaml(data: TripData): string {
     // would not catch the swap.
     const clean = JSON.parse(JSON.stringify(data)) as TripData;
     // Derived on every load (see `normalizeTripData`), so writing them back would
-    // freeze a stale copy the next edit silently contradicts.
+    // freeze a stale copy the next edit silently contradicts. `trip.id` comes from the
+    // same place and deliberately stays: it is the trip's identity rather than a
+    // restatement of its contents, and stripping it would mint a new one on the next
+    // load and orphan the trip's Drive file.
     const trip = clean.trip as Partial<TripData["trip"]>;
     delete trip.start;
     delete trip.end;
@@ -447,8 +479,8 @@ export function serializeToYaml(data: TripData): string {
     return SCHEMA_LINE + body;
 }
 
-export function saveTripData(data: TripData): void {
-    localStorage.setItem(USER_YAML_KEY, serializeToYaml(data));
+export function saveTripData(data: TripData, yaml: string = serializeToYaml(data)): void {
+    localStorage.setItem(USER_YAML_KEY, yaml);
 }
 
 export const YAML_BACKUPS_KEY = "showmeway_yaml_backups";

@@ -114,7 +114,7 @@ export interface NextEventInfo {
     minutesUntil?: number;
 }
 
-function formatEventMinutes(minutes: number): string {
+export function formatEventMinutes(minutes: number): string {
     const h = String(Math.floor(minutes / 60)).padStart(2, "0");
     const m = String(minutes % 60).padStart(2, "0");
     return `${h}:${m}`;

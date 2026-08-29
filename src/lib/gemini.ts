@@ -2,6 +2,10 @@ import {
     serializeToYaml,
     type TripData,
 } from "./api";
+import {
+    splitDayDate,
+    toLocalIsoDate,
+} from "./utils";
 
 export const GEMINI_API_KEY_STORAGE = "showmeway_gemini_api_key";
 export const GEMINI_MODEL_STORAGE = "showmeway_gemini_model";
@@ -127,6 +131,10 @@ function buildSystemInstruction(itineraryYaml: string, currentDateTime: string):
         // reads as a flow sequence, or `desc: **提早**到`, which it reads as an
         // alias — either way the whole edit fails validateYaml.
         "10. 值的開頭若是 [ 或 *，整個值一定要用單引號包起來（例如 desc: '**提早兩小時**到機場'、text: '[申請入口](https://…) 記得先辦'），否則 YAML 會解析失敗、整次修改都套用不了。",
+        // Appended rather than filed with the edit rules above so rules 8-10, which the
+        // docs and comments refer to by number, keep their numbers. applyAiEdit restores
+        // trip.id regardless — this only saves the model from inventing one.
+        "11. trip.id 是 App 自動產生的行程識別碼，請原封不動照抄，不要修改、刪除或自行產生。",
         "",
         "=== 行程資料 (YAML) ===",
         itineraryYaml,
@@ -363,15 +371,12 @@ export async function sendChatMessage(
     userText: string,
     itineraryYaml: string,
 ): Promise<ChatTurn> {
-    const daysOfWeek = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
     const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const date = String(now.getDate()).padStart(2, "0");
+    const nowIso = toLocalIsoDate(now);
+    const { weekday } = splitDayDate(nowIso);
     const hours = String(now.getHours()).padStart(2, "0");
     const minutes = String(now.getMinutes()).padStart(2, "0");
-    const dayName = daysOfWeek[now.getDay()];
-    const nowStr = `${year}-${month}-${date} (${dayName}) ${hours}:${minutes}`;
+    const nowStr = `${nowIso} (星期${weekday}) ${hours}:${minutes}`;
 
     let res: Response;
     try {

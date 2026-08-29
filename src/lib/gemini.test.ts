@@ -33,7 +33,7 @@ function createLocalStorageStub() {
 }
 
 const tripData: TripData = {
-    trip: { name: "Test Trip", start: "2026-06-11", end: "2026-06-13", departure: "2026-06-11T14:00:00+08:00", hotels: [] },
+    trip: { name: "Test Trip", id: "t-test", start: "2026-06-11", end: "2026-06-13", departure: "2026-06-11T14:00:00+08:00", hotels: [] },
     todo: [],
     packing: [],
     days: [],

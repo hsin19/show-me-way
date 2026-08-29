@@ -7,6 +7,7 @@ import type { HotelInfo } from "../api";
 import type { EnlargedCard } from "../enlarge";
 import { isOvernightStay } from "../timeline";
 import { copyToClipboard } from "../toast.svelte";
+import { splitDayDate } from "../utils";
 import ConfirmationChips from "./ConfirmationChips.svelte";
 
 interface Props {
@@ -41,14 +42,6 @@ function showAddressForDriver(hotel: HotelInfo) {
         prompt: driverPrompt,
     });
 }
-
-function formatShortDate(dateStr: string): string {
-    const parts = dateStr.split("-");
-    if (parts.length === 3) {
-        return `${parts[1]}/${parts[2]}`;
-    }
-    return dateStr;
-}
 </script>
 
 <div class="space-y-3">
@@ -72,7 +65,7 @@ function formatShortDate(dateStr: string): string {
 
                     <div class="flex items-center gap-1 text-[10px] text-text-secondary">
                         <Calendar size={10} aria-hidden="true" />
-                        <span>{formatShortDate(hotel.checkIn)} 入房 – {formatShortDate(hotel.checkOut)} 退房</span>
+                        <span>{splitDayDate(hotel.checkIn).mmdd} 入房 – {splitDayDate(hotel.checkOut).mmdd} 退房</span>
                     </div>
                 </div>
 

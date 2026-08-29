@@ -6,16 +6,22 @@ import {
     it,
     vi,
 } from "vitest";
-import { USER_YAML_KEY } from "./api";
+import {
+    serializeToYaml,
+    USER_YAML_KEY,
+    validateYaml,
+} from "./api";
 import {
     ACTIVE_PROFILE_KEY,
     createProfile,
     deleteProfile,
     ensureActiveProfileId,
+    ensureUniqueTripId,
     getActiveProfileId,
     listProfiles,
     PROFILES_KEY,
     switchToProfile,
+    tripIdFromYaml,
     tripNameFromYaml,
     tripStartDateFromYaml,
 } from "./profiles";
@@ -24,6 +30,21 @@ import {
 // directly (no full-structure validation), so this is all the swap logic needs.
 function yamlNamed(name: string): string {
     return `trip:\n  name: '${name}'\n`;
+}
+
+/** A full trip the way one reaches storage: validated, then serialized. */
+function savedYaml(id?: string): string {
+    const source = [
+        "trip:",
+        "  name: '東京'",
+        ...(id ? [`  id: '${id}'`] : []),
+        "  hotels: []",
+        "days:",
+        "  - date: '2026-10-01'",
+        "    title: '市區'",
+        "    timeline: []",
+    ].join("\n");
+    return serializeToYaml(validateYaml(source));
 }
 
 function createLocalStorageStub() {
@@ -74,6 +95,59 @@ describe("trip profiles", () => {
         it("returns null when no date is present", () => {
             expect(tripStartDateFromYaml("trip:\n  name: '東京'\n")).toBeNull();
             expect(tripStartDateFromYaml("invalid: [yaml")).toBeNull();
+        });
+    });
+
+    describe("tripIdFromYaml", () => {
+        it("reads the id out of raw YAML without normalizing it", () => {
+            expect(tripIdFromYaml(savedYaml("t-1"))).toBe("t-1");
+        });
+
+        it("reports the gap rather than filling it", () => {
+            // Only `normalizeTripData` mints, so a reader must never invent one on the side.
+            expect(tripIdFromYaml(yamlNamed("東京"))).toBeNull();
+            expect(tripIdFromYaml("not: [valid")).toBeNull();
+        });
+    });
+
+    describe("ensureUniqueTripId", () => {
+        it("keeps the id of a trip this device does not hold", () => {
+            storage.setItem(USER_YAML_KEY, savedYaml("t-mine"));
+            const incoming = validateYaml(savedYaml("t-theirs"));
+
+            expect(ensureUniqueTripId(incoming)).toBe(false);
+            // Keeping it is the whole point: it is what lets two devices recognise one
+            // Drive file as the same trip.
+            expect(incoming.trip.id).toBe("t-theirs");
+        });
+
+        it("re-mints when the active trip is already that trip", () => {
+            storage.setItem(USER_YAML_KEY, savedYaml("t-1"));
+            const incoming = validateYaml(savedYaml("t-1"));
+
+            expect(ensureUniqueTripId(incoming)).toBe(true);
+            expect(incoming.trip.id).not.toBe("t-1");
+            expect(incoming.trip.id).toBeTruthy();
+        });
+
+        it("re-mints when a parked profile is already that trip", () => {
+            storage.setItem(USER_YAML_KEY, savedYaml("t-active"));
+            storage.setItem(
+                PROFILES_KEY,
+                JSON.stringify([{ id: "p-1", yaml: savedYaml("t-parked"), savedAt: "2026-08-01T00:00:00Z" }]),
+            );
+            const incoming = validateYaml(savedYaml("t-parked"));
+
+            expect(ensureUniqueTripId(incoming)).toBe(true);
+            expect(incoming.trip.id).not.toBe("t-parked");
+        });
+
+        it("survives storage holding trips written before ids existed", () => {
+            storage.setItem(USER_YAML_KEY, yamlNamed("東京"));
+            const incoming = validateYaml(savedYaml("t-1"));
+
+            expect(ensureUniqueTripId(incoming)).toBe(false);
+            expect(incoming.trip.id).toBe("t-1");
         });
     });
 

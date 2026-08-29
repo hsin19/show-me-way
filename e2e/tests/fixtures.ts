@@ -12,9 +12,13 @@ const BASE_ORIGIN = "http://localhost:8046";
 // aria-current chips). No trip.city / trip.currency — that keeps the weather
 // and exchange-rate fetch paths dormant, so tests stay hermetic. Dates and
 // times stay quoted: js-yaml would otherwise parse them as UTC Date objects,
-// but the app expects plain local-time strings.
+// but the app expects plain local-time strings. `trip.id` is load-bearing rather
+// than decorative: without one the app mints and persists it on first load, and
+// that rewrite makes every seeded sync record look locally dirty — which turns the
+// Drive specs' carefully staged one-sided changes into conflicts.
 export const FIXTURE_YAML = `trip:
   name: 測試行程
+  id: t-fixture
   start: '2099-01-01'
   end: '2099-01-02'
   departure: '2099-01-01T08:00:00+08:00'

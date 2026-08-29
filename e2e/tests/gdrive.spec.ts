@@ -31,6 +31,8 @@ interface FakeFile {
     trashed?: boolean;
     /** 對應 Drive appProperties.startDate —— 決定切換器要不要把它摺起來 */
     startDate?: string;
+    /** 對應 appProperties.showmewayTripId —— 重新綁定就是靠它認出「同一趟行程」 */
+    tripId?: string;
 }
 
 interface FakeDrive {
@@ -56,7 +58,12 @@ async function installFakeDrive(page: Page, initial: FakeFile[] = []): Promise<F
         size: String(Buffer.byteLength(f.content, "utf8")),
         md5Checksum: md5(f.content),
         trashed: !!f.trashed,
-        appProperties: { showmewayTripId: "seeded", ...(f.startDate ? { startDate: f.startDate } : {}) },
+        appProperties: {
+            showmewayTripId: f.tripId ?? "seeded",
+            // 真的算，不是寫死：假 Drive 每次被寫入都會重算，行為才跟真的 Drive 一致。
+            contentHash: yamlFingerprint(f.content),
+            ...(f.startDate ? { startDate: f.startDate } : {}),
+        },
     });
 
     // multipart/related：part[1] 是 JSON metadata，part[2] 是空行之後的 YAML
@@ -194,7 +201,25 @@ test("連線 Google：走完 GIS 流程並把行程建立成雲端檔", async ({
     expect(drive.list()[0].content).toContain("name: 測試行程");
 });
 
-test("按一下同步：雲端較新時下載並實際換掉畫面上的行程", async ({ page }) => {
+test("重新綁定：登出再登入後靠 trip.id 認回雲端檔案，不是當成沒備份過", async ({ page }) => {
+    // 登出會留下行程本身，但不留 sync record —— 修好之前這裡會顯示「建立新檔案」，
+    // 按下去就多一份重複的雲端檔。
+    const drive = await installFakeDrive(page, [
+        { id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML, tripId: "t-fixture" },
+    ]);
+    await seedItinerary(page);
+    await seedConnected(page);
+    await page.goto("/");
+
+    await openTripManagement(page);
+
+    // 內容一致 → 直接認回完整的比對基準，按鈕停在「同步」而不是「上傳」。
+    await expect(page.getByRole("button", { name: "同步行程 (比對本地與雲端內容差異)" })).toBeVisible();
+    expect(drive.counts().downloads).toBe(0);
+    expect(drive.list()).toHaveLength(1);
+});
+
+test("按一下同步：雲端較新時先給下載按鈕，再按一次才真的換掉畫面上的行程", async ({ page }) => {
     const cloudYaml = yamlNamed("雲端版行程");
     const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML }]);
     await seedItinerary(page);
@@ -208,6 +233,14 @@ test("按一下同步：雲端較新時下載並實際換掉畫面上的行程",
     await openTripManagement(page);
     await page.getByRole("button", { name: "同步行程 (比對本地與雲端內容差異)" }).click();
 
+    // 第一下只是檢查：按鈕換成「下載」，還沒真的動到本機內容。
+    await expect(page.getByText(/有新版本，可以下載更新/)).toBeVisible();
+    expect(drive.counts().downloads).toBe(0);
+    const downloadButton = page.getByRole("button", { name: "下載雲端最新版本 (覆蓋本機)" });
+    await expect(downloadButton).toBeVisible();
+
+    await downloadButton.click();
+
     await expect(page.getByText(/已載入雲端版本/)).toBeVisible();
     // 真的套用了：回到行程分頁看得到新名稱，而不只是 toast 說有。
     await page.locator("nav").getByRole("button", { name: "行程", exact: true }).click();
@@ -217,18 +250,18 @@ test("按一下同步：雲端較新時下載並實際換掉畫面上的行程",
     await expect(page.getByRole("button", { name: /還原/ }).first()).toBeVisible();
 });
 
-test("按一下同步：兩邊都改過時停下來問，且兩側都不動", async ({ page }) => {
+test("按一下上傳：本機與雲端都改過時停下來問，且兩側都不動", async ({ page }) => {
     const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML }]);
     await seedItinerary(page);
     await seedConnected(page, {
-        // localHash 是舊的 → 本機也算動過。
+        // localHash 是舊的 → 本機也算動過，按鈕一開始就是「上傳」而不是「同步」。
         record: { fileId: CLOUD_FILE_ID, remoteMd5: md5Of(FIXTURE_YAML), localHash: "stale-fingerprint" },
     });
     await page.goto("/");
     drive.write(CLOUD_FILE_ID, yamlNamed("雲端版行程"));
 
     await openTripManagement(page);
-    await page.getByRole("button", { name: "同步行程 (比對本地與雲端內容差異)" }).click();
+    await page.getByRole("button", { name: "上傳本機異動到 Google Drive (覆蓋雲端版本)" }).click();
 
     const strip = page.getByRole("alertdialog", { name: /都改過/ });
     await expect(strip).toBeVisible();
@@ -253,7 +286,7 @@ test("衝突時選擇保留本機：雲端內容被本機取代", async ({ page 
     drive.write(CLOUD_FILE_ID, yamlNamed("雲端版行程"));
 
     await openTripManagement(page);
-    await page.getByRole("button", { name: "同步行程 (比對本地與雲端內容差異)" }).click();
+    await page.getByRole("button", { name: "上傳本機異動到 Google Drive (覆蓋雲端版本)" }).click();
     await expect(page.getByRole("alertdialog", { name: /都改過/ })).toBeVisible();
 
     await page.getByRole("button", { name: "保留本機版本" }).click();
@@ -261,6 +294,44 @@ test("衝突時選擇保留本機：雲端內容被本機取代", async ({ page 
 
     await expect(page.getByText(/已以本機版本覆蓋雲端/)).toBeVisible();
     expect(drive.read(CLOUD_FILE_ID)).toContain("name: 測試行程");
+});
+
+test("衝突時兩份都留：雲端版成為這趟行程，本機版另存成新行程", async ({ page }) => {
+    const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML }]);
+    await seedItinerary(page);
+    await seedConnected(page, {
+        record: { fileId: CLOUD_FILE_ID, remoteMd5: md5Of(FIXTURE_YAML), localHash: "stale-fingerprint" },
+    });
+    await page.goto("/");
+    drive.write(CLOUD_FILE_ID, yamlNamed("雲端版行程"));
+
+    await openTripManagement(page);
+    await page.getByRole("button", { name: "上傳本機異動到 Google Drive (覆蓋雲端版本)" }).click();
+    await expect(page.getByRole("alertdialog", { name: /都改過/ })).toBeVisible();
+
+    await page.getByRole("button", { name: /兩份都留/ }).click();
+    await page.getByRole("button", { name: "兩份都留", exact: true }).click();
+
+    // 畫面上留的是本機那份，改了名字才分得出來。
+    await expect(page.getByRole("heading", { level: 2, name: "測試行程（本機版）" })).toBeVisible();
+    // 雲端那份沒有被覆蓋，而且成為停放中的另一趟行程。
+    expect(drive.read(CLOUD_FILE_ID)).toContain("name: 雲端版行程");
+    expect(drive.counts().uploads).toBe(0);
+
+    await openTripManagement(page);
+    await page.getByRole("button", { name: /目前行程/ }).click();
+    await expect(page.getByRole("button", { name: /雲端版行程.*切換/ })).toBeVisible();
+
+    // 兩趟行程的身分必須分開，否則會搶同一個雲端檔案。
+    const ids = await page.evaluate(() => {
+        const idOf = (yaml: string | null) => yaml?.match(/^\s+id:\s*(\S+)/m)?.[1] ?? null;
+        const parked = JSON.parse(localStorage.getItem("showmeway_profiles") ?? "[]") as { yaml: string; }[];
+        return { active: idOf(localStorage.getItem("showmeway_user_yaml")), parked: parked.map(p => idOf(p.yaml)) };
+    });
+    // 綁定留在原本那個 slot，所以雲端版保住 t-fixture；本機版是新的一趟。
+    expect(ids.parked).toEqual(["t-fixture"]);
+    expect(ids.active).toBeTruthy();
+    expect(ids.active).not.toBe("t-fixture");
 });
 
 test("雲端行程清單：載入為新行程，原行程仍可切回；刪除後該列消失", async ({ page }) => {

@@ -1,12 +1,11 @@
 import {
     cachedKeysWithPrefix,
+    clearStorageCacheMemory,
     isFresh,
     readCachedJson,
     removeCachedKeys,
     writeCachedJson,
 } from "./storage-cache";
-
-export { clearStorageCacheMemory as resetExchangeCacheForTests } from "./storage-cache";
 
 export interface ExchangeRates {
     date: string;
@@ -40,6 +39,14 @@ export function clearExchangeCache(): number {
 interface CacheEntry {
     timestamp: number;
     rates: ExchangeRates;
+}
+
+// Overlapping stale loads (visibilitychange bursts) share one request — same shape as weather.ts.
+const inFlightRates = new Map<string, Promise<ExchangeRates | null>>();
+
+export function resetExchangeCacheForTests(): void {
+    inFlightRates.clear();
+    clearStorageCacheMemory();
 }
 
 function cacheKeyFor(baseCurrency: string): string {
@@ -102,7 +109,13 @@ export function loadExchangeRates(
     const stale = !cached || !isFresh(cached.timestamp, EXCHANGE_CACHE_TTL, Date.now());
     if (!stale) return;
 
-    void fetchFromNetwork(baseCurrency).then(rates => {
+    const key = baseCurrency.toLowerCase();
+    let pending = inFlightRates.get(key);
+    if (!pending) {
+        pending = fetchFromNetwork(baseCurrency).finally(() => inFlightRates.delete(key));
+        inFlightRates.set(key, pending);
+    }
+    void pending.then(rates => {
         if (rates) onUpdate(rates, { fromCache: false, fetchedAt: Date.now() });
     });
 }

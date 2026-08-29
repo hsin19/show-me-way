@@ -25,6 +25,7 @@ Top-level keys: `trip` (required), `days` (required), and optional `todo`, `pack
 ### trip (required: name, hotels)
 
 - `name` — string, trip title.
+- `id` — **app-generated, never authored, and never edited.** The trip's identity, which travels with exports, share links and the Google Drive copy so the app can tell "the same trip" from "a similar one". Unlike the derived fields below it *is* kept in the saved YAML: when updating an existing file, copy it across verbatim; when writing a new one, leave it out and the app mints it on first load. Changing or dropping it on an existing trip cuts it loose from its cloud backup.
 - `lang` — optional language code (`ko` / `ja` / `en`). Selects the app's built-in survival phrases and taxi-driver prompt. Defaults to English (`en`) when omitted or unsupported. Phrases are no longer authored in YAML.
 - `city` — optional destination city for the daily weather badge. **Prefer an English name** (e.g. `Tokyo`, `Seoul`) — only some Chinese names resolve (東京/京都 work; 首爾/大阪/釜山 miss or hit the wrong country). Ambiguous names take a two-letter country suffix (e.g. `Springfield, US`). Weather is simply hidden when unset (or an empty string). Preserve an existing `city` when merging/updating.
 - `currency` — optional currency code (e.g. `JPY`, `KRW`, `USD`) driving the ledger's converter, default wallets and quick amounts. Defaults to TWD when omitted.
@@ -61,7 +62,7 @@ Top-level keys: `trip` (required), `days` (required), and optional `todo`, `pack
 
 - **Dates are plain `YYYY-MM-DD`** and are parsed in local time by the app — never add a time or `Z` to any date field, and quote them so YAML keeps them as text. Times of day live in `timeline[].time` as `HH:MM`.
 - **`trip.start` / `trip.end` / `trip.departure` and `day` numbers are derived — never write them.** The app sorts `days` by `date`, numbers them, fills any skipped date in as a free day, takes the first and last dates as the trip range, and uses day 1's first event time as the home-screen countdown target. They are stripped on every save, so a hand-written value silently disappears. Entries in `days` may be listed in any order.
-- **Never emit `_id`** on timeline events — it is a runtime-only field stripped on export.
+- **Never emit `_id`** on timeline events — it is a runtime-only field stripped on export. `trip.id` is the opposite case: also app-generated, but persisted — never invent one, and never drop one that is already there.
 - **Language:** keep all user-facing copy (titles, desc, pace) in Traditional Chinese to match the app.
 - **Event type defaults:** flights/tickets/reservations → `booked`; the day's headline attraction → `must-go`; routine moves/meals → `standard`; tentative or backup ideas → `option`.
 - **Be honest about gaps.** If the notes don't give a time or address, leave a clearly-marked placeholder (e.g. `desc: '（待確認地址）'`) rather than inventing specifics like exact addresses or flight numbers.

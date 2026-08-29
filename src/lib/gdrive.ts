@@ -7,6 +7,11 @@ export const GDRIVE_FOLDER_ID_STORAGE = "showmeway_gdrive_folder_id";
 export const GDRIVE_TRIPS_STORAGE = "showmeway_gdrive_trips";
 
 import { tripStartDateFromYaml } from "./profiles";
+import {
+    readCachedJson,
+    removeCachedKeys,
+    writeCachedJson,
+} from "./storage-cache";
 
 export const GDRIVE_FOLDER_NAME = "ShowMeWay";
 /** Checked explicitly after consent; the userinfo scopes fail loudly in `connect()` instead. */
@@ -30,9 +35,18 @@ export interface CloudTripFile {
     name: string;
     modifiedTime: string;
     size?: number;
+    /** The trip's own `trip.id`, carried in `appProperties` so any device can recognise it. */
     tripId?: string;
     startDate?: string;
     md5Checksum?: string;
+    /**
+     * `yamlFingerprint` of the content this app last wrote, carried in `appProperties`.
+     * Unlike `md5Checksum` it is a claim rather than a measurement — an edit made outside
+     * this app leaves it stale — so `decideSyncAction` only trusts it where md5 cannot
+     * contradict it. What it buys is the one question md5 cannot answer: whether the
+     * remote copy is byte-identical to the local one, without downloading it.
+     */
+    contentHash?: string;
 }
 
 /**
@@ -45,6 +59,20 @@ export interface TripSyncRecord {
     remoteMd5?: string;
     /** `yamlFingerprint` of the local YAML at that same moment. */
     localHash?: string;
+    /**
+     * `yamlFingerprint` of the remote copy at that same moment. Equal to `localHash` by
+     * construction — an agreement is only ever recorded from bytes both sides hold — and
+     * kept separately anyway so a remote-side comparison never has to assume that.
+     */
+    remoteHash?: string;
+    /**
+     * A rebind bound this file to a trip whose contents differ from it, and the user has
+     * not picked a side yet. Persisted rather than held as UI state because the record it
+     * sits on is persisted: it has no `localHash`, which on its own decides `push`, and a
+     * conflict that lives only in memory stops holding the trip the moment the app
+     * reloads. `decideSyncAction` reads it, so nothing can push past it by accident.
+     */
+    diverged?: boolean;
 }
 
 export type TripSyncMap = Record<string, TripSyncRecord>;
@@ -57,57 +85,35 @@ export function getGdriveClientId(): string {
     return FALLBACK_CLIENT_ID;
 }
 
+function isValidGoogleUser(value: unknown): value is GoogleUser {
+    return !!value
+        && typeof value === "object"
+        && typeof (value as GoogleUser).email === "string"
+        && typeof (value as GoogleUser).name === "string";
+}
+
 export function loadGdriveUser(): GoogleUser | null {
-    try {
-        const raw = localStorage.getItem(GDRIVE_USER_STORAGE);
-        if (!raw) return null;
-        const parsed: unknown = JSON.parse(raw);
-        if (
-            parsed
-            && typeof parsed === "object"
-            && "email" in parsed
-            && "name" in parsed
-            && typeof (parsed as GoogleUser).email === "string"
-            && typeof (parsed as GoogleUser).name === "string"
-        ) {
-            return parsed as GoogleUser;
-        }
-        return null;
-    } catch {
-        return null;
-    }
+    return readCachedJson(GDRIVE_USER_STORAGE, isValidGoogleUser);
 }
 
 export function saveGdriveUser(user: GoogleUser): void {
-    try {
-        localStorage.setItem(GDRIVE_USER_STORAGE, JSON.stringify(user));
-    } catch (e) {
-        console.warn("Failed to save Google Drive User", e);
-    }
+    writeCachedJson(GDRIVE_USER_STORAGE, user);
 }
 
 export function clearGdriveUser(): void {
-    try {
-        localStorage.removeItem(GDRIVE_USER_STORAGE);
-    } catch (e) {
-        console.warn("Failed to clear Google Drive User", e);
-    }
+    removeCachedKeys([GDRIVE_USER_STORAGE]);
+}
+
+function isBoolean(value: unknown): value is boolean {
+    return typeof value === "boolean";
 }
 
 export function loadGdriveAutoSync(): boolean {
-    try {
-        return localStorage.getItem(GDRIVE_AUTO_SYNC_STORAGE) === "true";
-    } catch {
-        return false;
-    }
+    return readCachedJson(GDRIVE_AUTO_SYNC_STORAGE, isBoolean) ?? false;
 }
 
 export function saveGdriveAutoSync(enabled: boolean): void {
-    try {
-        localStorage.setItem(GDRIVE_AUTO_SYNC_STORAGE, enabled ? "true" : "false");
-    } catch (e) {
-        console.warn("Failed to save Google Drive Auto Sync", e);
-    }
+    writeCachedJson(GDRIVE_AUTO_SYNC_STORAGE, enabled);
 }
 
 /** @public */
@@ -162,8 +168,13 @@ export function saveTripSyncMap(map: TripSyncMap): void {
  * Deliberately not a cryptographic digest: it is only ever compared against another
  * fingerprint this app produced, never against Drive's md5, so FNV-1a over two seeds plus
  * the length is enough. `crypto.subtle` has no MD5 and is async, which would make the
- * sync decision async for no gain. A collision would mean one skipped upload, not
- * corruption.
+ * sync decision async for no gain.
+ *
+ * It is compared across sides as well as across time — the remote's copy rides along in
+ * `appProperties.contentHash` — so a collision no longer only costs a skipped upload: two
+ * genuinely different trips would be declared identical and the divergence would never be
+ * raised. 64 bits plus the length over hand-authored YAML makes that vanishingly unlikely,
+ * but widen the use again and this is the sentence to re-check.
  */
 export function yamlFingerprint(yaml: string): string {
     let a = 0x811c9dc5;
@@ -224,42 +235,120 @@ export function migrateGdriveSyncState(): void {
 export type SyncDecision = "push" | "pull" | "up_to_date" | "conflict";
 
 /**
+ * Whether the remote copy moved since the last agreement, or `null` when neither side of
+ * the comparison is available.
+ *
+ * Drive's md5 is asked first and is final: it measures the bytes, so it catches an edit
+ * made outside this app — in Drive's own UI, by a desktop sync client, or by restoring a
+ * version — which `contentHash` cannot, being a value this app writes and only refreshes
+ * when it writes the file itself.
+ */
+function remoteMoved(record: TripSyncRecord, remoteMd5: string | null, remoteHash: string | null): boolean | null {
+    if (record.remoteMd5 && remoteMd5) return remoteMd5 !== record.remoteMd5;
+    if (record.remoteHash && remoteHash) return remoteHash !== record.remoteHash;
+    return null;
+}
+
+/**
  * The whole sync direction decision, kept pure so the truth table is testable.
  *
- * Two independent memories drive it, one per side: `record.localHash` says what the local
- * YAML looked like at the last successful sync, `record.remoteMd5` what Drive held at that
- * same moment. Comparing each against its current value answers "did this side move"
- * without ever comparing two clocks — the device's clock and Google's are not comparable,
- * and doing so is what used to discard whichever side the phone's clock disagreed with.
+ * Three memories drive it. Two are per-side history: `record.localHash` says what the
+ * local YAML looked like at the last successful sync, `record.remoteMd5`/`remoteHash` what
+ * Drive held at that same moment. Comparing each against its current value answers "did
+ * this side move" without ever comparing two clocks — the device's clock and Google's are
+ * not comparable, and doing so is what used to discard whichever side the phone's clock
+ * disagreed with. The third is `remoteHash` vs `localHash`, which answers a question no
+ * history can: whether the two sides are byte-identical *right now*. It exists only
+ * because `yamlFingerprint` runs on both sides; Drive's md5 has no local counterpart
+ * (`crypto.subtle` has no MD5).
+ *
+ * Rule order, and why the first one comes first:
+ *   1. remote moved, local did not              → pull
+ *   2. contents are equal                       → up_to_date
+ *   3. remote moved (so local did too)          → conflict
+ *   4. remote did not move                      → push / up_to_date
+ *   5. unknowable, but contents differ          → conflict / pull
+ *   6. unknowable                               → conflict / up_to_date
+ * Rule 1 outranks rule 2 deliberately: equal hashes with a moved md5 is the signature of
+ * an edit made outside this app, where the hash is stale and the bytes are authoritative.
+ * Taking the remote there loses nothing; trusting the hash would silently overwrite that
+ * edit on the next push.
+ *
+ * Rule 5 reads the equality backwards to recover a direction the history could not supply:
+ * an agreement is only ever recorded from bytes both sides hold, so "local has not moved
+ * and the contents now differ" can only mean the remote did.
  *
  * `push` covers creating the file too: no record, or a record whose Drive copy is gone,
  * both mean there is nothing to overwrite.
  *
  * Two deliberate asymmetries:
- * - A record with no `remoteMd5` (migrated from the timestamp scheme) resolves to `push`.
- *   This is the ONE case that can overwrite a remote another device advanced: with no
- *   agreed checksum there is nothing to compare, and the alternative — prompting every
+ * - A record with no remote memory at all (migrated from the timestamp scheme) resolves to
+ *   `push`. This is the ONE case that can overwrite a remote another device advanced: with
+ *   nothing agreed there is nothing to compare, and the alternative — prompting every
  *   upgrading install on its first sync — trades a rare loss for certain noise.
- * - A live remote that reports no md5 at all is unknowable rather than unchanged, so it
- *   never silently pushes: it asks, or does nothing.
+ * - A live remote that reports neither md5 nor `contentHash` is unknowable rather than
+ *   unchanged, so it never silently pushes: it asks, or does nothing.
  */
 export function decideSyncAction(state: {
     record: TripSyncRecord | null;
     remoteExists: boolean;
     remoteMd5: string | null;
+    remoteHash: string | null;
     localHash: string;
 }): SyncDecision {
     const { record } = state;
     if (!record || !state.remoteExists) return "push";
-    if (!record.remoteMd5) return "push";
+    if (!record.remoteMd5 && !record.remoteHash) return "push";
 
     // No recorded fingerprint means the last sync predates them: assume local moved.
     const localChanged = record.localHash === undefined || record.localHash !== state.localHash;
-    if (!state.remoteMd5) return localChanged ? "conflict" : "up_to_date";
+    const remoteChanged = remoteMoved(record, state.remoteMd5, state.remoteHash);
+    const sameContent = state.remoteHash === null ? null : state.remoteHash === state.localHash;
 
-    const remoteChanged = state.remoteMd5 !== record.remoteMd5;
-    if (remoteChanged) return localChanged ? "conflict" : "pull";
-    return localChanged ? "push" : "up_to_date";
+    // An unresolved rebind outranks every direction below: the record deliberately holds
+    // no base, so those rules would read it as "local moved" and overwrite a cloud copy
+    // the user has never seen. Only the two sides turning out to hold the same content
+    // settles it without a decision — see `buildRebindRecord`.
+    if (record.diverged) return sameContent === true ? "up_to_date" : "conflict";
+
+    if (remoteChanged === true && !localChanged) return "pull";
+    if (sameContent === true) return "up_to_date";
+    if (remoteChanged === true) return "conflict";
+    if (remoteChanged === false) return localChanged ? "push" : "up_to_date";
+    if (sameContent === false) return localChanged ? "conflict" : "pull";
+    return localChanged ? "conflict" : "up_to_date";
+}
+
+/**
+ * The record to write for a Drive file that names this trip but which this device holds no
+ * binding for — after a sign-out, a reinstall, or storage being evicted. Kept pure and
+ * separate from `decideSyncAction` because the question is a different one: not "which way
+ * should this sync go" but "is there an agreement here to record at all".
+ *
+ * Whether they agree is the whole point of publishing `contentHash`: the two copies can be compared
+ * without downloading either, so the common rebind — you signed back in and nothing had
+ * changed — costs one listing and recovers a complete merge base.
+ *
+ * When they differ there is no agreement to record, and `localHash` is deliberately left
+ * out rather than filled with the current value: writing it would claim the two sides
+ * agreed on contents they never shared, and the next sync would call that up_to_date and
+ * quietly overwrite one of them. The record still names the file, which is what stops a
+ * duplicate being created, and carries `diverged` so it holds the trip by itself —
+ * `decideSyncAction` refuses to push past it until the user picks a side. The flag is on
+ * the record rather than in the caller's UI state because a missing `localHash` decides
+ * `push`, and anything the caller keeps in memory stops holding it at the next reload.
+ */
+export function buildRebindRecord(
+    file: { id: string; md5Checksum?: string; contentHash?: string; },
+    localHash: string,
+): TripSyncRecord {
+    const agreed = !!file.contentHash && file.contentHash === localHash;
+    return {
+        fileId: file.id,
+        remoteMd5: file.md5Checksum,
+        remoteHash: file.contentHash,
+        ...(agreed ? { localHash } : { diverged: true }),
+    };
 }
 
 /**
@@ -537,7 +626,7 @@ interface RawDriveFile {
     size?: string;
     md5Checksum?: string;
     trashed?: boolean;
-    appProperties?: { showmewayTripId?: string; startDate?: string; };
+    appProperties?: { showmewayTripId?: string; startDate?: string; contentHash?: string; };
 }
 
 /** Fetch metadata of a single Google Drive file */
@@ -563,6 +652,7 @@ export async function fetchCloudTripMeta(token: string, fileId: string): Promise
         tripId: f.appProperties?.showmewayTripId,
         startDate: f.appProperties?.startDate,
         md5Checksum: f.md5Checksum,
+        contentHash: f.appProperties?.contentHash,
     };
 }
 
@@ -591,6 +681,7 @@ export async function listCloudTrips(token: string, folderId?: string): Promise<
             tripId: f.appProperties?.showmewayTripId,
             startDate: f.appProperties?.startDate,
             md5Checksum: f.md5Checksum,
+            contentHash: f.appProperties?.contentHash,
         }));
 }
 
@@ -625,8 +716,14 @@ export async function uploadOrUpdateCloudTrip(
     const fileName = `${tripName.trim() || "未命名行程"}.yaml`;
     const startDate = tripStartDateFromYaml(yamlContent);
 
+    const contentHash = yamlFingerprint(yamlContent);
     const appProperties: Record<string, string> = {
         updatedAt: new Date().toISOString(),
+        // Rides in the same multipart request as the bytes it describes, so this app can
+        // never publish a hash that disagrees with the content it just wrote. Anything
+        // that writes the file without going through here leaves it stale on purpose —
+        // that mismatch against Drive's md5 is what tells decideSyncAction not to trust it.
+        contentHash,
     };
     if (options.tripId) {
         appProperties.showmewayTripId = options.tripId;
@@ -635,66 +732,46 @@ export async function uploadOrUpdateCloudTrip(
         appProperties.startDate = startDate;
     }
 
+    let method: string;
+    let url: string;
+    let metadata: Record<string, unknown>;
+    let errorMessage: string;
+
     if (options.fileId) {
-        // Update existing file
-        const metadata = {
-            name: fileName,
-            appProperties,
-        };
-        const body = buildMultipartBody(boundary, metadata, yamlContent);
-
-        const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${options.fileId}?uploadType=multipart&fields=id,name,modifiedTime,size,md5Checksum,appProperties`, {
-            method: "PATCH",
-            headers: {
-                "Authorization": `Bearer ${token}`,
-                "Content-Type": `multipart/related; boundary=${boundary}`,
-            },
-            body,
-        });
-
-        assertDriveOk(res, "無法更新 Google Drive 行程檔案");
-
-        const data = await res.json() as RawDriveFile;
-        return {
-            id: data.id!,
-            name: (data.name || fileName).replace(/\.ya?ml$/i, ""),
-            modifiedTime: data.modifiedTime || new Date().toISOString(),
-            tripId: options.tripId,
-            startDate: startDate ?? undefined,
-            md5Checksum: data.md5Checksum,
-        };
+        method = "PATCH";
+        url = `https://www.googleapis.com/upload/drive/v3/files/${options.fileId}?uploadType=multipart&fields=id,name,modifiedTime,size,md5Checksum,appProperties`;
+        metadata = { name: fileName, appProperties };
+        errorMessage = "無法更新 Google Drive 行程檔案";
     } else {
-        // Create new file in folder
         const parentFolderId = options.folderId || await findOrCreateAppFolder(token);
-        const metadata = {
-            name: fileName,
-            parents: [parentFolderId],
-            mimeType: "text/yaml",
-            appProperties,
-        };
-        const body = buildMultipartBody(boundary, metadata, yamlContent);
-
-        const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime,size,md5Checksum,appProperties", {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${token}`,
-                "Content-Type": `multipart/related; boundary=${boundary}`,
-            },
-            body,
-        });
-
-        assertDriveOk(res, "無法上傳行程至 Google Drive");
-
-        const data = await res.json() as RawDriveFile;
-        return {
-            id: data.id!,
-            name: (data.name || fileName).replace(/\.ya?ml$/i, ""),
-            modifiedTime: data.modifiedTime || new Date().toISOString(),
-            tripId: options.tripId,
-            startDate: startDate ?? undefined,
-            md5Checksum: data.md5Checksum,
-        };
+        method = "POST";
+        url = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime,size,md5Checksum,appProperties";
+        metadata = { name: fileName, parents: [parentFolderId], mimeType: "text/yaml", appProperties };
+        errorMessage = "無法上傳行程至 Google Drive";
     }
+
+    const body = buildMultipartBody(boundary, metadata, yamlContent);
+    const res = await fetch(url, {
+        method,
+        headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": `multipart/related; boundary=${boundary}`,
+        },
+        body,
+    });
+
+    assertDriveOk(res, errorMessage);
+
+    const data = await res.json() as RawDriveFile;
+    return {
+        id: data.id!,
+        name: (data.name || fileName).replace(/\.ya?ml$/i, ""),
+        modifiedTime: data.modifiedTime || new Date().toISOString(),
+        tripId: options.tripId,
+        startDate: startDate ?? undefined,
+        md5Checksum: data.md5Checksum,
+        contentHash,
+    };
 }
 
 /** Download YAML content from a Google Drive file */

@@ -65,6 +65,13 @@ const checkoutHotel = $derived(
 
 // UI-only, keyed by `_id`: which alternatives lists the user has opened.
 let expandedAlts = $state<Record<string, boolean>>({});
+
+/** Shared by every map-link chip so the same href always gets the same icon. */
+function classifyMapHref(href: string): "naver" | "google" | "other" {
+    if (href.includes("naver")) return "naver";
+    if (/maps\.app\.goo\.gl|google\.[^/]+\/maps|goo\.gl\/maps/.test(href)) return "google";
+    return "other";
+}
 </script>
 
 <div class="panel rounded-2xl p-5 mb-6">
@@ -104,18 +111,20 @@ let expandedAlts = $state<Record<string, boolean>>({});
 {#snippet placeActions(localName: string | undefined, title: string, address?: string, mapLink?: string)}
     {@const safeMapLink = sanitizeLinkHref(mapLink)}
     {@const href = safeMapLink ?? (localName ? mapSearch(localName, mapProvider) : undefined)}
-    {@const isNaver = safeMapLink ? safeMapLink.includes("naver") : mapProvider === "naver"}
     {#if href}
+        {@const mapKind = classifyMapHref(href)}
         <a
             {href}
             target="_blank"
             rel="noopener noreferrer"
             class="inline-flex items-center gap-1.5 min-h-[44px] bg-accent/10 text-accent text-xs font-bold px-3 py-1.5 rounded-lg transition duration-200 hover:bg-accent/20"
         >
-            {#if isNaver}
+            {#if mapKind === "naver"}
                 <NaverIcon size={13} class="shrink-0" aria-hidden="true" />
-            {:else}
+            {:else if mapKind === "google"}
                 <GoogleMapsIcon size={13} class="shrink-0" aria-hidden="true" />
+            {:else}
+                <Link size={12} class="shrink-0" aria-hidden="true" />
             {/if}
             Map
         </a>
@@ -137,15 +146,16 @@ let expandedAlts = $state<Record<string, boolean>>({});
 {#snippet linkChip(label: string, url: string)}
     {@const href = sanitizeLinkHref(url)}
     {#if href}
+        {@const mapKind = classifyMapHref(href)}
         <a
             {href}
             target="_blank"
             rel="noopener noreferrer"
             class="inline-flex items-center gap-1.5 min-h-[44px] bg-accent/10 text-accent text-xs font-bold px-3 py-1.5 rounded-lg transition duration-200 hover:bg-accent/20"
         >
-            {#if href.includes("naver")}
+            {#if mapKind === "naver"}
                 <NaverIcon size={13} class="shrink-0" aria-hidden="true" />
-            {:else if /maps\.app\.goo\.gl|google\.[^/]+\/maps|goo\.gl\/maps/.test(href)}
+            {:else if mapKind === "google"}
                 <GoogleMapsIcon size={13} class="shrink-0" aria-hidden="true" />
             {:else}
                 <Link size={12} class="shrink-0" aria-hidden="true" />

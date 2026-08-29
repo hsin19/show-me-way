@@ -16,6 +16,7 @@ import {
     createExpenseId,
     type DayItinerary,
     downloadTextFile,
+    genTripId,
     saveTripData,
     serializeToYaml,
     type TripData,
@@ -48,9 +49,11 @@ import {
     createProfile,
     deleteProfile,
     ensureActiveProfileId,
+    isActiveProfile,
     listProfiles,
     type ProfileInfo,
     switchToProfile,
+    tripIdFromYaml,
 } from "./lib/profiles";
 import { initPwaInstallPrompt } from "./lib/pwa-install.svelte";
 import { settingsDraft } from "./lib/settings-draft.svelte";
@@ -61,6 +64,7 @@ import {
     isShareSupported,
     readShareTokenFromHash,
 } from "./lib/share";
+import { importSharedTrip } from "./lib/share-import";
 import {
     checkForSwUpdate,
     initServiceWorkerUpdates,
@@ -208,23 +212,18 @@ onMount(async () => {
     void gdriveSync.refreshFiles();
 });
 
-// Non-destructive: the shared trip lands as a NEW profile and the current one is
-// parked, not overwritten. The hash is always stripped afterwards, including on
-// decline or failure, so a refresh cannot re-prompt.
+// Never overwrites without asking: an unrecognised trip lands as a NEW profile with the
+// current one parked, and a link carrying a trip this device already holds asks before
+// replacing it. The hash is always stripped afterwards, including on decline or failure,
+// so a refresh cannot re-prompt.
 async function maybeImportSharedItinerary() {
     const token = readShareTokenFromHash();
     if (!token) return;
     try {
-        const yaml = await decodeShareToken(token);
-        const parsed = validateYaml(yaml);
-        const hasExisting = !!localStorage.getItem(USER_YAML_KEY);
-        const message = "偵測到分享的行程，要匯入為新行程嗎？（目前行程會保留，可隨時切回）";
-        if (!hasExisting || confirm(message)) {
-            // Re-serialized rather than stored raw, so a hand-edited share link
-            // is canonicalized (runtime ids out, schema modeline back in).
-            createProfile(serializeToYaml(parsed));
-            showToast("已匯入分享的行程");
-        }
+        // `onMount` reloads right after, and there is no live `tripData` to persist yet.
+        const outcome = importSharedTrip(validateYaml(await decodeShareToken(token)));
+        if (outcome.kind === "overwritten") showToast("已用分享連結更新行程，可在行程管理還原前一版");
+        else if (outcome.kind === "imported") showToast("已匯入分享的行程");
     } catch (err) {
         console.error("Failed to import shared itinerary:", err);
         showToast("分享連結內容無效，已略過");
@@ -249,6 +248,10 @@ function syncToToday(data: TripData) {
 }
 
 async function loadTripData() {
+    // Whatever draft belonged to the previous active trip outranks the persisted
+    // YAML in the editor and would be saved over the trip loaded here — see
+    // settings-draft.svelte.ts's invariant.
+    settingsDraft.yaml = null;
     isLoading = true;
     loadError = null;
     try {
@@ -263,6 +266,13 @@ async function loadTripData() {
         migrateGdriveSyncState();
         let migrated = migrateLegacyChecklistState(data);
         if (migrateLegacyLedger(data)) migrated = true;
+        // A trip saved before ids existed has one minted on every load until it is
+        // written back, and an identity that changes each launch is worse than none: a
+        // Drive push would stamp the file with a value the next load no longer holds.
+        // Only for a trip already in storage — writing the bundled template out would
+        // silently adopt it as the user's own and stop it tracking the shipped one.
+        const storedYaml = localStorage.getItem(USER_YAML_KEY);
+        if (storedYaml !== null && tripIdFromYaml(storedYaml) !== data.trip.id) migrated = true;
         if (migrated) persistTripData();
 
         syncToToday(data);
@@ -274,18 +284,22 @@ async function loadTripData() {
     }
 }
 
-function persistTripData() {
-    if (!tripData) return;
+/** Returns whether the save actually landed, so a caller that must not proceed past a failed save (e.g. before parking this trip and swapping in another) can bail out instead of ignoring it. */
+function persistTripData(): boolean {
+    if (!tripData) return false;
     try {
-        saveTripData(tripData);
+        const yaml = serializeToYaml(tripData);
+        saveTripData(tripData, yaml);
         // ensureActiveProfileId, not a `?? "default"` fallback: the id keys this trip's
         // sync state, and two trips sharing a literal would share one Drive file.
         const activeId = ensureActiveProfileId();
         // Debounced and opt-in-checked inside the sync state; this runs on every tap.
-        gdriveSync.scheduleSync(tripData.trip.name, serializeToYaml(tripData), activeId);
+        gdriveSync.scheduleSync(yaml, activeId);
+        return true;
     } catch (err) {
         console.error("Failed to persist trip data:", err);
         showToast("儲存失敗，請稍後再試");
+        return false;
     }
 }
 
@@ -354,28 +368,61 @@ function addChecklistItem(list: "todo" | "packing", text: string) {
     persistTripData();
 }
 
-function deleteChecklistItem(list: "todo" | "packing", id: string) {
-    if (!tripData) return;
-    const index = tripData[list].findIndex(i => i._id === id);
+/**
+ * Remove `id` from a `_id`-keyed list, persist, and offer an undo toast that
+ * reinserts it — reading the list fresh via `getList` both times, since `tripData`
+ * can go null or the list can change while the toast is up.
+ */
+function deleteWithUndo<T extends { _id?: string; }>(
+    getList: () => T[] | null,
+    setList: (next: T[]) => void,
+    id: string,
+    toastMessage: (removed: T) => string,
+) {
+    const list = getList();
+    if (!list) return;
+    const index = list.findIndex(i => i._id === id);
     if (index < 0) return;
-    const removed = { ...tripData[list][index] };
-    tripData[list] = tripData[list].filter(i => i._id !== id);
+    const removed = { ...list[index] };
+    setList(list.filter(i => i._id !== id));
     persistTripData();
-    // `text` is optional at the gate, and this toast is the only place that ever
-    // reads it back.
-    const text = removed.text ?? "";
-    const label = text.length > 10 ? `${text.slice(0, 10)}…` : text;
+    // The undo toast can still be showing after the user switches to a different trip —
+    // its closure keeps running regardless — so it must not splice `removed` into
+    // whatever trip happens to be active by the time 復原 is tapped.
+    const profileIdAtDelete = ensureActiveProfileId();
     showToast({
-        message: `已刪除「${label}」`,
+        message: toastMessage(removed),
         actionLabel: "復原",
         onAction: () => {
-            if (!tripData) return;
+            if (!isActiveProfile(profileIdAtDelete)) {
+                showToast("行程已切換，無法復原");
+                return;
+            }
+            const current = getList();
+            if (!current) return;
             // `index` may be stale — another item could have gone while the toast
             // was up — which is why the insert clamps.
-            tripData[list] = insertAtClamped(tripData[list], index, removed);
+            setList(insertAtClamped(current, index, removed));
             persistTripData();
         },
     });
+}
+
+function deleteChecklistItem(list: "todo" | "packing", id: string) {
+    deleteWithUndo(
+        () => tripData?.[list] ?? null,
+        next => {
+            if (tripData) tripData[list] = next;
+        },
+        id,
+        removed => {
+            // `text` is optional at the gate, and this toast is the only place that ever
+            // reads it back.
+            const text = removed.text ?? "";
+            const label = text.length > 10 ? `${text.slice(0, 10)}…` : text;
+            return `已刪除「${label}」`;
+        },
+    );
 }
 
 /** `undefined` clears the check-in mark. */
@@ -418,21 +465,14 @@ function addExpense(name: string, amount: number, type: string, date?: string) {
 }
 
 function deleteExpense(id: string) {
-    if (!tripData) return;
-    const index = tripData.expenses.findIndex(e => e._id === id);
-    if (index < 0) return;
-    const removed = { ...tripData.expenses[index] };
-    tripData.expenses = tripData.expenses.filter(e => e._id !== id);
-    persistTripData();
-    showToast({
-        message: "紀錄已刪除",
-        actionLabel: "復原",
-        onAction: () => {
-            if (!tripData) return;
-            tripData.expenses = insertAtClamped(tripData.expenses, index, removed);
-            persistTripData();
+    deleteWithUndo(
+        () => tripData?.expenses ?? null,
+        next => {
+            if (tripData) tripData.expenses = next;
         },
-    });
+        id,
+        () => "紀錄已刪除",
+    );
 }
 
 function resetLedger() {
@@ -455,9 +495,15 @@ function applyAiEdit(yaml: string): boolean {
         showToast("AI 的修改內容無效，已略過");
         return false;
     }
+    // The model re-authors the whole document, so an id it dropped or invented would be
+    // minted fresh here and orphan this trip's Drive file. An AI edit is always an edit to
+    // the trip on screen, so its identity is not the model's to change.
+    if (tripData) parsed.trip.id = tripData.trip.id;
     // Snapshot before persistTripData overwrites it — the toast's 復原 needs the
     // pre-edit YAML, and the backup ring alone would leave undo buried in 行程管理.
     const previousYaml = localStorage.getItem(USER_YAML_KEY);
+    // Same reasoning as deleteWithUndo: the undo toast can outlive a profile switch.
+    const profileIdAtEdit = ensureActiveProfileId();
     backupCurrentYaml();
     // Assigned in place rather than via loadTripData, which would unmount the AI
     // tab and take its in-memory conversation with it.
@@ -469,6 +515,10 @@ function applyAiEdit(yaml: string): boolean {
             message: "已套用 AI 修改的行程",
             actionLabel: "復原",
             onAction: () => {
+                if (!isActiveProfile(profileIdAtEdit)) {
+                    showToast("行程已切換，無法復原");
+                    return;
+                }
                 let restored: TripData;
                 try {
                     restored = validateYaml(previousYaml);
@@ -582,30 +632,69 @@ async function handleCreateProfile() {
         showToast("無法建立新行程，請稍後再試");
         return;
     }
-    saveTripData(tripData);
-    createProfile(yaml);
-    // A leftover draft belongs to the previous trip and outranks the persisted
-    // YAML in the editor, so it would be saved over the new one.
-    settingsDraft.yaml = null;
+    // persistTripData, not a raw saveTripData: a storage failure here must abort the
+    // switch rather than park a trip whose latest edits never actually landed.
+    if (!persistTripData()) return;
+    try {
+        createProfile(yaml);
+    } catch (err) {
+        console.error("Failed to create profile:", err);
+        showToast("建立新行程失敗，請稍後再試");
+        return;
+    }
     await loadTripData();
     showToast("已建立新行程，請填入行程內容");
     // Straight to 行程管理: a template trip is useless until it is filled in.
     openTools("settings");
 }
 
+/**
+ * 兩份都留 — the conflict resolution that discards nothing. The cloud copy has already
+ * landed in this trip's slot, keeping its id and so its Drive binding; what was here
+ * becomes a trip of its own.
+ *
+ * Re-identified and renamed because from here these are two trips: sharing an id would
+ * have them fight over one Drive file, and sharing a name would make the switcher
+ * unreadable. The caller has persisted the incoming copy already, which is what
+ * `createProfile` parks in its place.
+ */
+async function branchLocalCopy(localYaml: string) {
+    let forked: TripData;
+    try {
+        forked = validateYaml(localYaml);
+    } catch (err) {
+        console.error("Failed to branch the local copy:", err);
+        showToast("保留本機版本失敗：內容無法解析");
+        return;
+    }
+    forked.trip.id = genTripId();
+    forked.trip.name = `${forked.trip.name}（本機版）`;
+    try {
+        createProfile(serializeToYaml(forked));
+    } catch (err) {
+        console.error("Failed to branch the local copy:", err);
+        showToast("保留本機版本失敗，請稍後再試");
+        return;
+    }
+    await loadTripData();
+    showToast(`已保留兩份，這台裝置的版本另存為「${forked.trip.name}」`);
+}
+
 async function handleSwitchProfile(id: string) {
     if (!tripData) return;
-    saveTripData(tripData);
+    if (!persistTripData()) return;
     try {
         switchToProfile(id);
     } catch (err) {
         console.error("Failed to switch profile:", err);
-        showToast("找不到該行程");
+        // switchToProfile's own message names the actual problem (e.g. an unknown
+        // id); anything else — a DOMException from a full quota, say, which is not
+        // even `instanceof Error` — falls back to a generic message instead of
+        // misreporting itself as "trip not found".
+        showToast(err instanceof Error ? err.message : "切換行程失敗，請稍後再試");
         profiles = listProfiles();
         return;
     }
-    // Same hazard as in handleCreateProfile: the draft belongs to the old trip.
-    settingsDraft.yaml = null;
     showToast("已切換行程");
     await loadTripData();
     // Switching is initiated from 工具, but what the user asked for is the trip.
@@ -620,9 +709,10 @@ function handleDeleteProfile(id: string) {
 }
 
 async function handleLoadCloudTrip(fileId: string, fileName: string) {
-    const result = await gdriveSync.importCloudTripAsProfile(fileId, () => {
-        if (tripData) saveTripData(tripData);
-    });
+    // persistTripData, not a raw saveTripData: this is the outgoing trip's last save
+    // before it gets parked, and its answer has to be honoured — parking a trip whose
+    // latest edits never reached storage loses them for good.
+    const result = await gdriveSync.importCloudTripAsProfile(fileId, persistTripData);
     if (!result) return;
     if (!result.ok) {
         console.error("Cloud YAML validation failed:", result.error);
@@ -630,7 +720,6 @@ async function handleLoadCloudTrip(fileId: string, fileName: string) {
         openTools("settings");
         return;
     }
-    settingsDraft.yaml = null;
     await loadTripData();
     showToast(`已從 Google Drive 載入「${fileName.replace(/\.ya?ml$/i, "")}」`);
     activeTab = "itinerary";
@@ -727,6 +816,7 @@ async function handleDeleteCloudTrip(fileId: string) {
                         onSwitchProfile={handleSwitchProfile}
                         onCreateProfile={handleCreateProfile}
                         onDeleteProfile={handleDeleteProfile}
+                        onBranchLocalCopy={branchLocalCopy}
                         onExportYaml={exportTripYaml}
                         onExportUrl={exportTripUrl}
                     />

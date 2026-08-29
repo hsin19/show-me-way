@@ -178,7 +178,7 @@ export function ledgerTypeLabel(type: string): string {
     if (!type) return "";
     if (type === "Cash") return "現金支付";
     if (type === "Deposit-Cash") return "現金兌換";
-    if (type.startsWith("Deposit-")) return `${type.slice("Deposit-".length)} 加值`;
+    if (isDeposit(type)) return `${type.slice("Deposit-".length)} 加值`;
     return `${type} 支付`;
 }
 

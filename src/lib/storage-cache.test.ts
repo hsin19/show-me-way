@@ -99,4 +99,22 @@ describe("readCachedJson / writeCachedJson", () => {
     it("returns null for an absent key", () => {
         expect(readCachedJson("missing", isEntry)).toBeNull();
     });
+
+    it("degrades to a miss when the read itself throws (blocked site data)", () => {
+        // Chrome's "block all cookies" and some embedded webviews throw on every access,
+        // reads included. Callers run this from module-scope field initialisers, where a
+        // throw takes the import graph — and the whole app — down with it.
+        storage.getItem = () => {
+            throw new DOMException("SecurityError");
+        };
+        expect(readCachedJson("k", isEntry)).toBeNull();
+    });
+
+    it("survives a removeItem that throws while dropping a corrupt entry", () => {
+        storage.setItem("k", "{not json");
+        storage.removeItem = () => {
+            throw new DOMException("SecurityError");
+        };
+        expect(readCachedJson("k", isEntry)).toBeNull();
+    });
 });

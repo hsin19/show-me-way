@@ -23,7 +23,16 @@ export function readCachedJson<T>(key: string, isValid: (value: unknown) => valu
         if (isValid(mirrored)) return mirrored;
         memCache.delete(key);
     }
-    const cached = localStorage.getItem(key);
+    let cached: string | null;
+    try {
+        cached = localStorage.getItem(key);
+    } catch (e) {
+        // Blocked site data (Chrome's "block all cookies", some embedded webviews) throws
+        // on every access, not just writes. Callers run this from module-scope field
+        // initialisers, where a throw takes the whole import graph — and the app — down.
+        console.warn("Failed to read cached data", e);
+        return null;
+    }
     if (!cached) return null;
     try {
         const parsed: unknown = JSON.parse(cached);
@@ -34,7 +43,7 @@ export function readCachedJson<T>(key: string, isValid: (value: unknown) => valu
     } catch (e) {
         console.warn("Failed to parse cached data", e);
     }
-    localStorage.removeItem(key);
+    removeCachedKeys([key]);
     return null;
 }
 
@@ -51,9 +60,13 @@ export function writeCachedJson(key: string, value: unknown): void {
 /** A snapshot, so the caller can remove keys while walking the result. */
 export function cachedKeysWithPrefix(prefix: string): string[] {
     const keys: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key?.startsWith(prefix)) keys.push(key);
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key?.startsWith(prefix)) keys.push(key);
+        }
+    } catch (e) {
+        console.warn("Failed to enumerate cached data", e);
     }
     return keys;
 }
@@ -62,7 +75,11 @@ export function cachedKeysWithPrefix(prefix: string): string[] {
 export function removeCachedKeys(keys: readonly string[]): void {
     for (const key of keys) {
         memCache.delete(key);
-        localStorage.removeItem(key);
+        try {
+            localStorage.removeItem(key);
+        } catch (e) {
+            console.warn("Failed to remove cached data", e);
+        }
     }
 }
 

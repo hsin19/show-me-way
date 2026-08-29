@@ -1,3 +1,7 @@
+import type {
+    BrowserContext,
+    Page,
+} from "@playwright/test";
 import { encodeShareToken } from "../../src/lib/share";
 import {
     expect,
@@ -7,15 +11,20 @@ import {
 } from "./fixtures";
 
 // Share-link flows (src/lib/share.ts + maybeImportSharedItinerary in App.svelte):
-// a `#s=<token>` hash carries a whole compressed itinerary. Importing is
-// non-destructive — the current trip is parked as a profile, never overwritten —
-// and the hash is always stripped afterwards so a refresh never re-prompts.
+// a `#s=<token>` hash carries a whole compressed itinerary. An unrecognised trip is
+// imported non-destructively — the current trip is parked as a profile, never
+// overwritten — while a link carrying a trip this device already holds (same trip.id)
+// offers to replace that copy first, and a copy only behind that. The hash is always
+// stripped afterwards so a refresh never re-prompts.
 // Tokens are built in Node with the app's own encodeShareToken (share.ts is
 // pure; CompressionStream/btoa exist in Node 18+).
 
 // Derived from FIXTURE_YAML with distinct names/dates, so assertions can tell
-// the imported trip from the seeded one.
+// the imported trip from the seeded one. The id has to differ too: this stands for
+// someone else's trip, and sharing the seed's id would land on the replace-mine flow
+// these tests are not about.
 const SHARED_YAML = FIXTURE_YAML
+    .replace("id: t-fixture", "id: t-shared")
     .replace("name: 測試行程", "name: 分享行程")
     .replaceAll("2099-01-01", "2099-02-01")
     .replaceAll("2099-01-02", "2099-02-02")
@@ -92,7 +101,20 @@ test("無效的分享 token：提示內容無效並照常載入原行程", async
     expect(page.url()).not.toContain("#s=");
 });
 
-test("分享行程按鈕：複製的連結可在新頁面匯入（round-trip）", async ({ page, context }) => {
+/** 每個本機行程的 trip.id：active 一個，加上停放中的每一個。 */
+async function localTripIds(page: Page): Promise<{ active: string | null; parked: (string | null)[]; }> {
+    return page.evaluate(() => {
+        const idOf = (yaml: string | null) => yaml?.match(/^\s+id:\s*(\S+)/m)?.[1] ?? null;
+        const parked = JSON.parse(localStorage.getItem("showmeway_profiles") ?? "[]") as { yaml: string; }[];
+        return { active: idOf(localStorage.getItem("showmeway_user_yaml")), parked: parked.map(p => idOf(p.yaml)) };
+    });
+}
+
+/**
+ * 分享自己的行程，回傳連結。收件端刻意用同一個 context 的新分頁，所以共用 localStorage ——
+ * 那正是「連結帶進來的行程本機已經有」的情境。
+ */
+async function shareOwnTrip(page: Page, context: BrowserContext): Promise<string> {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await seedItinerary(page);
     await page.goto("/");
@@ -105,12 +127,65 @@ test("分享行程按鈕：複製的連結可在新頁面匯入（round-trip）"
 
     const sharedUrl = await page.evaluate(() => navigator.clipboard.readText());
     expect(sharedUrl).toContain("#s=");
+    return sharedUrl;
+}
 
-    // 同一個 context 的新分頁共用 localStorage（已有現有行程）→ 匯入為新行程
+/** 依序回答對話框：true 按確定、false 按取消。用完之後多出來的一律取消。 */
+function answerDialogs(page: Page, answers: boolean[]): { asked: () => number; } {
+    let asked = 0;
+    page.on("dialog", dialog => void (answers[asked++] ? dialog.accept() : dialog.dismiss()));
+    return { asked: () => asked };
+}
+
+test("分享行程按鈕：連結帶回同一趟行程時，第一個選項是覆蓋原本那份", async ({ page, context }) => {
+    const sharedUrl = await shareOwnTrip(page, context);
+    const before = await localTripIds(page);
+
     const receiver = await context.newPage();
-    receiver.on("dialog", dialog => void dialog.accept());
+    answerDialogs(receiver, [true]);
+    await receiver.goto(sharedUrl);
+
+    await expect(receiver.getByRole("status")).toContainText("已用分享連結更新行程");
+    await expect(receiver.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
+
+    // 同一趟就是同一趟：沒有多出第二份，身分也沒換 —— 換掉的話雲端那個檔案就認不得它了。
+    const after = await localTripIds(receiver);
+    expect(after.parked).toHaveLength(0);
+    expect(after.active).toBe(before.active);
+    // 覆蓋前先進了備份環，所以行程管理還原得回來。
+    const backups = await receiver.evaluate(() => JSON.parse(localStorage.getItem("showmeway_yaml_backups") ?? "[]").length as number);
+    expect(backups).toBeGreaterThan(0);
+});
+
+test("分享行程按鈕：拒絕覆蓋後可以改成另存副本，副本會拿到自己的 trip.id", async ({ page, context }) => {
+    const sharedUrl = await shareOwnTrip(page, context);
+    const before = await localTripIds(page);
+
+    const receiver = await context.newPage();
+    // 第一問（覆蓋）取消、第二問（副本）確定。
+    const dialogs = answerDialogs(receiver, [false, true]);
     await receiver.goto(sharedUrl);
 
     await expect(receiver.getByRole("status")).toContainText("已匯入");
+    expect(dialogs.asked()).toBe(2);
+
+    // 兩份共用同一個 trip.id 會讓它們搶同一個雲端檔案，所以副本一定要換身分。
+    const after = await localTripIds(receiver);
+    expect(after.parked).toEqual([before.active]);
+    expect(after.active).toBeTruthy();
+    expect(after.active).not.toBe(before.active);
+});
+
+test("分享行程按鈕：兩問都拒絕時什麼都不動，網址 token 仍被清除", async ({ page, context }) => {
+    const sharedUrl = await shareOwnTrip(page, context);
+    const before = await localTripIds(page);
+
+    const receiver = await context.newPage();
+    const dialogs = answerDialogs(receiver, [false, false]);
+    await receiver.goto(sharedUrl);
+
     await expect(receiver.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
+    expect(dialogs.asked()).toBe(2);
+    expect(await localTripIds(receiver)).toEqual(before);
+    expect(receiver.url()).not.toContain("#s=");
 });
