@@ -1,6 +1,6 @@
 {
   "yaml.schemas": {
-    "./public/showmeway-schema.json": ["itinerary.yaml", "itinerary.local.yaml", "itinerary*.yaml"]
+    "./schema/showmeway-schema.json": ["itinerary.yaml", "itinerary.local.yaml", "itinerary*.yaml"]
   },
   "cSpell.words": [
     "gdrive"

@@ -8,12 +8,14 @@ import {
 import {
     addDaysIso,
     compareTripDates,
+    daysBetweenIso,
     formatBackupTime,
     formatDateRange,
     formatDayDate,
     formatYearMonth,
     getTodayIsoString,
     insertAtClamped,
+    isCalendarDate,
     isTripLongPast,
     parseLocalDate,
     splitDayDate,
@@ -157,6 +159,36 @@ describe("addDaysIso", () => {
         expect(addDaysIso("2026-12-31", 1)).toBe("2027-01-01");
         expect(addDaysIso("2024-02-28", 1)).toBe("2024-02-29");
         expect(addDaysIso("2026-02-28", 1)).toBe("2026-03-01");
+    });
+});
+
+describe("daysBetweenIso", () => {
+    it("counts whole days forward and backward", () => {
+        expect(daysBetweenIso("2026-06-11", "2026-06-11")).toBe(0);
+        expect(daysBetweenIso("2026-06-11", "2026-06-14")).toBe(3);
+        expect(daysBetweenIso("2026-06-14", "2026-06-11")).toBe(-3);
+    });
+
+    it("crosses month, year and leap-day boundaries", () => {
+        expect(daysBetweenIso("2025-12-31", "2026-01-01")).toBe(1);
+        expect(daysBetweenIso("2024-02-28", "2024-03-01")).toBe(2);
+        expect(daysBetweenIso("2026-01-01", "2062-01-01")).toBe(13149);
+    });
+});
+
+describe("isCalendarDate", () => {
+    it("accepts real dates including leap day", () => {
+        expect(isCalendarDate("2026-06-11")).toBe(true);
+        expect(isCalendarDate("2024-02-29")).toBe(true);
+        expect(isCalendarDate("2026-12-31")).toBe(true);
+    });
+
+    it("rejects a day, month or leap day that does not exist", () => {
+        expect(isCalendarDate("2026-02-30")).toBe(false);
+        expect(isCalendarDate("2026-02-29")).toBe(false);
+        expect(isCalendarDate("2026-13-01")).toBe(false);
+        expect(isCalendarDate("2026-04-31")).toBe(false);
+        expect(isCalendarDate("2026-00-10")).toBe(false);
     });
 });
 

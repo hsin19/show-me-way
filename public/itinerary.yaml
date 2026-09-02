@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://hsin19.github.io/show-me-way/showmeway-schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/hsin19/show-me-way/main/schema/showmeway-schema.json
 trip:
   name: 下面一way-我的探索之旅
   lang: ja
@@ -14,7 +14,6 @@ trip:
       checkIn: '2026-10-01'
       checkOut: '2026-10-03'
       localName: 新宿セレクトホテル
-      phone: '+81-3-1234-5678'
       mapLink: 'https://maps.app.goo.gl/example-hotel'
       confirmation:
         code: 'BK-20261001'

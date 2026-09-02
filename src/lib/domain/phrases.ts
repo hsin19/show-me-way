@@ -11,7 +11,7 @@ export interface PhraseInfo {
 /**
  * Phrases are code, not itinerary data: a trip only picks a `lang` and the deck
  * is resolved from here, so adding one means editing this file. A new language
- * also needs its code in the `lang` enum of `public/showmeway-schema.json`.
+ * also needs its code in the `lang` metadata enum in `src/lib/domain/trip-schema.ts`.
  */
 export interface LanguageConfig {
     label: string;

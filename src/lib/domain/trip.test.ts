@@ -70,7 +70,7 @@ describe("validateYaml — hotels 元素形狀", () => {
             .toThrow("hotels 第 1 項的 name 必須是文字");
     });
 
-    it("把未加引號的日期 (js-yaml 解析成 Date) 還原為 YYYY-MM-DD 字串", () => {
+    it("接受未加引號的日期 (js-yaml 的 YAML 1.2 core schema 讀成純文字，不是 Date)", () => {
         const unquotedDates = [
             "",
             "    - name: '測試旅店'",
@@ -341,7 +341,7 @@ describe("validateYaml — 結構與其餘 zh-TW 驗證", () => {
             .toThrow("days 第 1 項的 pace 必須是文字");
     });
 
-    it("接受未加引號的 date (js-yaml 會給出 Date 物件)", () => {
+    it("接受未加引號的 date (js-yaml 的 YAML 1.2 core schema 讀成純文字，不是 Date)", () => {
         const unquoted = [
             "days:",
             "  - date: 2026-06-11",
@@ -707,5 +707,87 @@ describe("YAML alias bomb", () => {
         // must get PAST the alias guard and fail on structure instead.
         const fewAliases = "anchor: &x 'ok'\nlist: [*x,*x,*x]";
         expect(() => validateYaml(fewAliases)).toThrow("YAML 缺少必要的結構");
+    });
+});
+
+describe("validateYaml — schema 補上的形狀檢查", () => {
+    it("事件缺少 time / title / type 時指出項次，而不是等到旅行當天才在時間軸炸掉", () => {
+        expect(() => validateYaml(timelineYaml("\n      - title: '沒有時間'\n        type: standard")))
+            .toThrow("days 第 1 項的 timeline 第 1 項缺少 time 屬性");
+        expect(() => validateYaml(timelineYaml("\n      - time: '08:00'\n        type: standard")))
+            .toThrow("days 第 1 項的 timeline 第 1 項缺少 title 屬性");
+        expect(() => validateYaml(timelineYaml("\n      - time: '08:00'\n        title: '沒有類型'")))
+            .toThrow("days 第 1 項的 timeline 第 1 項缺少 type 屬性");
+    });
+
+    it("拒絕數字的 time (未加引號的 800) 與未知的 type", () => {
+        expect(() => validateYaml(timelineYaml("\n      - time: 800\n        title: '早餐'\n        type: standard")))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 time 必須是文字");
+        expect(() => validateYaml(timelineYaml("\n      - time: '08:00'\n        title: '早餐'\n        type: banana")))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 type 必須是 'booked'、'must-go'、'standard' 或 'option'");
+    });
+
+    it("checked 必須是布林：YAML 1.2 把 no/off 讀成文字，勾選狀態會反轉", () => {
+        expect(() => validateYaml([validTripBlock, validDaysBlock, "todo:", "  - text: '換錢'", "    checked: no"].join("\n")))
+            .toThrow("todo 第 1 項的 checked 必須是 true 或 false");
+    });
+
+    it("expenses 每筆都要有 name / amount / type / date，且 amount 必須是數字", () => {
+        const expense = (fields: string) => [validTripBlock, validDaysBlock, "expenses:", fields].join("\n");
+        expect(() => validateYaml(expense("  - amount: 1200\n    type: Cash\n    date: '2026-06-11'")))
+            .toThrow("expenses 第 1 項缺少 name 屬性");
+        expect(() => validateYaml(expense("  - name: '午餐'\n    amount: '1200'\n    type: Cash\n    date: '2026-06-11'")))
+            .toThrow("expenses 第 1 項的 amount 必須是數字");
+        expect(() => validateYaml(expense("  - name: '午餐'\n    amount: 1200\n    date: '2026-06-11'")))
+            .toThrow("expenses 第 1 項缺少 type 屬性");
+    });
+
+    it("hotels 的 checkIn / checkOut 必須是 YYYY-MM-DD，否則退房節點會靜靜消失", () => {
+        const slashDates = validHotel.replace("checkIn: '2026-06-11'", "checkIn: '2026/06/11'");
+        expect(() => validateYaml(tripYaml(slashDates)))
+            .toThrow("hotels 第 1 項的 checkIn 必須是 YYYY-MM-DD 日期格式");
+    });
+
+    it("trip.wallets 必須是文字列表，trip.mapProvider 只接受 naver / google", () => {
+        expect(() => validateYaml([validTripBlock, "  wallets: Suica", validDaysBlock].join("\n")))
+            .toThrow("trip.wallets 必須是文字列表");
+        expect(() => validateYaml([validTripBlock, "  mapProvider: apple", validDaysBlock].join("\n")))
+            .toThrow("trip.mapProvider 必須是 'naver' 或 'google'");
+    });
+
+    it("不認識的欄位在載入時被剝掉，所以存檔後不會再出現", () => {
+        const data = validateYaml([validTripBlock, "  notes: '不在 schema 裡'", validDaysBlock.replace("    timeline: []", "    mapLnk: 'typo'\n    timeline: []")].join("\n"));
+        expect((data.trip as unknown as { notes?: string; }).notes).toBeUndefined();
+        expect((data.days[0] as unknown as { mapLnk?: string; }).mapLnk).toBeUndefined();
+        expect(serializeToYaml(data)).not.toMatch(/notes|mapLnk/);
+    });
+
+    it("欄位值留空 (YAML 的 null) 一律視為未填：選填欄位過關，必填欄位回報缺少", () => {
+        expect(validateYaml(timelineYaml("\n      - time: '08:00'\n        title: '早餐'\n        type: standard\n        desc:")).days[0].timeline[0].desc).toBeUndefined();
+        expect(() => validateYaml(timelineYaml("\n      - time:\n        title: '早餐'\n        type: standard")))
+            .toThrow("days 第 1 項的 timeline 第 1 項缺少 time 屬性");
+    });
+});
+
+describe("validateYaml — 日期的語意檢查", () => {
+    const days = (...entries: string[]) => [validTripBlock, "days:", ...entries].join("\n");
+    const day = (date: string) => `  - date: '${date}'\n    title: '市區'\n    timeline: []`;
+
+    it("拒絕通過格式卻不存在於月曆上的日期 (Date 會把 2026-02-30 滾成 3 月 2 日)", () => {
+        expect(() => validateYaml(days(day("2026-02-30"))))
+            .toThrow("days 第 1 項的 date 不是有效的日期 (2026-02-30)");
+        expect(() => validateYaml(tripYaml(validHotel.replace("checkOut: '2026-06-12'", "checkOut: '2026-13-01'"))))
+            .toThrow("hotels 第 1 項的 checkOut 不是有效的日期 (2026-13-01)");
+    });
+
+    it("拒絕兩天同一個日期，並以作者的順序指出兩個項次", () => {
+        expect(() => validateYaml(days(day("2026-06-12"), day("2026-06-11"), day("2026-06-12"))))
+            .toThrow("days 第 1 項與第 3 項的 date 重複 (2026-06-12)");
+    });
+
+    it("相鄰兩天相隔超過 90 天視為打錯 (少打一位年份會補出上萬個自由日並寫回 YAML)", () => {
+        expect(() => validateYaml(days(day("2026-01-01"), day("2062-01-01"))))
+            .toThrow("days 第 1 項 (2026-01-01) 與第 2 項 (2062-01-01) 相隔 13149 天，超過 90 天的上限，請確認日期是否打錯");
+        expect(validateYaml(days(day("2026-01-01"), day("2026-04-01"))).days).toHaveLength(91);
     });
 });

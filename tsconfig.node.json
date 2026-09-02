@@ -36,6 +36,7 @@
     "pwa-assets.config.ts",
     "playwright.config.ts",
     "e2e/**/*.ts",
+    "scripts/**/*.ts",
     "src/vite-env.d.ts"
   ]
 }

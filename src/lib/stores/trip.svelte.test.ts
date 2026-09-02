@@ -25,6 +25,7 @@ days:
     timeline:
       - time: '10:00'
         title: 抵達機場
+        type: standard
 todo:
   - text: 買網卡
     checked: false

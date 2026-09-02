@@ -12,6 +12,8 @@
     "format:check": "dprint check",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "schema:gen": "node scripts/gen-schema.ts",
+    "schema:check": "node scripts/gen-schema.ts --check",
     "typecheck": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
     "typecheck:fast": "node -e \"fs.rmSync('.svelte-check',{recursive:true,force:true})\" && svelte-check --tsgo --tsconfig ./tsconfig.app.json && tsgo -p tsconfig.node.json",
     "test": "vitest run",
@@ -22,8 +24,8 @@
     "knip": "knip",
     "knip:fix": "knip --fix --fix-type exports,types --format",
     "knip:ci": "knip --exclude dependencies,devDependencies --no-config-hints",
-    "check": "pnpm run format && pnpm run knip:fix && pnpm run lint:fix && pnpm run typecheck && pnpm run test && pnpm run build && E2E_SKIP_BUILD=1 pnpm run test:e2e",
-    "ci": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run knip:ci && pnpm run test && pnpm run build",
+    "check": "pnpm run schema:gen && pnpm run format && pnpm run knip:fix && pnpm run lint:fix && pnpm run typecheck && pnpm run test && pnpm run build && E2E_SKIP_BUILD=1 pnpm run test:e2e",
+    "ci": "pnpm run schema:check && pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run knip:ci && pnpm run test && pnpm run build",
     "skills:update": "pnpm dlx skills update",
     "prepare": "simple-git-hooks"
   },
@@ -31,6 +33,7 @@
     "pre-commit": "pnpm exec lint-staged"
   },
   "lint-staged": {
+    "src/lib/domain/trip-schema.ts": "pnpm run schema:gen",
     "*": "dprint fmt --allow-no-files",
     "*.{js,ts,svelte}": "eslint --fix"
   },
@@ -43,6 +46,7 @@
     "@tsconfig/svelte": "^5.0.8",
     "@types/node": "^24.13.3",
     "@typescript/native-preview": "7.0.0-dev.20260610.1",
+    "@valibot/to-json-schema": "^1.7.1",
     "@vite-pwa/assets-generator": "^1.0.2",
     "@vitest/coverage-v8": "^4.1.11",
     "dprint": "^0.56.1",
@@ -66,6 +70,7 @@
   },
   "dependencies": {
     "@fontsource-variable/noto-sans-tc": "^5.3.0",
-    "@fontsource-variable/plus-jakarta-sans": "^5.3.0"
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
+    "valibot": "^1.4.2"
   }
 }

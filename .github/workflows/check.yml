@@ -56,6 +56,12 @@ jobs:
       - name: Format
         run: pnpm run format:check
 
+      # The committed JSON Schema is generated from the valibot schema; a stale copy means
+      # the editor and the app disagree about what a valid itinerary is.
+      - name: Schema
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run schema:check
+
       - name: Lint
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm run lint

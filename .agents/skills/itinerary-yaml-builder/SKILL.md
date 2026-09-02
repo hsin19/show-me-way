@@ -7,7 +7,7 @@ description: Turn freeform trip notes (scattered Traditional Chinese text, jotte
 
 Convert messy trip notes into a schema-valid `public/itinerary.local.yaml` for the ShowMeWay PWA.
 
-The source of truth for structure is `public/showmeway-schema.json`. The quick reference below mirrors it — if the schema and this file ever disagree, re-read the schema and trust it.
+**The field reference is `schema/showmeway-schema.json` — read it before writing.** It is generated from `src/lib/domain/trip-schema.ts`, the very definition the app validates with, so it is never stale: every field's type, whether it is required, its allowed values, and a `description` written for authors. Three markers matter: `deprecated: true` is a field the app computes and strips on save (never write it), `readOnly: true` is `trip.id` (copy verbatim when updating, leave out when creating), and `additionalProperties: false` on every object means a key the schema does not list is a typo the app will silently drop — do not invent fields.
 
 ## Workflow
 
@@ -18,51 +18,28 @@ The source of truth for structure is `public/showmeway-schema.json`. The quick r
 5. **Write the YAML** to the chosen target path, with the schema modeline on line 1 (see Output rules).
 6. **Verify** with the checks in the Verification section before reporting done.
 
-## Schema quick reference
+## Shape at a glance
 
-Top-level keys: `trip` (required), `days` (required), and optional `todo`, `packing`.
+Top-level keys: `trip` and `days` (required); `todo`, `packing` (optional); `expenses` (ledger records the app maintains — preserve when merging, never author).
 
-### trip (required: name, hotels)
+- `trip` — requires `name`, `hotels[]`; optional `lang`, `city`, `currency`, `mapProvider`, `wallets[]`; app-owned `id`.
+- `trip.hotels[]` — requires `name`, `address`, `checkIn`, `checkOut`; optional `localName`, `mapLink`, `confirmation`.
+- `days[]` — requires `date`, `title`, `timeline[]`; optional `pace`, `city`. Order-insensitive: the app sorts by `date` and fills skipped dates in as free days.
+- `days[].timeline[]` — requires `time`, `title`, `type`; optional `desc`, `bullets[]`, `localName`, `mapLink`, `stops[]`, `links[]`, `alternatives[]`, `confirmation`, `status`.
+- `todo[]` / `packing[]` — `text`, optional `checked`.
 
-- `name` — string, trip title.
-- `id` — **app-generated, never authored, and never edited.** The trip's identity, which travels with exports, share links and the Google Drive copy so the app can tell "the same trip" from "a similar one". Unlike the derived fields below it *is* kept in the saved YAML: when updating an existing file, copy it across verbatim; when writing a new one, leave it out and the app mints it on first load. Changing or dropping it on an existing trip cuts it loose from its cloud backup.
-- `lang` — optional language code (`ko` / `ja` / `en`). Selects the app's built-in survival phrases and taxi-driver prompt. Defaults to English (`en`) when omitted or unsupported. Phrases are no longer authored in YAML.
-- `city` — optional destination city for the daily weather badge. **Prefer an English name** (e.g. `Tokyo`, `Seoul`) — only some Chinese names resolve (東京/京都 work; 首爾/大阪/釜山 miss or hit the wrong country). Ambiguous names take a two-letter country suffix (e.g. `Springfield, US`). Weather is simply hidden when unset (or an empty string). Preserve an existing `city` when merging/updating.
-- `currency` — optional currency code (e.g. `JPY`, `KRW`, `USD`) driving the ledger's converter, default wallets and quick amounts. Defaults to TWD when omitted.
-- `mapProvider` — optional `naver` | `google`; which map service place searches open in (Korea effectively requires `naver`). Defaults to Google Maps.
-- `wallets[]` — optional custom wallet/card names for the ledger (e.g. `Suica`, `WOWPASS`); omit to use the currency's defaults.
-- `hotels[]` — each requires `name`, `address` (local-language address for taxi drivers), `checkIn`, `checkOut` (both `YYYY-MM-DD`); optional `localName` (local-language hotel name, used as the map-search query), `mapLink` (direct map URL, preferred over searching `localName`) and `confirmation` (see timeline `confirmation` below — same shape).
-
-### days[] (required: date, title, timeline)
-
-- `date` — `YYYY-MM-DD`. Order-insensitive: the app automatically sorts entries by date and fills in missing intermediate gap days as free days.
-- `title` — day headline / main area, e.g. `明洞 · 乙支路` or `京都一日遊`.
-- `city` — optional; overrides `trip.city` for this day's weather lookup (multi-city trips), e.g. `Kyoto`. Prefer English names; a `, XX` country suffix disambiguates.
-- `pace` — optional pace description, e.g. `慢活、需要早起` (defaults to `自由安排行程`).
-- `timeline[]` — each requires `time`, `title`, `type`, `desc`; optional `bullets`, `localName`, `mapLink`, `stops`, `links`, `alternatives`, `status`, `confirmation`.
-  - `time` — `HH:MM` or a range `14:00 - 15:30`.
-  - `title` — short label; emoji prefix is idiomatic (✈️ 🏨 🍜 🛍️ ☕ 🎁).
-  - `type` — one of `booked` (預訂/橘), `must-go` (必訪/粉), `standard` (一般/藍), `option` (備選/紫).
-  - `bullets[]` — optional string notes; inline Markdown is supported, see **Inline Markdown** below.
-  - `localName` — optional place name in the destination's local language; used as the map-search query and for the enlarge-for-the-driver view.
-  - `mapLink` — optional direct map URL (e.g. a `naver.me` / `maps.app.goo.gl` short link); preferred over searching `localName`.
-  - `stops[]` — optional ordered places this event walks through `{ name, localName?, mapLink? }`, for a `A ➔ B ➔ C` style title. Each stop renders its own map + enlarge buttons, so **every** stop can be shown to a driver — unlike the event-level `localName`, of which there is only one. Always shown expanded (it is the event's main content, not a fallback). `name` is the display name (usually Chinese), `localName` the local-language name that drives the map search — **without `localName` or `mapLink` a stop has no map button**, so fill it in. There is no `note` field: put commentary in the event's `desc` / `bullets`. When an event has `stops`, don't also repeat one of them in the event-level `localName`.
-  - `links[]` — optional extra labeled links `{ label, url }` for the *same* event (official site, a guide article); map URLs get a matching brand icon automatically. Use this when the URL deserves its own labeled chip; for a URL that belongs inside a sentence, write a Markdown link in the prose instead — see **Inline Markdown** below. `url` may be `http(s)`, `mailto:`, `tel:`, `sms:`, `geo:` or a bare domain — **anything else renders no chip at all**, so a restaurant's phone number goes here as `tel:+81312345678`, never a `line://` deep link. Never hand-write a `google.com/maps/search/...` URL here to list a place — that is what `stops` is for, and a hand-written Google URL also ignores the trip's `mapProvider` (e.g. Naver for Korea).
-  - `alternatives[]` — optional pick-one backup places `{ title, localName?, mapLink?, note? }` (e.g. fallback restaurants), shown as a collapsed list at the event card's tail. `localName` is the local-language place name (enlargeable to ask directions, also the map-search query), `mapLink` a direct map URL (preferred over searching `localName`), `note` a switch-decision reminder (e.g. `排隊超過 30 分鐘就換`). **`stops` vs `links` vs `alternatives`:** `stops` = places this event actually visits, all of them; `links` = supplementary URLs of the same event; `alternatives` = candidate places to switch to, carrying local name + note for on-the-spot decisions — never stuff backup restaurants into `links`.
-  - `status` — optional check-in state, `done` (已完成) or `skipped` (略過); unset means not visited yet. Normally written by the in-app check-in buttons — leave it out when drafting a new trip, and preserve existing values when merging/updating.
-  - `confirmation` — optional reservation confirmation `{ code, name?, note? }`, typically on `booked` events (and on hotels): `code` is the booking/confirmation code (**always quote it** — an unquoted numeric code like `012345` loses its leading zero to YAML number parsing), `name` the reservation name (passport spelling), `note` a short reminder (e.g. `入住時出示護照`). Shown as a tap-to-copy chip with an enlarge-for-the-counter view.
-
-### todo[] / packing[] (each item requires text; optional checked)
-
-- `text` — the todo / packing item description. Inline Markdown is supported, so keep the application or booking page in the item itself: `辦妥簽證 / 免簽電子許可，[申請入口](https://...)`.
-- `checked` — optional boolean, default false.
-- Do not write an `id` (or `_id`) field. Items are identified by a runtime-only `_id` the app assigns in memory; checkbox state lives inline via `checked` and is persisted back to YAML.
+What each field means, its examples, the `stops` vs `links` vs `alternatives` distinction and which fields accept Markdown are all in the schema's `description` strings — that is the reference, this list is only the skeleton.
 
 ## Conventions
 
 - **Dates are plain `YYYY-MM-DD`** and are parsed in local time by the app — never add a time or `Z` to any date field, and quote them so YAML keeps them as text. Times of day live in `timeline[].time` as `HH:MM`.
 - **`trip.start` / `trip.end` / `trip.departure` and `day` numbers are derived — never write them.** The app sorts `days` by `date`, numbers them, fills any skipped date in as a free day, takes the first and last dates as the trip range, and uses day 1's first event time as the home-screen countdown target. They are stripped on every save, so a hand-written value silently disappears. Entries in `days` may be listed in any order.
-- **Never emit `_id`** on timeline events — it is a runtime-only field stripped on export. `trip.id` is the opposite case: also app-generated, but persisted — never invent one, and never drop one that is already there.
+- **Never emit `_id`, and never write `id` on a todo/packing item** — both are runtime-only and stripped on save. `trip.id` is the opposite case: also app-generated, but persisted — never invent one, and never drop one that is already there.
+- **`time` is `HH:MM` or a range `14:00 - 15:30`.** An unquoted `800` is a number and is rejected.
+- **`title` idiom:** short, emoji prefix welcome (✈️ 🏨 🍜 🛍️ ☕ 🎁). The schema's `maxLength` on `days[].title` / `pace` is a layout hint for a 390px phone, not a hard limit.
+- **`status` and `expenses` are the app's to write.** Leave `status` out when drafting a new trip; preserve existing `status`, `expenses`, `city`, `wallets` and `trip.id` when merging into an existing file.
+- **`stops` need a `localName` or `mapLink` each** or the stop has no map button; when an event has `stops`, do not repeat one of them in the event-level `localName`. Never hand-write a `google.com/maps/search/...` URL in `links[]` to list a place — that is what `stops` is for, and a hand-written Google URL ignores the trip's `mapProvider` (Naver for Korea).
+- **`links[].url` accepts `http(s)`, `mailto:`, `tel:`, `sms:`, `geo:` or a bare domain — anything else renders no chip**, so a restaurant's phone goes in as `tel:+81312345678`, never a `line://` deep link.
 - **Language:** keep all user-facing copy (titles, desc, pace) in Traditional Chinese to match the app.
 - **Event type defaults:** flights/tickets/reservations → `booked`; the day's headline attraction → `must-go`; routine moves/meals → `standard`; tentative or backup ideas → `option`.
 - **Be honest about gaps.** If the notes don't give a time or address, leave a clearly-marked placeholder (e.g. `desc: '（待確認地址）'`) rather than inventing specifics like exact addresses or flight numbers.
@@ -94,7 +71,7 @@ Rules that matter when authoring:
 
 - Write to the chosen target file path.
 - **Line 1 must be the schema modeline**, preserving whatever the file already uses. The repo default is:
-  `# yaml-language-server: $schema=https://hsin19.github.io/show-me-way/showmeway-schema.json`
+  `# yaml-language-server: $schema=https://raw.githubusercontent.com/hsin19/show-me-way/main/schema/showmeway-schema.json`
 - YAML style follows 2-space indentation and single quotes for strings. If the output path is inside the repository, format it using `pnpm exec dprint fmt <path>` after writing (or `pnpm run format`).
 
 ## Verification

@@ -128,10 +128,10 @@ export function compareTripDates(
 }
 
 /**
- * The UTC calendar day of a `Date` as YYYY-MM-DD -- for a Date that already
- * *means* a bare date, which is how js-yaml hands back an unquoted `2026-10-01`
- * (UTC midnight). `toLocalIsoDate` is for a Date meaning a local instant; west of
- * UTC the two disagree by a day, so the wrong one silently shifts every date.
+ * The UTC calendar day of a `Date` as YYYY-MM-DD -- for a Date built with
+ * `Date.UTC` to *mean* a bare date, which is how the plain-date arithmetic below
+ * avoids DST. `toLocalIsoDate` is for a Date meaning a local instant; west of UTC
+ * the two disagree by a day, so the wrong one silently shifts every date.
  */
 export function toUtcIsoDate(date: Date): string {
     const yyyy = date.getUTCFullYear();
@@ -144,6 +144,23 @@ export function toUtcIsoDate(date: Date): string {
 export function addDaysIso(dateStr: string, days: number): string {
     const [y, m, d] = dateStr.split("-").map(Number);
     return toUtcIsoDate(new Date(Date.UTC(y, m - 1, d + days)));
+}
+
+/** Whole days from `fromIso` to `toIso` (negative when `toIso` is earlier); plain dates, so DST cannot make it fractional. */
+export function daysBetweenIso(fromIso: string, toIso: string): number {
+    const [y1, m1, d1] = fromIso.split("-").map(Number);
+    const [y2, m2, d2] = toIso.split("-").map(Number);
+    return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000);
+}
+
+/**
+ * Whether a string that already matches YYYY-MM-DD names a real calendar day.
+ * `Date` silently rolls `2026-02-30` over to March 2nd, so the check is a
+ * round-trip through `Date.UTC` rather than a NaN test.
+ */
+export function isCalendarDate(iso: string): boolean {
+    const [y, m, d] = iso.split("-").map(Number);
+    return toUtcIsoDate(new Date(Date.UTC(y, m - 1, d))) === iso;
 }
 
 /** ("2026-06-11", "2026-06-16") -> "2026.06.11 – 06.16" */

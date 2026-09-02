@@ -26,7 +26,7 @@ import yaml
 from jsonschema import Draft7Validator
 
 SCHEMA_NAME = "showmeway-schema.json"
-DEFAULT_SCHEMA_URL = "https://hsin19.github.io/show-me-way/showmeway-schema.json"
+DEFAULT_SCHEMA_URL = "https://raw.githubusercontent.com/hsin19/show-me-way/main/schema/showmeway-schema.json"
 
 
 def find_upwards(start: Path, name: str) -> Path | None:
@@ -40,8 +40,9 @@ def find_upwards(start: Path, name: str) -> Path | None:
 
 def load_schema_for(target: Path) -> dict | None:
     """Load schema either from local parent directory or from web fallback."""
-    # 1. Try to find local schema file upward
-    schema_path = find_upwards(target.resolve().parent, SCHEMA_NAME)
+    # 1. Try the repo checkout first: the generated file next to this skill, then any copy upward of the target
+    repo_copy = Path(__file__).resolve().parents[4] / "schema" / SCHEMA_NAME
+    schema_path = repo_copy if repo_copy.is_file() else find_upwards(target.resolve().parent, SCHEMA_NAME)
     if schema_path is not None:
         try:
             return yaml.safe_load(schema_path.read_text(encoding="utf-8"))
