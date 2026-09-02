@@ -116,7 +116,11 @@ let staleWeatherHours = $derived.by(() => {
         {#if tripStore.isLoading}
             <div class="h-full flex flex-col items-center justify-center gap-3 pt-[var(--safe-top)]">
                 <Loader2 class="animate-spin text-accent" size={36} />
-                <p class="text-text-secondary text-sm">正在載入行程資料…</p>
+                <!-- A scanned QR spends its whole network wait on this line, so it
+                     names what is actually happening rather than the generic load. -->
+                <p class="text-text-secondary text-sm">
+                    {tripStore.sharedLinkLoading ? "正在取得分享的行程…" : "正在載入行程資料…"}
+                </p>
             </div>
         {:else if activeTab === "tools"}
             <!-- 工具 tab renders even on a YAML load error so 行程管理 stays
@@ -189,6 +193,7 @@ let staleWeatherHours = $derived.by(() => {
                         onBranchLocalCopy={localYaml => tripStore.branchLocalCopy(localYaml)}
                         onExportYaml={() => tripStore.exportTripYaml()}
                         onExportUrl={() => tripStore.exportTripUrl()}
+                        sharing={tripStore.isSharing}
                     />
                 {/snippet}
                 {#snippet prefs()}
@@ -236,6 +241,7 @@ let staleWeatherHours = $derived.by(() => {
                         onOpenPrepare={() => openTools("prep")}
                         onOpenLedger={() => openTools("ledger")}
                         onShare={() => tripStore.shareCurrentTrip()}
+                        sharing={tripStore.isSharing}
                     />
                 {/if}
             {:else if activeTab === "ai"}

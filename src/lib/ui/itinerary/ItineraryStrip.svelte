@@ -40,6 +40,7 @@ interface Props {
     onOpenPrepare: () => void;
     onOpenLedger: () => void;
     onShare: () => void;
+    sharing?: boolean;
     onSwitchProfile?: (id: string) => void;
     onCreateProfile?: () => void;
     onDeleteProfile?: (id: string) => void;
@@ -65,6 +66,7 @@ let {
     onOpenPrepare,
     onOpenLedger,
     onShare,
+    sharing = false,
     onSwitchProfile,
     onCreateProfile,
     onDeleteProfile,
@@ -128,6 +130,7 @@ function positionPanel(day: number, panel: HTMLElement) {
                 {onOpenPrepare}
                 {onOpenLedger}
                 {onShare}
+                {sharing}
                 {onSwitchProfile}
                 {onCreateProfile}
                 {onDeleteProfile}

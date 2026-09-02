@@ -1,8 +1,5 @@
 <script lang="ts">
-import {
-    decodeShareToken,
-    parseShareToken,
-} from "$lib/domain/share";
+import { parseShareLink } from "$lib/domain/share";
 import {
     serializeToYaml,
     type TripData,
@@ -10,6 +7,7 @@ import {
 } from "$lib/domain/trip";
 import { formatBackupTime } from "$lib/domain/utils";
 import { fetchDefaultYamlText } from "$lib/infra/http/itinerary-loader";
+import { resolveShareLink } from "$lib/infra/http/share-link";
 import {
     ensureActiveProfileId,
     isActiveProfile,
@@ -62,6 +60,8 @@ interface Props {
     onBranchLocalCopy: (yaml: string) => Promise<void>;
     onExportYaml: () => void;
     onExportUrl: () => void;
+    /** True while `onExportUrl` is mid-flight — a hop round trip — so its button disables. */
+    sharing?: boolean;
 }
 
 let {
@@ -75,10 +75,14 @@ let {
     onBranchLocalCopy,
     onExportYaml,
     onExportUrl,
+    sharing = false,
 }: Props = $props();
 
 let yamlInput = $state("");
 let validationError = $state<string | null>(null);
+// A pasted short link makes save() a network round trip; this keeps a second tap
+// from running importSharedTrip twice and stacking two confirm dialogs.
+let saving = $state(false);
 let yamlBackups = $state<YamlBackup[]>([]);
 // What the editor is compared against to spot unsaved edits.
 let yamlSnapshot = $state("");
@@ -108,11 +112,17 @@ function markDraft() {
 
 /** 儲存並解析 — also the import path for a pasted share link. */
 async function save() {
+    if (saving) return;
+    saving = true;
     try {
-        const token = parseShareToken(yamlInput);
-        const parsed = validateYaml(token ? await decodeShareToken(token) : yamlInput);
+        const link = parseShareLink(yamlInput);
+        // A short link needs a network round trip, so stillActive() below now guards
+        // a much longer await than it used to — leave it where it is. resolveShareLink
+        // rejects with finished zh-TW copy, so the catch below can show it verbatim.
+        const yaml = link === null ? yamlInput : await resolveShareLink(link);
+        const parsed = validateYaml(yaml);
         if (!stillActive()) return;
-        if (token) {
+        if (link) {
             await landSharedLink(parsed);
             return;
         }
@@ -133,6 +143,8 @@ async function save() {
     } catch (err) {
         console.error("YAML Validation failed:", err);
         validationError = err instanceof Error ? err.message : "YAML 格式錯誤，請檢查縮排！";
+    } finally {
+        saving = false;
     }
 }
 
@@ -631,9 +643,11 @@ function discardDraft() {
         <div class="flex items-center gap-2 mt-1">
             <button
                 onclick={() => void save()}
-                class="flex-1 min-h-[44px] bg-accent text-accent-contrast font-bold py-2.5 px-4 rounded-xl hover:opacity-90 transition active:scale-[0.98] cursor-pointer shadow-sm text-center"
+                disabled={saving}
+                aria-busy={saving}
+                class="flex-1 min-h-[44px] bg-accent text-accent-contrast font-bold py-2.5 px-4 rounded-xl hover:opacity-90 transition active:scale-[0.98] cursor-pointer shadow-sm text-center disabled:opacity-40 disabled:cursor-wait"
             >
-                儲存並解析
+                {saving ? "解析中…" : "儲存並解析"}
             </button>
             {#if yamlInput !== yamlSnapshot}
                 <button
@@ -647,8 +661,9 @@ function discardDraft() {
     </div>
 
     <!-- The editor's share-link sniffing, the clear-to-default behaviour, and where the
-         data goes. That last line is the only place in the app that says the itinerary
-         leaves the device, so it has to stay true to what sync actually uploads. -->
+         data goes. That last line, the share toasts and public/privacy.html are the
+         places that say the itinerary leaves the device — keep them agreeing with what
+         sync and the short link actually upload. -->
     <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint">
         <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
             <Lightbulb size={12} class="shrink-0 text-accent" aria-hidden="true" />編輯器與匯入說明
@@ -656,7 +671,7 @@ function discardDraft() {
         <ul class="list-disc pl-4 mt-1.5 space-y-1.5">
             <li>貼上 YAML 行程內容，或他人的分享連結，按「儲存並解析」即可匯入；原本的行程會留在下方的備份紀錄。</li>
             <li>清空並儲存會還原為預設的 <a href="./itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-accent underline hover:text-text-primary transition">itinerary.yaml</a>。</li>
-            <li>行程存在這台裝置上。連線 Google 雲端硬碟後，同步會把整份行程（含記帳明細）複製到你自己的 Drive。</li>
+            <li>行程存在這台裝置上。產生分享連結時，行程會先在瀏覽器加密，只有密文上傳到短連結服務；連線 Google 雲端硬碟後，同步會把整份行程（含記帳明細）複製到你自己的 Drive。</li>
             <li>
                 可用此指令安裝行程小幫手 Skill：
                 <div class="bg-well-deep border border-line rounded px-2 py-1 mt-1 font-mono text-[10px] select-all break-all text-text-primary">
@@ -715,7 +730,9 @@ function discardDraft() {
         <div class="grid grid-cols-2 gap-2 mt-2">
             <button
                 onclick={onExportUrl}
-                class="w-full min-h-[44px] flex items-center justify-center gap-1 px-1.5 rounded-lg bg-accent/10 text-[11px] font-bold text-accent hover:bg-accent/15 transition cursor-pointer text-center"
+                disabled={sharing}
+                aria-busy={sharing}
+                class="w-full min-h-[44px] flex items-center justify-center gap-1 px-1.5 rounded-lg bg-accent/10 text-[11px] font-bold text-accent hover:bg-accent/15 transition cursor-pointer text-center disabled:opacity-40 disabled:cursor-wait"
             >
                 <Link2 size={12} class="shrink-0" aria-hidden="true" /> 複製跨裝置連結
             </button>

@@ -25,6 +25,7 @@ import ChevronDown from "@lucide/svelte/icons/chevron-down";
 import ChevronRight from "@lucide/svelte/icons/chevron-right";
 import FolderKanban from "@lucide/svelte/icons/folder-kanban";
 import ListChecks from "@lucide/svelte/icons/list-checks";
+import Loader2 from "@lucide/svelte/icons/loader-2";
 import Maximize2 from "@lucide/svelte/icons/maximize-2";
 import Share2 from "@lucide/svelte/icons/share-2";
 import Wallet from "@lucide/svelte/icons/wallet";
@@ -51,6 +52,8 @@ interface Props {
     onOpenPrepare: () => void;
     onOpenLedger: () => void;
     onShare: () => void;
+    /** Building a share link is a hop round trip now, so the button disables while it runs. */
+    sharing?: boolean;
     onSwitchProfile?: (id: string) => void;
     onCreateProfile?: () => void;
     onDeleteProfile?: (id: string) => void;
@@ -73,6 +76,7 @@ let {
     onOpenPrepare,
     onOpenLedger,
     onShare,
+    sharing = false,
     onSwitchProfile,
     onCreateProfile,
     onDeleteProfile,
@@ -106,11 +110,17 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
         <button
             type="button"
             onclick={onShare}
-            class="min-w-[44px] min-h-[44px] -mr-2 -mt-1 flex items-center justify-center rounded-xl text-accent hover:bg-accent/10 active:scale-95 transition cursor-pointer shrink-0"
+            disabled={sharing}
+            aria-busy={sharing}
+            class="min-w-[44px] min-h-[44px] -mr-2 -mt-1 flex items-center justify-center rounded-xl text-accent hover:bg-accent/10 active:scale-95 transition cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-wait"
             aria-label="分享行程"
             title="分享行程"
         >
-            <Share2 size={18} aria-hidden="true" />
+            {#if sharing}
+                <Loader2 size={18} class="animate-spin" aria-hidden="true" />
+            {:else}
+                <Share2 size={18} aria-hidden="true" />
+            {/if}
         </button>
     </div>
     <p class="text-xs text-text-secondary font-medium tracking-wide mt-1.5 flex items-center gap-1.5">

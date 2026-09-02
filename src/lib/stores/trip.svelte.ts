@@ -5,11 +5,16 @@ import {
 import { getLanguageConfig } from "$lib/domain/phrases";
 import {
     buildShareUrl,
+    buildShortShareUrl,
     clearShareHash,
-    decodeShareToken,
     isShareSupported,
-    readShareTokenFromHash,
+    readShareLinkFromHash,
+    ShareLinkError,
 } from "$lib/domain/share";
+import {
+    isEncryptedShareSupported,
+    sealShareToken,
+} from "$lib/domain/share-crypto";
 import { buildDayReport } from "$lib/domain/timeline";
 import {
     createChecklistItemId,
@@ -25,10 +30,12 @@ import {
     toLocalIsoDate,
 } from "$lib/domain/utils";
 import { migrateGdriveSyncState } from "$lib/infra/http/gdrive";
+import { createHopBlob } from "$lib/infra/http/hop";
 import {
     fetchDefaultYamlText,
     fetchItinerary,
 } from "$lib/infra/http/itinerary-loader";
+import { resolveShareLink } from "$lib/infra/http/share-link";
 import { downloadTextFile } from "$lib/infra/pwa/file-download";
 import {
     createProfile,
@@ -103,11 +110,35 @@ function migrateLegacyLedger(data: TripData): boolean {
     return true;
 }
 
+/**
+ * Prefer the short link, fall back to the inline one. Sharing must never fail
+ * outright just because hop is unreachable: a several-thousand-character link still
+ * works everywhere, it just cannot become a QR code.
+ */
+async function buildBestShareUrl(yaml: string): Promise<{ url: string; short: boolean; }> {
+    if (isEncryptedShareSupported()) {
+        const sealed = await sealShareToken(yaml);
+        const created = await createHopBlob(sealed.payload);
+        // The key is joined to the id here and nowhere else — it was never sent to hop.
+        // Null means hop handed back an id no receiver would parse; the blob is
+        // orphaned, but the inline link below still gets the trip across.
+        const url = created.ok ? buildShortShareUrl(created.id, sealed.key) : null;
+        if (url) return { url, short: true };
+    }
+    return { url: await buildShareUrl(yaml), short: false };
+}
+
+const UPLOADED_NOTE = "行程已加密上傳，分享連結 90 天內有效";
+
 export class TripStore {
     data = $state<TripData | null>(null);
     isLoading = $state(true);
     loadError = $state<string | null>(null);
     profiles = $state<ProfileInfo[]>([]);
+    /** Drives the loading copy: a scanned QR spends this time on the app's first screen. */
+    sharedLinkLoading = $state(false);
+    /** True while a share link is being built — a hop round trip, so the buttons disable on it. */
+    isSharing = $state(false);
 
     prepDone = $derived(this.data ? [...this.data.todo, ...this.data.packing].filter(i => i.checked).length : 0);
     prepTotal = $derived(this.data ? this.data.todo.length + this.data.packing.length : 0);
@@ -188,10 +219,31 @@ export class TripStore {
     }
 
     async maybeImportSharedItinerary(): Promise<void> {
-        const token = readShareTokenFromHash();
-        if (!token) return;
+        const link = readShareLinkFromHash();
+        if (!link) return;
+
+        let yaml: string;
         try {
-            const outcome = importSharedTrip(validateYaml(await decodeShareToken(token)));
+            this.sharedLinkLoading = link.kind === "short";
+            yaml = await resolveShareLink(link);
+        } catch (err) {
+            if (err instanceof ShareLinkError && err.retryable) {
+                // The address bar holds the only copy of the decryption key on this
+                // device, so a retryable failure must leave the hash alone. Clearing
+                // it here would destroy the link the user just scanned.
+                showToast(err.message);
+                return;
+            }
+            console.error("Failed to read shared itinerary:", err);
+            showToast(err instanceof ShareLinkError ? err.message : "分享連結內容無效，已略過");
+            clearShareHash();
+            return;
+        } finally {
+            this.sharedLinkLoading = false;
+        }
+
+        try {
+            const outcome = importSharedTrip(validateYaml(yaml));
             if (outcome.kind === "overwritten") showToast("已用分享連結更新行程，可在行程管理還原前一版");
             else if (outcome.kind === "imported") showToast("已匯入分享的行程");
         } catch (err) {
@@ -334,17 +386,29 @@ export class TripStore {
     }
 
     async shareCurrentTrip() {
-        if (!this.data) return;
+        if (!this.data || this.isSharing) return;
         if (!isShareSupported()) {
             showToast("此瀏覽器不支援連結壓縮，無法產生分享連結");
             return;
         }
+        this.isSharing = true;
         try {
-            const url = await buildShareUrl(serializeToYaml({ ...this.data, expenses: [] }));
-            await shareOrCopyToClipboard({ url }, url, "分享連結已複製！網址較長，可用短網址服務縮短");
+            // expenses stripped: this link is for whoever it reaches. exportTripUrl
+            // makes the opposite choice for a link the user sends to themselves, and
+            // the two are deliberately not deduped.
+            const { url, short } = await buildBestShareUrl(serializeToYaml({ ...this.data, expenses: [] }));
+            // Say the upload happened, on both the clipboard and the share-sheet path.
+            // This button reached no server before, and the privacy policy promises
+            // the user is told when data leaves the device.
+            const copyMsg = short
+                ? `分享連結已複製！${UPLOADED_NOTE}，可直接做成 QR code`
+                : "分享連結已複製！網址較長，可用短網址服務縮短";
+            await shareOrCopyToClipboard({ url }, url, copyMsg, short ? UPLOADED_NOTE : undefined);
         } catch (err) {
             console.error("Failed to build share link:", err);
             showToast("無法產生分享連結，請稍後再試");
+        } finally {
+            this.isSharing = false;
         }
     }
 
@@ -373,16 +437,25 @@ export class TripStore {
             showToast("目前沒有可匯出的行程");
             return;
         }
+        if (this.isSharing) return;
         if (!isShareSupported()) {
             showToast("此瀏覽器不支援連結壓縮，無法產生連結");
             return;
         }
+        this.isSharing = true;
         try {
-            const url = await buildShareUrl(serializeToYaml(this.data));
-            await shareOrCopyToClipboard({ url }, url, "已複製跨裝置連結（含記帳），在另一台裝置貼上即可");
+            // The whole trip, ledger included — this one is the user moving their own
+            // data between their own devices. Not deduped with shareCurrentTrip.
+            const { url, short } = await buildBestShareUrl(serializeToYaml(this.data));
+            const copyMsg = short
+                ? `已複製跨裝置連結（含記帳），${UPLOADED_NOTE}，在另一台裝置貼上即可`
+                : "已複製跨裝置連結（含記帳），在另一台裝置貼上即可";
+            await shareOrCopyToClipboard({ url }, url, copyMsg, short ? UPLOADED_NOTE : undefined);
         } catch (err) {
             console.error("Failed to build transfer link:", err);
             showToast("無法產生連結，請稍後再試");
+        } finally {
+            this.isSharing = false;
         }
     }
 

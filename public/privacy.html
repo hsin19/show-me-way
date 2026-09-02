@@ -121,21 +121,21 @@
             <section>
                 <h2>1. 簡介 (Introduction)</h2>
                 <p>
-                    歡迎使用 <strong>ShowMeWay</strong>（以下簡稱「本應用程式」，網址：<a href="https://trip.hsin19.com">https://trip.hsin19.com</a>）。 本應用程式是一款純前端運行的旅行行程輔助漸進式網頁應用（PWA）。我們非常重視您的個人隱私，並致力於保護您的個人資料安全。
+                    歡迎使用 <strong>ShowMeWay</strong>（以下簡稱「本應用程式」，網址：<a href="https://trip.hsin19.com">https://trip.hsin19.com</a>）。 本應用程式是一款以純前端運行為主的旅行行程輔助漸進式網頁應用（PWA）；唯一的第一方後端是產生分享連結時使用的加密短連結服務，詳見第 4 節。我們非常重視您的個人隱私，並致力於保護您的個人資料安全。
                 </p>
             </section>
 
             <section>
                 <h2>2. 資料收集與儲存方式 (Data Collection & Storage)</h2>
                 <div class="highlight-box">
-                    <strong>重點承諾：</strong>ShowMeWay 是純前端應用程式，我們<strong>沒有運作任何後端伺服器</strong>來收集、記錄、追蹤或轉移您的個人資料與行程內容。
+                    <strong>重點承諾：</strong>您的行程資料預設完整儲存在您自己的裝置上。我們<strong>不會自動收集、記錄或追蹤</strong>您的個人資料與行程內容；資料只有在您<strong>主動</strong>使用分享連結、Google 雲端硬碟同步或 AI 功能時才會離開您的裝置，其中分享連結的內容<strong>在離開裝置前已於您的瀏覽器完成加密</strong>。
                 </div>
                 <ul>
                     <li>
                         <strong>本機儲存 (Local Storage)：</strong>您的所有行程資料（YAML）、待辦與行李清單、記帳紀錄及個人偏好設定，均僅儲存在您裝置的瀏覽器本機儲存空間（<code>localStorage</code>）中。
                     </li>
                     <li>
-                        <strong>不進行第三方資料轉移：</strong>除了您主動啟用的 Google 雲端硬碟同步或 AI 功能外，本應用程式不會將任何資料傳送至外部伺服器。
+                        <strong>不進行非必要的資料轉移：</strong>除了您主動啟用的 Google 雲端硬碟同步、AI 功能，以及您主動產生的加密分享連結外，本應用程式不會將任何資料傳送至外部伺服器。
                     </li>
                 </ul>
             </section>
@@ -168,6 +168,20 @@
                     <li>
                         <strong>天氣資訊 (Open-Meteo)：</strong>本應用程式僅根據您在行程中填寫的城市名稱，向公開的 Open-Meteo API 查詢天氣預報。本應用程式<strong>不會</strong>要求或存取您的裝置 GPS 定位權限，查詢過程亦不包含任何使用者個人資訊。
                     </li>
+                </ul>
+
+                <h2 id="short-link">加密分享連結 (Encrypted Share Links)</h2>
+                <p>
+                    當您主動點選「分享行程」或「含記帳的跨裝置連結」時，行程內容會先在您的瀏覽器中以 <code>AES-GCM</code> 128 位元金鑰加密，<strong>僅有加密後的密文</strong>會上傳至我們自行運作的短連結服務（<code>hop.hsin19.com</code>）以換取一組短代碼。
+                </p>
+                <div class="highlight-box">
+                    <strong>解密金鑰只存在於連結網址的片段</strong>（<code>#</code> 之後的部分）。依照瀏覽器規範，網址片段不會隨任何網路請求送出，因此該短連結服務及其 CDN 只會看到<strong>無法解讀的密文</strong>。<br><br>
+                    相對地，這也代表<strong>任何取得完整連結的人都能解密並讀取該行程</strong>，請只分享給您信任的對象。
+                </div>
+                <ul>
+                    <li>密文會在 <strong>90 天</strong>後自動刪除，屆時該連結將失效。</li>
+                    <li>當您<strong>開啟</strong>一條分享連結時，瀏覽器會向該服務請求對應的密文，其伺服器紀錄可能包含您的 IP 位址與存取時間。</li>
+                    <li>若該服務暫時無法連線，本應用程式會自動改用不經過任何伺服器的完整連結（網址較長）。</li>
                 </ul>
             </section>
 

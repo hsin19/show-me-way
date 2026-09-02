@@ -160,18 +160,29 @@ export function copyToClipboard(text: string, successMsg = "已複製"): void {
  * the native share sheet if there is one, else the clipboard fallback.
  * Declining the share sheet (AbortError) is a decision, not a failure — stay
  * silent rather than falling through to the copy.
+ *
+ * `sharedMsg` is for something that already happened before the sheet opened (an
+ * upload, say) and so must be said whether the user shares or cancels. It is shown
+ * once the sheet closes, because a toast raised while the sheet is up sits behind
+ * it and expires unseen. The clipboard path never shows it: `copyMsg` is the whole
+ * message there, so fold the same note into that string.
  */
 export async function shareOrCopyToClipboard(
     data: { url?: string; text?: string; title?: string; },
     copyText: string,
     copyMsg: string,
+    sharedMsg?: string,
 ): Promise<void> {
     if (typeof navigator.share === "function") {
         try {
             await navigator.share(data);
+            if (sharedMsg) showToast(sharedMsg);
             return;
         } catch (err) {
-            if ((err as DOMException)?.name === "AbortError") return;
+            if ((err as DOMException)?.name === "AbortError") {
+                if (sharedMsg) showToast(sharedMsg);
+                return;
+            }
         }
     }
     copyToClipboard(copyText, copyMsg);

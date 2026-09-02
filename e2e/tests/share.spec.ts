@@ -92,7 +92,7 @@ test("分享連結匯入：取消後維持原行程，網址 token 仍被清除"
 test("無效的分享 token：提示內容無效並照常載入原行程", async ({ page }) => {
     await seedItinerary(page);
 
-    // token 須通過 parseShareToken 的 base64url 字元檢查（否則被靜默忽略、
+    // token 須通過 parseShareLink 的 base64url 字元檢查（否則被靜默忽略、
     // 不會有 toast），但解壓失敗 → 走「內容無效」錯誤路徑。
     await page.goto("/#s=not-a-valid-token");
 
@@ -188,4 +188,105 @@ test("分享行程按鈕：兩問都拒絕時什麼都不動，網址 token 仍�
     expect(dialogs.asked()).toBe(2);
     expect(await localTripIds(receiver)).toEqual(before);
     expect(receiver.url()).not.toContain("#s=");
+});
+
+// 上面每一個測試走的都是 inline fallback：fixtures.ts 擋掉所有非 localhost 請求，
+// 所以 hop 連不上、buildBestShareUrl 退回 #s=。以下的短連結（#h=<id>.<key>）測試
+// 改成在 test 內用 page.route 掛上 hop 的假伺服器（page 層級優先於 context 層級的 abort）。
+
+type HopStore = { uploaded: string; };
+
+/**
+ * POST 把 body 存起來、GET 再吐回去 —— 這樣就得到一次真的往返，跑的是 app 自己那份
+ * 加解密，完全不需要伺服器。
+ */
+async function mockHop(page: Page, store: HopStore, opts: { getFails?: boolean; corrupt?: boolean; } = {}) {
+    await page.route(url => url.origin === "https://hop.hsin19.com", route => {
+        const json = (body: unknown) =>
+            route.fulfill({
+                status: 200,
+                contentType: "application/json",
+                // fulfill 不會自己補 CORS，而這是跨來源請求。
+                headers: { "access-control-allow-origin": "*" },
+                body: JSON.stringify(body),
+            });
+
+        if (route.request().method() === "POST") {
+            store.uploaded = route.request().postData() ?? "";
+            return json({ id: "abcd1234", editToken: "edit-token" });
+        }
+        if (opts.getFails) return route.abort();
+        if (opts.corrupt) return json({ payload: "AAAAAAAAAAAAAAAAAAAA" });
+        return json({ id: "abcd1234", kind: "blob", payload: store.uploaded });
+    });
+}
+
+async function shareOwnTripShort(page: Page, context: BrowserContext, store: HopStore): Promise<string> {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await mockHop(page, store);
+    await seedItinerary(page);
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
+
+    await page.getByRole("button", { name: "分享行程", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("已加密上傳");
+
+    const sharedUrl = await page.evaluate(() => navigator.clipboard.readText());
+    expect(sharedUrl).toContain("#h=");
+    return sharedUrl;
+}
+
+test("短連結分享：上傳的是密文，連結短到可以做成 QR code", async ({ page, context }) => {
+    const hop: HopStore = { uploaded: "" };
+    const sharedUrl = await shareOwnTripShort(page, context, hop);
+
+    // 這一行就是整個功能的核心不變條件：離開裝置的是密文，不是行程內容。
+    expect(hop.uploaded.length).toBeGreaterThan(0);
+    expect(hop.uploaded).not.toContain("測試行程");
+    expect(hop.uploaded).not.toContain("測試事件一");
+
+    // 原本的 inline 連結是好幾千字元，做不成 QR code。正式站是
+    // https://trip.hsin19.com/#h=<8 碼>.<22 碼> ≈ 58 字元。
+    expect(sharedUrl.length).toBeLessThan(100);
+});
+
+test("短連結匯入：收件端解密後正常匯入，網址片段被清除", async ({ page, context }) => {
+    const hop: HopStore = { uploaded: "" };
+    const sharedUrl = await shareOwnTripShort(page, context, hop);
+
+    const receiver = await context.newPage();
+    await mockHop(receiver, hop);
+    answerDialogs(receiver, [true]);
+    await receiver.goto(sharedUrl);
+
+    await expect(receiver.getByRole("status")).toContainText("已用分享連結更新行程");
+    await expect(receiver.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
+    expect(receiver.url()).not.toContain("#h=");
+});
+
+test("短連結匯入：取不到密文時保留網址片段 —— 金鑰只存在於那裡", async ({ page, context }) => {
+    const hop: HopStore = { uploaded: "" };
+    const sharedUrl = await shareOwnTripShort(page, context, hop);
+
+    const receiver = await context.newPage();
+    await mockHop(receiver, hop, { getFails: true });
+    await receiver.goto(sharedUrl);
+
+    await expect(receiver.getByRole("status")).toContainText("請檢查網路");
+    // 清掉就等於銷毀使用者剛掃進來的那把金鑰，重新整理也救不回來。
+    expect(receiver.url()).toContain("#h=");
+    await expect(receiver.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
+});
+
+test("短連結匯入：密文無法解密時提示內容無效並清除網址片段", async ({ page, context }) => {
+    const hop: HopStore = { uploaded: "" };
+    const sharedUrl = await shareOwnTripShort(page, context, hop);
+
+    const receiver = await context.newPage();
+    await mockHop(receiver, hop, { corrupt: true });
+    await receiver.goto(sharedUrl);
+
+    await expect(receiver.getByRole("status")).toContainText("分享連結內容無效");
+    // 重新整理不會讓它變得可解密，所以這條連結留著沒有意義。
+    expect(receiver.url()).not.toContain("#h=");
 });
