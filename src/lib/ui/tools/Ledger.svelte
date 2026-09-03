@@ -81,12 +81,11 @@ function formatQuickAmount(amount: number): string {
 // A wallet that no longer exists must not stay selected — switching currency
 // replaces the whole set.
 $effect(() => {
-    if (activeWallets.length > 0) {
-        if (!activeWallets.includes(expenseType) && !isDeposit(expenseType) && expenseType !== "Cash") {
-            expenseType = activeWallets[0];
-        }
-    } else {
+    const firstWallet = activeWallets[0];
+    if (firstWallet === undefined) {
         expenseType = "Cash";
+    } else if (!activeWallets.includes(expenseType) && !isDeposit(expenseType) && expenseType !== "Cash") {
+        expenseType = firstWallet;
     }
 });
 

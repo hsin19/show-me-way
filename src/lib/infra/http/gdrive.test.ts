@@ -37,7 +37,7 @@ import {
 /** One recorded fetch, typed, so the request-shape assertions below stay type-checked. */
 function fetchCall(index: number): { url: string; method: string; headers: Record<string, string>; body: string; } {
     const mock = globalThis.fetch as unknown as { mock: { calls: [string, RequestInit][]; }; };
-    const [url, init] = mock.mock.calls[index];
+    const [url, init] = mock.mock.calls[index]!;
     return {
         url,
         method: init.method ?? "GET",
@@ -423,7 +423,7 @@ describe("gdrive module", () => {
             expect(req.url).toContain("md5Checksum");
             expect(req.headers["Content-Type"]).toMatch(/^multipart\/related; boundary=/);
             // Both parts, in order, with the trip id that binds the file back to a profile.
-            const boundary = req.headers["Content-Type"].split("boundary=")[1];
+            const boundary = req.headers["Content-Type"]!.split("boundary=")[1];
             const parts = req.body.split(`--${boundary}`);
             expect(parts[1]).toContain('"parents":["folder-123"]');
             expect(parts[1]).toContain('"showmewayTripId":"p-fukuoka"');

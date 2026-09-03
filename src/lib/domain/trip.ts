@@ -182,8 +182,8 @@ function sortAuthoredDays(days: readonly AuthoredDay[]): AuthoredDay[] {
     }
     ordered.sort((a, b) => a.day.date.localeCompare(b.day.date));
     for (let i = 1; i < ordered.length; i++) {
-        const prev = ordered[i - 1];
-        const cur = ordered[i];
+        const prev = ordered[i - 1]!;
+        const cur = ordered[i]!;
         if (prev.day.date === cur.day.date) {
             throw new Error(`days 第 ${prev.index + 1} 項與第 ${cur.index + 1} 項的 date 重複 (${cur.day.date})`);
         }
@@ -236,13 +236,15 @@ function normalizeTripData(raw: unknown): TripData {
     if (doc.trip.wallets) doc.trip.wallets = [...new Set(doc.trip.wallets)];
     // `id` sits right after `name` whether authored or minted, for the same round-trip stability as `pace`.
     const { name, id, ...rest } = doc.trip;
+    const firstDay = filledDays[0]!;
+    const lastDay = filledDays[filledDays.length - 1]!;
     const trip: TripInfo = {
         name,
         id: id?.trim() || genTripId(),
         ...rest,
-        start: filledDays[0].date,
-        end: filledDays[filledDays.length - 1].date,
-        departure: deriveDeparture(filledDays[0]),
+        start: firstDay.date,
+        end: lastDay.date,
+        departure: deriveDeparture(firstDay),
     };
 
     const normalized: TripData = {

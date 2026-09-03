@@ -39,7 +39,7 @@ describe("toast stack", () => {
     it("shows a plain message and auto-dismisses after 2500ms", () => {
         showToast("已複製");
         expect(messages()).toEqual(["已複製"]);
-        expect(toast.items[0].action).toBeNull();
+        expect(toast.items[0]?.action).toBeNull();
 
         vi.advanceTimersByTime(2499);
         expect(messages()).toEqual(["已複製"]);
@@ -49,7 +49,7 @@ describe("toast stack", () => {
 
     it("keeps an undo toast up for the longer 4500ms window", () => {
         showToast({ message: "已刪除", actionLabel: "復原", onAction: () => {} });
-        expect(toast.items[0].action?.label).toBe("復原");
+        expect(toast.items[0]?.action?.label).toBe("復原");
 
         vi.advanceTimersByTime(4499);
         expect(messages()).toEqual(["已刪除"]);
@@ -59,7 +59,7 @@ describe("toast stack", () => {
 
     it("ignores an actionLabel without an onAction and uses the plain window", () => {
         showToast({ message: "已複製", actionLabel: "復原" });
-        expect(toast.items[0].action).toBeNull();
+        expect(toast.items[0]?.action).toBeNull();
 
         vi.advanceTimersByTime(2500);
         expect(messages()).toEqual([]);
@@ -102,7 +102,7 @@ describe("toast stack", () => {
         showToast({ message: "A", actionLabel: "復原", onAction: undoA });
         showToast({ message: "B", actionLabel: "復原", onAction: undoB });
 
-        runToastAction(toast.items[1].id);
+        runToastAction(toast.items[1]!.id);
         expect(undoB).toHaveBeenCalledOnce();
         expect(undoA).not.toHaveBeenCalled();
         expect(messages()).toEqual(["A"]);
@@ -112,7 +112,7 @@ describe("toast stack", () => {
         const onAction = vi.fn();
         showToast({ message: "已刪除", actionLabel: "復原", onAction });
 
-        runToastAction(toast.items[0].id);
+        runToastAction(toast.items[0]!.id);
         expect(onAction).toHaveBeenCalledOnce();
         expect(messages()).toEqual([]);
 
@@ -156,14 +156,14 @@ describe("toast stack", () => {
 
         it("can be dismissed explicitly", () => {
             update();
-            dismissToast(toast.items[0].id);
+            dismissToast(toast.items[0]!.id);
             expect(messages()).toEqual([]);
         });
 
         it("carries its kind through for the icon", () => {
             update();
-            expect(toast.items[0].kind).toBe("update");
-            expect(toast.items[0].persist).toBe(true);
+            expect(toast.items[0]?.kind).toBe("update");
+            expect(toast.items[0]?.persist).toBe(true);
         });
 
         // Two deploys in one long session fire onNeedRefresh twice. Without the
@@ -171,10 +171,10 @@ describe("toast stack", () => {
         // no timer and the cap skips them.
         it("replaces itself instead of stacking when the notice fires again", () => {
             update();
-            const first = toast.items[0].id;
+            const first = toast.items[0]!.id;
             update();
             expect(messages()).toEqual(["已有新版本"]);
-            expect(toast.items[0].id).not.toBe(first);
+            expect(toast.items[0]?.id).not.toBe(first);
         });
 
         it("does not displace unrelated toasts", () => {
@@ -186,8 +186,8 @@ describe("toast stack", () => {
 
     it("defaults to the success kind and no persistence", () => {
         showToast("已複製");
-        expect(toast.items[0].kind).toBe("success");
-        expect(toast.items[0].persist).toBe(false);
+        expect(toast.items[0]?.kind).toBe("success");
+        expect(toast.items[0]?.persist).toBe(false);
     });
 
     it("supports custom durationMs, showDismiss, and onDismiss callback", () => {
@@ -200,8 +200,8 @@ describe("toast stack", () => {
             onDismiss,
         });
 
-        expect(toast.items[0].kind).toBe("download");
-        expect(toast.items[0].showDismiss).toBe(true);
+        expect(toast.items[0]?.kind).toBe("download");
+        expect(toast.items[0]?.showDismiss).toBe(true);
 
         vi.advanceTimersByTime(9999);
         expect(messages()).toEqual(["下載專用"]);
@@ -220,7 +220,7 @@ describe("toast stack", () => {
         const onDismiss = vi.fn();
         showToast({ message: "關掉我", showDismiss: true, onDismiss });
 
-        dismissToast(toast.items[0].id);
+        dismissToast(toast.items[0]!.id);
         expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 
@@ -229,7 +229,7 @@ describe("toast stack", () => {
         const onAction = vi.fn();
         showToast({ message: "接受我", actionLabel: "好", onAction, onDismiss });
 
-        runToastAction(toast.items[0].id);
+        runToastAction(toast.items[0]!.id);
         expect(onAction).toHaveBeenCalledTimes(1);
         expect(onDismiss).not.toHaveBeenCalled();
     });

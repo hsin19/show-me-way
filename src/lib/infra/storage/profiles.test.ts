@@ -175,8 +175,8 @@ describe("trip profiles", () => {
             // The previous active trip is parked under its original id.
             const parked = listProfiles();
             expect(parked).toHaveLength(1);
-            expect(parked[0].id).toBe(firstId);
-            expect(parked[0].name).toBe("行程A");
+            expect(parked[0]?.id).toBe(firstId);
+            expect(parked[0]?.name).toBe("行程A");
         });
     });
 
@@ -199,8 +199,8 @@ describe("trip profiles", () => {
             // B is now the parked one (it was pushed down on the way out).
             const parkedAfter = listProfiles();
             expect(parkedAfter).toHaveLength(1);
-            expect(parkedAfter[0].id).toBe(idB);
-            expect(parkedAfter[0].name).toBe("行程B");
+            expect(parkedAfter[0]?.id).toBe(idB);
+            expect(parkedAfter[0]?.name).toBe("行程B");
         });
 
         it("keeps the target parked when the active-slot write fails, so a quota error loses nothing", () => {

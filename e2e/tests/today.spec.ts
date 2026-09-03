@@ -25,7 +25,7 @@ function build(eventTitle = "") {
     // window is a run that crosses Taipei midnight between this `new Date()` and
     // the page load.
     const todayIso = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
-    const [year, month, day] = todayIso.split("-").map(Number);
+    const [year, month, day] = todayIso.split("-").map(Number) as [number, number, number];
     const base = Date.UTC(year, month - 1, day);
     const dayOf = (offset: number) => new Date(base + offset * 86_400_000).toISOString().slice(0, 10);
     const days = [-3, -2, -1, 0, 1, 2, 3].map((off, i) =>

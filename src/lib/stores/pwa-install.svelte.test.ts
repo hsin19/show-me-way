@@ -157,10 +157,10 @@ describe("pwa-install module", () => {
         it("shows the offer with an action and an explicit close button", () => {
             pwa.showPwaInstallToast();
             expect(toastModule.toast.items).toHaveLength(1);
-            expect(toastModule.toast.items[0].message).toBe("將 ShowMeWay 新增至主畫面？");
-            expect(toastModule.toast.items[0].action?.label).toBe("安裝");
-            expect(toastModule.toast.items[0].kind).toBe("download");
-            expect(toastModule.toast.items[0].showDismiss).toBe(true);
+            expect(toastModule.toast.items[0]?.message).toBe("將 ShowMeWay 新增至主畫面？");
+            expect(toastModule.toast.items[0]?.action?.label).toBe("安裝");
+            expect(toastModule.toast.items[0]?.kind).toBe("download");
+            expect(toastModule.toast.items[0]?.showDismiss).toBe(true);
         });
 
         it("starts the cool-off when the toast expires unanswered", () => {
@@ -174,7 +174,7 @@ describe("pwa-install module", () => {
 
         it("starts the cool-off when the user closes it with ✕", () => {
             pwa.showPwaInstallToast();
-            toastModule.dismissToast(toastModule.toast.items[0].id);
+            toastModule.dismissToast(toastModule.toast.items[0]!.id);
             expect(pwa.isInstallDismissedRecently()).toBe(true);
         });
 
@@ -183,7 +183,7 @@ describe("pwa-install module", () => {
             pwa.setNavigateToAppSettings(navigate);
 
             pwa.showPwaInstallToast();
-            toastModule.runToastAction(toastModule.toast.items[0].id);
+            toastModule.runToastAction(toastModule.toast.items[0]!.id);
 
             expect(navigate).toHaveBeenCalledTimes(1);
             expect(toastModule.toast.items).toHaveLength(0);
@@ -271,11 +271,11 @@ describe("pwa-install module", () => {
             const win = stubWindow();
             pwa.initPwaInstallPrompt();
             fireInstallPrompt(win, createInstallEvent());
-            const shownId = toastModule.toast.items[0].id;
+            const shownId = toastModule.toast.items[0]!.id;
 
             vi.advanceTimersByTime(FALLBACK_DELAY_MS);
             expect(toastModule.toast.items).toHaveLength(1);
-            expect(toastModule.toast.items[0].id).toBe(shownId);
+            expect(toastModule.toast.items[0]?.id).toBe(shownId);
             expect(pwa.isInstallDismissedRecently()).toBe(false);
 
             // ...and the original 10s window still ends on schedule, not 13.5s in.

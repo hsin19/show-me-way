@@ -95,7 +95,7 @@ describe("listGeminiModels", () => {
         vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(modelsPayload()) })));
         const models = await listGeminiModels("key");
         expect(models.map(m => m.id)).toEqual(["gemini-2.5-pro", "gemini-2.5-flash"]);
-        expect(models[0].displayName).toBe("Gemini 2.5 Pro");
+        expect(models[0]?.displayName).toBe("Gemini 2.5 Pro");
     });
 
     it("filters out dirty model names like preview, banana, tts, and version suffixes", async () => {
@@ -359,8 +359,8 @@ describe("sendChatMessage", () => {
         };
         expect(body.model).toBe("gemini-2.5-pro");
         expect(body.store).toBe(false);
-        expect(body.tools[0].name).toBe("update_itinerary");
-        expect(body.tools[0].parameters.required).toContain("yaml");
+        expect(body.tools[0]?.name).toBe("update_itinerary");
+        expect(body.tools[0]?.parameters.required).toContain("yaml");
     });
 
     it("replays prior history as input steps and appends the new user turn", async () => {

@@ -58,7 +58,7 @@ describe("backupCurrentYaml / listYamlBackups / getYamlBackup", () => {
 
         const backups = listYamlBackups();
         expect(backups.map(b => b.yaml)).toEqual(["trip: B", "trip: A"]);
-        expect(getYamlBackup(backups[0].savedAt)).toBe("trip: B");
+        expect(getYamlBackup(backups[0]!.savedAt)).toBe("trip: B");
         expect(getYamlBackup("no-such-stamp")).toBeNull();
     });
 
@@ -78,7 +78,7 @@ describe("backupCurrentYaml / listYamlBackups / getYamlBackup", () => {
         }
         const backups = listYamlBackups();
         expect(backups).toHaveLength(5);
-        expect(backups[0].yaml).toBe("trip: 6"); // newest
+        expect(backups[0]?.yaml).toBe("trip: 6"); // newest
         expect(backups.at(-1)!.yaml).toBe("trip: 2"); // oldest two evicted
     });
 

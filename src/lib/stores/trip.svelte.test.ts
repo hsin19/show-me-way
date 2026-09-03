@@ -80,7 +80,7 @@ describe("TripStore", () => {
     });
 
     it("toggles checklist items", () => {
-        const todoItem = store.data!.todo[0];
+        const todoItem = store.data!.todo[0]!;
         expect(todoItem.checked).toBe(false);
 
         store.toggleChecklistItem("todo", todoItem._id!);
@@ -93,9 +93,9 @@ describe("TripStore", () => {
     it("adds and deletes checklist items", () => {
         store.addChecklistItem("todo", "新待辦事項");
         expect(store.data!.todo.length).toBe(2);
-        expect(store.data!.todo[1].text).toBe("新待辦事項");
+        expect(store.data!.todo[1]?.text).toBe("新待辦事項");
 
-        const newId = store.data!.todo[1]._id!;
+        const newId = store.data!.todo[1]!._id!;
         store.deleteChecklistItem("todo", newId);
         expect(store.data!.todo.length).toBe(1);
     });
@@ -113,10 +113,10 @@ describe("TripStore", () => {
     it("adds, deletes, and resets expenses", () => {
         store.addExpense("拉麵", 1200, "現金", "2025-05-01");
         expect(store.data!.expenses.length).toBe(1);
-        expect(store.data!.expenses[0].name).toBe("拉麵");
-        expect(store.data!.expenses[0].amount).toBe(1200);
+        expect(store.data!.expenses[0]?.name).toBe("拉麵");
+        expect(store.data!.expenses[0]?.amount).toBe(1200);
 
-        const expId = store.data!.expenses[0]._id!;
+        const expId = store.data!.expenses[0]!._id!;
         store.deleteExpense(expId);
         expect(store.data!.expenses.length).toBe(0);
 
@@ -127,7 +127,7 @@ describe("TripStore", () => {
     });
 
     it("updates timeline event status", () => {
-        const event = store.data!.days[0].timeline[0];
+        const event = store.data!.days[0]!.timeline[0]!;
         expect(event.status).toBeUndefined();
 
         store.setEventStatus(event._id!, "done");
@@ -282,7 +282,7 @@ describe("TripStore", () => {
             stubHopCreate("abcd1234");
             await store.exportTripUrl();
             expect(writeText).toHaveBeenCalledTimes(1);
-            expect(writeText.mock.calls[0][0]).toMatch(/^https:\/\/trip\.hsin19\.com\/#h=abcd1234\.[A-Za-z0-9_-]{22}$/);
+            expect(writeText.mock.calls[0]?.[0]).toMatch(/^https:\/\/trip\.hsin19\.com\/#h=abcd1234\.[A-Za-z0-9_-]{22}$/);
         });
 
         // hop owns its id format. An id parseShareLink refuses would be a dead QR with a
@@ -291,7 +291,7 @@ describe("TripStore", () => {
             stubHopCreate("x".repeat(40));
             await store.exportTripUrl();
             expect(writeText).toHaveBeenCalledTimes(1);
-            expect(writeText.mock.calls[0][0]).toMatch(/^https:\/\/trip\.hsin19\.com\/#s=/);
+            expect(writeText.mock.calls[0]?.[0]).toMatch(/^https:\/\/trip\.hsin19\.com\/#s=/);
         });
 
         // Building a link is a network round trip now; a second tap mid-flight must not

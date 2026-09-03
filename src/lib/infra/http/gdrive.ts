@@ -555,7 +555,7 @@ export async function fetchGoogleUserInfo(token: string): Promise<GoogleUser> {
     }
     return {
         email: data.email,
-        name: data.name || data.email.split("@")[0],
+        name: data.name || data.email.split("@")[0] || data.email,
         picture: data.picture,
     };
 }
@@ -593,10 +593,10 @@ export async function findOrCreateAppFolder(token: string): Promise<string> {
     assertDriveOk(searchRes, "無法搜尋 Google Drive 資料夾");
 
     const searchData = await searchRes.json() as { files?: { id: string; }[]; };
-    if (Array.isArray(searchData.files) && searchData.files.length > 0) {
-        const folderId = searchData.files[0].id;
-        saveGdriveFolderId(folderId);
-        return folderId;
+    const found = Array.isArray(searchData.files) ? searchData.files[0] : undefined;
+    if (found) {
+        saveGdriveFolderId(found.id);
+        return found.id;
     }
 
     // Create folder

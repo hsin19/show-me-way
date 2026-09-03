@@ -30,7 +30,7 @@ export function diffLines(oldText: string, newText: string): DiffLine[] {
     const dp: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
     for (let i = m - 1; i >= 0; i--) {
         for (let j = n - 1; j >= 0; j--) {
-            dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+            dp[i]![j] = a[i] === b[j] ? dp[i + 1]![j + 1]! + 1 : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
         }
     }
 
@@ -38,20 +38,22 @@ export function diffLines(oldText: string, newText: string): DiffLine[] {
     let i = 0;
     let j = 0;
     while (i < m && j < n) {
-        if (a[i] === b[j]) {
-            out.push({ type: "equal", text: a[i] });
+        const ai = a[i]!;
+        const bj = b[j]!;
+        if (ai === bj) {
+            out.push({ type: "equal", text: ai });
             i++;
             j++;
-        } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-            out.push({ type: "removed", text: a[i] });
+        } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) {
+            out.push({ type: "removed", text: ai });
             i++;
         } else {
-            out.push({ type: "added", text: b[j] });
+            out.push({ type: "added", text: bj });
             j++;
         }
     }
-    while (i < m) out.push({ type: "removed", text: a[i++] });
-    while (j < n) out.push({ type: "added", text: b[j++] });
+    while (i < m) out.push({ type: "removed", text: a[i++]! });
+    while (j < n) out.push({ type: "added", text: b[j++]! });
     return out;
 }
 

@@ -91,12 +91,12 @@ describe("acquireScreenWakeLock", () => {
         expect(request).toHaveBeenCalledTimes(1);
 
         releaseFirst();
-        expect(sentinels[0].release).not.toHaveBeenCalled();
+        expect(sentinels[0]?.release).not.toHaveBeenCalled();
         expect(doc.listenerCount).toBe(1);
 
         releaseSecond();
         await settle();
-        expect(sentinels[0].release).toHaveBeenCalledTimes(1);
+        expect(sentinels[0]?.release).toHaveBeenCalledTimes(1);
         expect(doc.listenerCount).toBe(0);
     });
 
@@ -108,7 +108,7 @@ describe("acquireScreenWakeLock", () => {
 
         releaseFirst();
         releaseFirst();
-        expect(sentinels[0].release).not.toHaveBeenCalled();
+        expect(sentinels[0]?.release).not.toHaveBeenCalled();
     });
 
     it("re-requests on visibilitychange after the browser dropped the lock", async () => {
@@ -117,7 +117,7 @@ describe("acquireScreenWakeLock", () => {
         await settle();
 
         // The browser releases the sentinel itself when the page is hidden.
-        sentinels[0].released = true;
+        sentinels[0]!.released = true;
         doc.fireVisibilityChange();
         await settle();
         expect(request).toHaveBeenCalledTimes(2);
@@ -138,7 +138,7 @@ describe("acquireScreenWakeLock", () => {
         acquireScreenWakeLock();
         await settle();
 
-        sentinels[0].released = true;
+        sentinels[0]!.released = true;
         doc.visibilityState = "hidden";
         doc.fireVisibilityChange();
         await settle();
@@ -158,7 +158,7 @@ describe("acquireScreenWakeLock", () => {
 
         release();
         await settle();
-        expect(sentinels[0].release).toHaveBeenCalledTimes(1);
+        expect(sentinels[0]?.release).toHaveBeenCalledTimes(1);
     });
 
     it("releases a lock that resolved after the last holder already left", async () => {

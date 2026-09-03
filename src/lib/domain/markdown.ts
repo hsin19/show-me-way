@@ -51,14 +51,14 @@ const CHIP_SCHEMES = [...PROSE_SCHEMES, "tel", "sms", "geo"];
  * number (`56.23`), not a destination.
  */
 function isBareDomain(target: string): boolean {
-    const authority = target.split(/[/?#]/, 1)[0];
-    const [host, port, ...extra] = authority.split(":");
+    const authority = target.split(/[/?#]/, 1)[0] ?? "";
+    const [host = "", port, ...extra] = authority.split(":");
     if (extra.length > 0 || (port !== undefined && !/^\d+$/.test(port))) return false;
     const labels = host.split(".");
     // A backslash is excluded with `@`: browsers fold it into `/` inside an
     // authority, so `\\evil.com` would resolve somewhere other than it reads.
     if (labels.length < 2 || labels.some(label => !label || /[\\@]/.test(label))) return false;
-    return !/^\d+$/.test(labels[labels.length - 1]);
+    return !/^\d+$/.test(labels[labels.length - 1] ?? "");
 }
 
 function sanitize(raw: unknown, allowed: readonly string[]): string | null {
@@ -69,7 +69,7 @@ function sanitize(raw: unknown, allowed: readonly string[]): string | null {
     if (!href || /\s/.test(href)) return null;
     if ([...href].some(ch => ch.charCodeAt(0) < 0x20 || ch.charCodeAt(0) === 0x7f)) return null;
 
-    const scheme = SCHEME.exec(href)?.[1].toLowerCase();
+    const scheme = SCHEME.exec(href)?.[1]?.toLowerCase();
     if (scheme) {
         if (!allowed.includes(scheme)) return null;
         // `https:`, `http://` and `mailto:` name a scheme and no destination.
@@ -195,9 +195,10 @@ function parse(src: string, allowLink: boolean): InlineNode[] {
 
     while (i < src.length) {
         const c = src[i];
+        const next = src[i + 1];
 
-        if (c === "\\" && i + 1 < src.length && ESCAPABLE.includes(src[i + 1])) {
-            buf += src[i + 1];
+        if (c === "\\" && next !== undefined && ESCAPABLE.includes(next)) {
+            buf += next;
             i += 2;
             continue;
         }

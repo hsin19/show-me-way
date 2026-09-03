@@ -345,8 +345,7 @@ export function listGeminiModels(apiKey: string, filterMode?: GeminiModelFilterM
  * is an arbitrary pick.
  */
 export function pickDefaultModel(models: GeminiModel[]): string | null {
-    if (models.length === 0) return null;
-    return (models.find(m => m.id.startsWith("gemini-")) ?? models[0]).id;
+    return (models.find(m => m.id.startsWith("gemini-")) ?? models[0])?.id ?? null;
 }
 
 function toInputSteps(history: ChatMessage[], userText: string) {

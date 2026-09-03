@@ -71,8 +71,8 @@ export function findCurrentEventIndex(
 ): number | null {
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
     let current: number | null = null;
-    for (let i = 0; i < events.length; i++) {
-        const start = parseEventStartMinutes(events[i].time);
+    for (const [i, event] of events.entries()) {
+        const start = parseEventStartMinutes(event.time);
         if (start !== null && start <= nowMinutes) current = i;
     }
     return current;
@@ -134,14 +134,14 @@ export function getNextEventInfo(
     if (dayDate !== toLocalIsoDate(now)) return null;
     const currentIdx = findCurrentEventIndex(events, now);
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
-    for (let i = (currentIdx ?? -1) + 1; i < events.length; i++) {
+    for (const event of events.slice((currentIdx ?? -1) + 1)) {
         // Manually resolved events are never announced as what's next.
-        if (events[i].status) continue;
-        const start = parseEventStartMinutes(events[i].time);
+        if (event.status) continue;
+        const start = parseEventStartMinutes(event.time);
         if (start === null) continue;
         return {
             kind: "upcoming",
-            title: events[i].title,
+            title: event.title,
             time: formatEventMinutes(start),
             // The clamp is belt-and-braces: an event after the current one must
             // start later than now, or it would be the current one.
@@ -150,11 +150,12 @@ export function getNextEventInfo(
     }
     // A checked-off / skipped anchor is no longer "in progress" — fall back to
     // the countdown label instead of contradicting the card's strikethrough.
-    if (currentIdx === null || events[currentIdx].status) return null;
+    const current = currentIdx === null ? undefined : events[currentIdx];
+    if (!current || current.status) return null;
     return {
         kind: "current",
-        title: events[currentIdx].title,
-        time: formatEventMinutes(parseEventStartMinutes(events[currentIdx].time) ?? 0),
+        title: current.title,
+        time: formatEventMinutes(parseEventStartMinutes(current.time) ?? 0),
     };
 }
 
@@ -178,7 +179,7 @@ export function findScrollTargetEventIndex(
 ): number | null {
     if (dayDate !== toLocalIsoDate(now)) return null;
     let eventIdx = findCurrentEventIndex(events, now);
-    while (eventIdx !== null && events[eventIdx].status) {
+    while (eventIdx !== null && events[eventIdx]?.status) {
         eventIdx = eventIdx + 1 < events.length ? eventIdx + 1 : null;
     }
     return eventIdx;

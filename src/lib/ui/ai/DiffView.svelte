@@ -40,7 +40,8 @@ function jump(dir: 1 | -1) {
     const n = hunkStarts.length;
     if (n === 0) return;
     current = (current + dir + n) % n;
-    const el = lineEls[hunkStarts[current]];
+    const lineIdx = hunkStarts[current];
+    const el = lineIdx === undefined ? undefined : lineEls[lineIdx];
     if (el && scrollEl) {
         scrollEl.scrollTo({
             top: el.offsetTop - scrollEl.clientHeight / 2 + el.clientHeight / 2,

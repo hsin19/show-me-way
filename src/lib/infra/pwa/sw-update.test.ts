@@ -99,7 +99,7 @@ describe("sw-update module", () => {
             getRegisterOptions()?.onNeedRefresh?.();
 
             expect(toastModule.toast.items).toHaveLength(1);
-            const [toastItem] = toastModule.toast.items;
+            const toastItem = toastModule.toast.items[0]!;
             expect(toastItem.message).toBe("已有新版本");
             expect(toastItem.kind).toBe("update");
             expect(toastItem.persist).toBe(true);
@@ -109,7 +109,7 @@ describe("sw-update module", () => {
         it("reloads via updateSW(true) when the toast action is taken", () => {
             swUpdate.initServiceWorkerUpdates();
             getRegisterOptions()?.onNeedRefresh?.();
-            toastModule.runToastAction(toastModule.toast.items[0].id);
+            toastModule.runToastAction(toastModule.toast.items[0]!.id);
 
             expect(updateSWMock).toHaveBeenCalledWith(true);
         });
@@ -119,11 +119,11 @@ describe("sw-update module", () => {
         it("dedupes a second onNeedRefresh instead of stacking a toast", () => {
             swUpdate.initServiceWorkerUpdates();
             getRegisterOptions()?.onNeedRefresh?.();
-            const firstId = toastModule.toast.items[0].id;
+            const firstId = toastModule.toast.items[0]!.id;
             getRegisterOptions()?.onNeedRefresh?.();
 
             expect(toastModule.toast.items).toHaveLength(1);
-            expect(toastModule.toast.items[0].id).not.toBe(firstId);
+            expect(toastModule.toast.items[0]?.id).not.toBe(firstId);
         });
 
         it("announces offline readiness", () => {
@@ -131,7 +131,7 @@ describe("sw-update module", () => {
             getRegisterOptions()?.onOfflineReady?.();
 
             expect(toastModule.toast.items).toHaveLength(1);
-            expect(toastModule.toast.items[0].message).toBe("已可離線使用");
+            expect(toastModule.toast.items[0]?.message).toBe("已可離線使用");
         });
 
         it("ignores a registration callback with no registration", () => {

@@ -124,7 +124,7 @@ export function showToast(input: ToastInput): void {
     // not evict something the user still has to act on. One insert can only put
     // the stack one over, hence a single eviction.
     const expiring = items.filter(item => !item.persist);
-    if (expiring.length > MAX_VISIBLE) dismissToast(expiring[0].id);
+    if (expiring.length > MAX_VISIBLE) dismissToast(expiring[0]!.id);
 }
 
 /** Run a toast's action and close it. Not a dismissal — the user engaged, so `onDismiss` does not fire. */

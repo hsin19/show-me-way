@@ -161,7 +161,7 @@ describe("sync: pushing", () => {
         expect(upload?.method).toBe("PATCH");
         expect(upload?.url).toContain("/files/file-1");
         expect(upload?.body).not.toContain('"parents"');
-        expect(gdrive.loadTripSyncMap()[TRIP].localHash).toBe(gdrive.yamlFingerprint(YAML_B));
+        expect(gdrive.loadTripSyncMap()[TRIP]?.localHash).toBe(gdrive.yamlFingerprint(YAML_B));
     });
 
     it("fingerprints the bytes it sent, not a later edit, so a mid-upload save still syncs", async () => {
@@ -172,9 +172,9 @@ describe("sync: pushing", () => {
 
         // The user edited while that upload was in flight: the record must still describe
         // YAML_A, or the next sync would call the newer content already sent.
-        expect(gdrive.loadTripSyncMap()[TRIP].localHash).not.toBe(gdrive.yamlFingerprint(YAML_B));
+        expect(gdrive.loadTripSyncMap()[TRIP]?.localHash).not.toBe(gdrive.yamlFingerprint(YAML_B));
         expect(gdrive.decideSyncAction({
-            record: gdrive.loadTripSyncMap()[TRIP],
+            record: gdrive.loadTripSyncMap()[TRIP]!,
             remoteExists: true,
             remoteMd5: "md5-1",
             // What that upload published, so the remote still describes YAML_A.
@@ -192,7 +192,7 @@ describe("sync: pushing", () => {
 
         expect(res?.action).toBe("pushed");
         expect(calls.find(c => c.url.includes("/upload/"))?.method).toBe("POST");
-        expect(gdrive.loadTripSyncMap()[TRIP].fileId).toBe("file-2");
+        expect(gdrive.loadTripSyncMap()[TRIP]?.fileId).toBe("file-2");
     });
 
     it("treats a file in Drive's trash as gone rather than syncing into the bin", async () => {
@@ -206,7 +206,7 @@ describe("sync: pushing", () => {
         await sync.sync(YAML_A, TRIP);
 
         expect(calls.find(c => c.url.includes("/upload/"))?.method).toBe("POST");
-        expect(gdrive.loadTripSyncMap()[TRIP].fileId).toBe("file-3");
+        expect(gdrive.loadTripSyncMap()[TRIP]?.fileId).toBe("file-3");
     });
 });
 
@@ -252,7 +252,7 @@ describe("sync: pulling", () => {
         expect(res?.action).toBe("pulled");
         expect(gdrive.loadTripSyncMap()[TRIP]).toEqual(behindRemote());
         expect(gdrive.decideSyncAction({
-            record: gdrive.loadTripSyncMap()[TRIP],
+            record: gdrive.loadTripSyncMap()[TRIP]!,
             remoteExists: true,
             remoteMd5: "md5-2",
             remoteHash: gdrive.yamlFingerprint(YAML_B),
@@ -274,7 +274,7 @@ describe("sync: pulling", () => {
         expect(res?.action).toBe("conflict");
         expect(sync.conflictFor(TRIP)).toEqual({ tripId: TRIP, fileName: "東京", kind: "remote-newer" });
         expect(calls.some(c => c.url.includes("alt=media"))).toBe(false);
-        expect(gdrive.loadTripSyncMap()[TRIP].remoteMd5).toBe("md5-1");
+        expect(gdrive.loadTripSyncMap()[TRIP]?.remoteMd5).toBe("md5-1");
     });
 
     it("pulls an edit made outside this app, whose published hash is stale", async () => {
@@ -353,7 +353,7 @@ describe("sync: checkOnly", () => {
         expect(sync.cloudActionFor(TRIP, YAML_A)).toEqual({ kind: "download" });
         expect(sync.conflictFor(TRIP)).toBeNull();
         expect(calls.some(c => c.url.includes("alt=media"))).toBe(false);
-        expect(gdrive.loadTripSyncMap()[TRIP].remoteMd5).toBe("md5-1");
+        expect(gdrive.loadTripSyncMap()[TRIP]?.remoteMd5).toBe("md5-1");
     });
 
     it("a real sync afterwards re-decides from scratch instead of trusting the armed flag", async () => {
@@ -475,7 +475,7 @@ describe("sync: conflict", () => {
         expect(res?.action).toBe("pushed");
         expect(sync.conflictFor(TRIP)).toBeNull();
         expect(calls.filter(c => c.url.includes("/upload/")).length).toBe(1);
-        expect(gdrive.loadTripSyncMap()[TRIP].remoteMd5).toBe("md5-3");
+        expect(gdrive.loadTripSyncMap()[TRIP]?.remoteMd5).toBe("md5-3");
     });
 
     it("force remote returns the cloud copy and clears the conflict", async () => {
@@ -611,7 +611,7 @@ describe("rebinding after the local state is lost", () => {
         const profileId = getActiveProfileId()!;
         // Bound, so nothing creates a second file — but with no local agreement recorded.
         expect(sync.cloudFileId(profileId)).toBe("file-1");
-        expect(gdrive.loadTripSyncMap()[profileId].localHash).toBeUndefined();
+        expect(gdrive.loadTripSyncMap()[profileId]?.localHash).toBeUndefined();
         expect(sync.conflictFor(profileId)).toEqual({ tripId: profileId, fileName: "東京", kind: "both-changed" });
     });
 
@@ -666,7 +666,7 @@ describe("rebinding after the local state is lost", () => {
 
         await sync.sync(YAML_ID_EDITED, profileId, { force: "local" });
 
-        expect(gdrive.loadTripSyncMap()[profileId].diverged).toBeUndefined();
+        expect(gdrive.loadTripSyncMap()[profileId]?.diverged).toBeUndefined();
         expect(sync.conflictFor(profileId)).toBeNull();
     });
 
@@ -678,7 +678,7 @@ describe("rebinding after the local state is lost", () => {
 
         await sync.refreshFiles({ force: true });
 
-        expect(gdrive.loadTripSyncMap()[TRIP].fileId).toBe("file-old");
+        expect(gdrive.loadTripSyncMap()[TRIP]?.fileId).toBe("file-old");
     });
 
     it("ignores files no local trip claims, and trips no file claims", async () => {
@@ -986,7 +986,7 @@ describe("scheduleSync", () => {
 
         expect(calls.filter(c => c.url.includes("/upload/")).length).toBe(1);
         // The last payload wins, not the first.
-        expect(gdrive.loadTripSyncMap()[TRIP].localHash).toBe(gdrive.yamlFingerprint(YAML_B));
+        expect(gdrive.loadTripSyncMap()[TRIP]?.localHash).toBe(gdrive.yamlFingerprint(YAML_B));
     });
 
     it("does nothing while automatic sync is off", async () => {

@@ -99,7 +99,7 @@ function positionPanel(day: number, panel: HTMLElement) {
     if (!dayData) return; // the overview; a fresh panel is already at 0
     const eventIdx = findScrollTargetEventIndex(dayData.timeline, dayData.date);
     if (eventIdx === null) return;
-    const targetId = dayData.timeline[eventIdx]._id;
+    const targetId = dayData.timeline[eventIdx]?._id;
     const card = targetId ? panel.querySelector<HTMLElement>(`[data-event-id="${targetId}"]`) : null;
     if (!card) return;
     const top = Math.max(0, card.getBoundingClientRect().top - panel.getBoundingClientRect().top + panel.scrollTop - EVENT_SCROLL_GAP);

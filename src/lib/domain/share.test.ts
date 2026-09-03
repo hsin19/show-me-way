@@ -165,7 +165,7 @@ describe("URL hash helpers", () => {
         const url = await buildShareUrl(SAMPLE_YAML);
         expect(url.startsWith(`https://hsin19.github.io/show-me-way/#${SHARE_HASH_PARAM}=`)).toBe(true);
 
-        const token = url.split(`#${SHARE_HASH_PARAM}=`)[1];
+        const token = url.split(`#${SHARE_HASH_PARAM}=`)[1]!;
         expect(await decodeShareToken(token)).toBe(SAMPLE_YAML);
     });
 

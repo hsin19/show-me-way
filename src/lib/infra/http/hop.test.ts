@@ -31,14 +31,14 @@ describe("hop base URL", () => {
         vi.stubEnv("VITE_HOP_BASE_URL", "");
         const fetchMock = stubFetch(() => jsonResponse({ id: "abcd1234" }, 201));
         await createHopBlob("CIPHERTEXT");
-        expect(fetchMock.mock.calls[0][0]).toBe("https://hop.hsin19.com/api/v1/blobs");
+        expect(fetchMock.mock.calls[0]![0]).toBe("https://hop.hsin19.com/api/v1/blobs");
     });
 
     it("honours an override and tolerates a trailing slash", async () => {
         vi.stubEnv("VITE_HOP_BASE_URL", "http://localhost:8787/");
         const fetchMock = stubFetch(() => jsonResponse({ id: "abcd1234", payload: "X" }));
         await fetchHopBlob("abcd1234");
-        expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:8787/api/v1/blobs/abcd1234");
+        expect(fetchMock.mock.calls[0]![0]).toBe("http://localhost:8787/api/v1/blobs/abcd1234");
     });
 });
 
@@ -50,7 +50,7 @@ describe("createHopBlob", () => {
         const res = await createHopBlob("CIPHERTEXT");
         expect(res).toEqual({ ok: true, id: "abcd1234", editToken: "tok" });
 
-        const [url, init] = fetchMock.mock.calls[0];
+        const [url, init] = fetchMock.mock.calls[0]!;
         expect(url).toBe("https://hop.hsin19.com/api/v1/blobs");
         expect(init?.method).toBe("POST");
         // application/json would trigger a preflight OPTIONS on this request.
@@ -89,7 +89,7 @@ describe("fetchHopBlob", () => {
         const fetchMock = stubFetch(() => jsonResponse({ id: "abcd1234", payload: "CIPHERTEXT" }));
 
         expect(await fetchHopBlob("abcd1234")).toEqual({ ok: true, cipher: "CIPHERTEXT" });
-        expect(fetchMock.mock.calls[0][0]).toBe("https://hop.hsin19.com/api/v1/blobs/abcd1234");
+        expect(fetchMock.mock.calls[0]![0]).toBe("https://hop.hsin19.com/api/v1/blobs/abcd1234");
     });
 
     // The reason/ok split is what decides whether the caller may clear the URL hash,

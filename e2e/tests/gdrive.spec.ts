@@ -69,8 +69,9 @@ async function installFakeDrive(page: Page, initial: FakeFile[] = []): Promise<F
     // multipart/related：part[1] 是 JSON metadata，part[2] 是空行之後的 YAML
     const parseMultipart = (body: string, boundary: string) => {
         const parts = body.split(`--${boundary}`);
-        const metadata = JSON.parse(parts[1].slice(parts[1].indexOf("{"), parts[1].lastIndexOf("}") + 1)) as { name?: string; };
-        const media = parts[2];
+        const head = parts[1]!;
+        const metadata = JSON.parse(head.slice(head.indexOf("{"), head.lastIndexOf("}") + 1)) as { name?: string; };
+        const media = parts[2]!;
         const content = media.slice(media.indexOf("\r\n\r\n") + 4).replace(/\r\n$/, "");
         return { name: metadata.name ?? "未命名行程.yaml", content };
     };
@@ -86,7 +87,7 @@ async function installFakeDrive(page: Page, initial: FakeFile[] = []): Promise<F
 
         if (url.pathname.startsWith("/upload/drive/v3/files")) {
             uploads++;
-            const boundary = (req.headers()["content-type"] ?? "").split("boundary=")[1];
+            const boundary = (req.headers()["content-type"] ?? "").split("boundary=")[1]!;
             const { name, content } = parseMultipart(req.postData() ?? "", boundary);
             const id = method === "PATCH" ? url.pathname.split("/").pop()! : `file-new-${nextId++}`;
             files.set(id, { id, name, content });
@@ -198,7 +199,7 @@ test("連線 Google：走完 GIS 流程並把行程建立成雲端檔", async ({
     await expect(page.getByText(/已建立雲端備份/)).toBeVisible();
 
     expect(drive.list()).toHaveLength(1);
-    expect(drive.list()[0].content).toContain("name: 測試行程");
+    expect(drive.list()[0]?.content).toContain("name: 測試行程");
 });
 
 test("重新綁定：登出再登入後靠 trip.id 認回雲端檔案，不是當成沒備份過", async ({ page }) => {
@@ -389,7 +390,7 @@ test("儲存完同步：連續操作在 debounce 窗口內只上傳一次", asyn
 
     // debounce 是 4s，等它收斂後才數。
     await expect.poll(() => drive.counts().uploads, { timeout: 15_000 }).toBe(1);
-    expect(drive.list()[0].content).toContain("checked: true");
+    expect(drive.list()[0]?.content).toContain("checked: true");
 });
 
 // 主畫面的「切換行程」抽屜：本機行程下方恆為單一雲端列 —— 清單、重新連線、或登入。

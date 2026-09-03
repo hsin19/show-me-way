@@ -52,9 +52,10 @@ function select(key: T) {
 function step(delta: number) {
     const i = keys.indexOf(current);
     const next = Math.max(0, Math.min(keys.length - 1, i + delta));
-    if (next === i) return;
+    const key = keys[next];
+    if (next === i || key === undefined) return;
     dir = delta > 0 ? 1 : -1;
-    current = keys[next];
+    current = key;
 }
 
 // Measured on touchend, not during the move, so vertical scrolling is never
@@ -65,14 +66,16 @@ let touchX = 0;
 let touchY = 0;
 let touchIgnored = false;
 function onTouchStart(e: TouchEvent) {
+    const touch = e.touches[0];
+    if (!touch) return;
     const target = e.target as Element | null;
     touchIgnored = !!target?.closest("input, textarea, select, [data-swipe-ignore]");
-    touchX = e.touches[0].clientX;
-    touchY = e.touches[0].clientY;
+    touchX = touch.clientX;
+    touchY = touch.clientY;
 }
 function onTouchEnd(e: TouchEvent) {
-    if (touchIgnored) return;
     const t = e.changedTouches[0];
+    if (touchIgnored || !t) return;
     const dx = t.clientX - touchX;
     const dy = t.clientY - touchY;
     if (Math.abs(dx) > SWIPE_MIN && Math.abs(dx) > Math.abs(dy) * 1.5) {

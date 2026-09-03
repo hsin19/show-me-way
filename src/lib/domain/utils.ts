@@ -23,7 +23,7 @@ export function splitDayDate(isoDateStr: string): { mmdd: string; weekday: strin
     const mm = String(date.getMonth() + 1).padStart(2, "0");
     const dd = String(date.getDate()).padStart(2, "0");
     const weekdays = ["日", "一", "二", "三", "四", "五", "六"];
-    return { mmdd: `${mm}/${dd}`, weekday: weekdays[date.getDay()] };
+    return { mmdd: `${mm}/${dd}`, weekday: weekdays[date.getDay()] ?? "" };
 }
 
 /** "2026-06-11" -> "06/11(四)" */
@@ -140,16 +140,23 @@ export function toUtcIsoDate(date: Date): string {
     return `${yyyy}-${mm}-${dd}`;
 }
 
+// Missing parts default to NaN, not 0, so `Date.UTC` yields an Invalid Date for
+// a malformed string instead of quietly landing on January 0.
+function isoDateParts(iso: string): [number, number, number] {
+    const [y = NaN, m = NaN, d = NaN] = iso.split("-").map(Number);
+    return [y, m, d];
+}
+
 /** Shift a plain YYYY-MM-DD by whole days; plain date in, plain date out. */
 export function addDaysIso(dateStr: string, days: number): string {
-    const [y, m, d] = dateStr.split("-").map(Number);
+    const [y, m, d] = isoDateParts(dateStr);
     return toUtcIsoDate(new Date(Date.UTC(y, m - 1, d + days)));
 }
 
 /** Whole days from `fromIso` to `toIso` (negative when `toIso` is earlier); plain dates, so DST cannot make it fractional. */
 export function daysBetweenIso(fromIso: string, toIso: string): number {
-    const [y1, m1, d1] = fromIso.split("-").map(Number);
-    const [y2, m2, d2] = toIso.split("-").map(Number);
+    const [y1, m1, d1] = isoDateParts(fromIso);
+    const [y2, m2, d2] = isoDateParts(toIso);
     return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000);
 }
 
@@ -159,7 +166,7 @@ export function daysBetweenIso(fromIso: string, toIso: string): number {
  * round-trip through `Date.UTC` rather than a NaN test.
  */
 export function isCalendarDate(iso: string): boolean {
-    const [y, m, d] = iso.split("-").map(Number);
+    const [y, m, d] = isoDateParts(iso);
     return toUtcIsoDate(new Date(Date.UTC(y, m - 1, d))) === iso;
 }
 

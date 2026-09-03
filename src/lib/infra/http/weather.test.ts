@@ -297,7 +297,7 @@ describe("loadDailyWeather", () => {
         loadDailyWeather("Springfield, US", onUpdate);
         await flushAsync();
 
-        const geocodeUrl = fetchMock.mock.calls[0][0];
+        const geocodeUrl = fetchMock.mock.calls[0]![0];
         expect(geocodeUrl).toContain("name=Springfield&");
         expect(geocodeUrl).toContain("&language=zh");
         expect(geocodeUrl).toContain("&countryCode=US");
@@ -312,7 +312,7 @@ describe("loadDailyWeather", () => {
         await flushAsync();
 
         expect(fetchMock).toHaveBeenCalledTimes(1); // forecast only
-        expect(fetchMock.mock.calls[0][0]).toContain("api.open-meteo.com");
+        expect(fetchMock.mock.calls[0]![0]).toContain("api.open-meteo.com");
     });
 
     it("re-resolves a geocode entry past its 30-day TTL", async () => {

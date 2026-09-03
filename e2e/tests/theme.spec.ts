@@ -134,22 +134,29 @@ test("兩個主題的資訊性文字都要通過 WCAG AA", async ({ page }) => {
 
         const failures = await page.evaluate(() => {
             const cs = getComputedStyle(document.documentElement);
-            const rgba = (v: string): number[] => {
+            type RGB = [number, number, number];
+            type RGBA = [number, number, number, number];
+            const rgba = (v: string): RGBA => {
                 const hex = v.match(/^#([0-9a-f]{3,8})$/i)?.[1];
-                if (!hex) return (v.match(/[\d.]+/g) ?? []).map(Number);
+                if (!hex) {
+                    const n = (v.match(/[\d.]+/g) ?? []).map(Number);
+                    return [n[0]!, n[1]!, n[2]!, n[3] ?? 1];
+                }
                 const w = hex.length <= 4 ? [...hex].map(c => c + c).join("") : hex;
-                const b = [0, 2, 4, 6].map(i => parseInt(w.slice(i, i + 2) || "ff", 16));
-                return [b[0], b[1], b[2], (isNaN(b[3]) ? 255 : b[3]) / 255];
+                const ch = (i: number) => parseInt(w.slice(i, i + 2) || "ff", 16);
+                const a = ch(6);
+                return [ch(0), ch(2), ch(4), (isNaN(a) ? 255 : a) / 255];
             };
             const tok = (n: string) => rgba(cs.getPropertyValue(n).trim());
-            const over = (f: number[], b: number[]) => [0, 1, 2].map(i => f[i] * (f[3] ?? 1) + b[i] * (1 - (f[3] ?? 1)));
-            const lum = (c: number[]) => {
+            const over = ([r, g, b, a]: RGBA, [br, bg, bb]: RGB): RGB => [r * a + br * (1 - a), g * a + bg * (1 - a), b * a + bb * (1 - a)];
+            const lum = ([r, g, b]: RGB) => {
                 const f = (v: number) => (v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-                return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+                return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
             };
-            const ratio = (a: number[], b: number[]) => {
-                const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
-                return (hi + 0.05) / (lo + 0.05);
+            const ratio = (a: RGB, b: RGB) => {
+                const la = lum(a);
+                const lb = lum(b);
+                return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
             };
 
             const card = over(tok("--color-card-bg"), [255, 255, 255]);
@@ -158,7 +165,7 @@ test("兩個主題的資訊性文字都要通過 WCAG AA", async ({ page }) => {
             // The `bg-accent/15` action chips put accent text on its own tint.
             const accentChip = over([accent[0], accent[1], accent[2], 0.15], card);
 
-            const cases: [string, number[], number[]][] = [
+            const cases: [string, RGBA, RGB][] = [
                 ["text-primary/card", tok("--color-text-primary"), card],
                 ["text-secondary/card", tok("--color-text-secondary"), card],
                 ["text-muted/card", tok("--color-text-muted"), card],

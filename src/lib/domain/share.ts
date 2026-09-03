@@ -198,8 +198,8 @@ export function parseShareLink(input: string): ShareLink | null {
     }
 
     const short = params.get(SHORT_HASH_PARAM);
-    const match = short && SHORT_LINK_RE.exec(short);
-    return match ? { kind: "short", id: match[1], key: match[2] } : null;
+    const [, id, key] = (short && SHORT_LINK_RE.exec(short)) || [];
+    return id && key ? { kind: "short", id, key } : null;
 }
 
 export function readShareLinkFromHash(): ShareLink | null {

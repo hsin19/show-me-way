@@ -157,8 +157,9 @@ export class TripStore {
         const list = getList();
         if (!list) return;
         const index = list.findIndex(i => i._id === id);
-        if (index < 0) return;
-        const removed = { ...list[index] };
+        const target = list[index];
+        if (!target) return;
+        const removed = { ...target };
         setList(list.filter(i => i._id !== id));
         this.persist();
         const profileIdAtDelete = ensureActiveProfileId();

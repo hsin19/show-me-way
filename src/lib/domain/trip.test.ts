@@ -136,7 +136,7 @@ describe("validateYaml — confirmation 形狀", () => {
             "          note: '出示護照'",
         ].join("\n");
         const data = validateYaml(timelineYaml(bookedEvent + conf));
-        expect(data.days[0].timeline[0].confirmation).toEqual({
+        expect(data.days[0]?.timeline[0]?.confirmation).toEqual({
             code: "ABC123",
             name: "WANG XIAO MING",
             note: "出示護照",
@@ -145,9 +145,9 @@ describe("validateYaml — confirmation 形狀", () => {
 
     it("接受只有 code 的 confirmation 與完全沒有 confirmation 的舊 YAML", () => {
         const codeOnly = "\n        confirmation:\n          code: 'X-1'";
-        expect(validateYaml(timelineYaml(bookedEvent + codeOnly)).days[0].timeline[0].confirmation)
+        expect(validateYaml(timelineYaml(bookedEvent + codeOnly)).days[0]?.timeline[0]?.confirmation)
             .toEqual({ code: "X-1" });
-        expect(validateYaml(timelineYaml(bookedEvent)).days[0].timeline[0].confirmation)
+        expect(validateYaml(timelineYaml(bookedEvent)).days[0]?.timeline[0]?.confirmation)
             .toBeUndefined();
     });
 
@@ -248,7 +248,7 @@ describe("validateYaml — 結構與其餘 zh-TW 驗證", () => {
             "    timeline: []",
         ].join("\n");
         const parsed = validateYaml(legacyYaml);
-        expect(parsed.days[0].title).toBe("舊版區域");
+        expect(parsed.days[0]?.title).toBe("舊版區域");
         expect((parsed.days[0] as unknown as { region?: string; }).region).toBeUndefined();
 
         const serialized = serializeToYaml(parsed);
@@ -336,7 +336,7 @@ describe("validateYaml — 結構與其餘 zh-TW 驗證", () => {
             "    title: '市區'",
             "    timeline: []",
         ].join("\n");
-        expect(validateYaml(`${validTripBlock}\n${dayWithoutPace}`).days[0].pace).toBe("自由安排行程");
+        expect(validateYaml(`${validTripBlock}\n${dayWithoutPace}`).days[0]?.pace).toBe("自由安排行程");
         expect(() => validateYaml(`${validTripBlock}\n${dayWithoutPace.replace("    timeline: []", "    pace: 123\n    timeline: []")}`))
             .toThrow("days 第 1 項的 pace 必須是文字");
     });
@@ -348,7 +348,7 @@ describe("validateYaml — 結構與其餘 zh-TW 驗證", () => {
             "    title: '市區'",
             "    timeline: []",
         ].join("\n");
-        expect(validateYaml(`${validTripBlock}\n${unquoted}`).days[0].date).toBe("2026-06-11");
+        expect(validateYaml(`${validTripBlock}\n${unquoted}`).days[0]?.date).toBe("2026-06-11");
     });
 
     it("自動推算 trip.start 與 trip.end，並依日期自動升冪排序與推算 day", () => {
@@ -370,18 +370,18 @@ describe("validateYaml — 結構與其餘 zh-TW 驗證", () => {
         expect(parsed.trip.end).toBe("2026-10-03");
         expect(parsed.days).toHaveLength(3);
         // Day 1
-        expect(parsed.days[0].day).toBe(1);
-        expect(parsed.days[0].date).toBe("2026-10-01");
-        expect(parsed.days[0].title).toBe("第一天行程");
+        expect(parsed.days[0]?.day).toBe(1);
+        expect(parsed.days[0]?.date).toBe("2026-10-01");
+        expect(parsed.days[0]?.title).toBe("第一天行程");
         // Day 2 (自動補齊)
-        expect(parsed.days[1].day).toBe(2);
-        expect(parsed.days[1].date).toBe("2026-10-02");
-        expect(parsed.days[1].title).toBe("自由活動");
-        expect(parsed.days[1].timeline).toEqual([]);
+        expect(parsed.days[1]?.day).toBe(2);
+        expect(parsed.days[1]?.date).toBe("2026-10-02");
+        expect(parsed.days[1]?.title).toBe("自由活動");
+        expect(parsed.days[1]?.timeline).toEqual([]);
         // Day 3
-        expect(parsed.days[2].day).toBe(3);
-        expect(parsed.days[2].date).toBe("2026-10-03");
-        expect(parsed.days[2].title).toBe("第三天行程");
+        expect(parsed.days[2]?.day).toBe(3);
+        expect(parsed.days[2]?.date).toBe("2026-10-03");
+        expect(parsed.days[2]?.title).toBe("第三天行程");
     });
 
     it("自動由第一天的第一個事件時間推算 trip.departure，若無時間則回退至 00:00:00", () => {
@@ -416,11 +416,11 @@ describe("validateYaml — 結構與其餘 zh-TW 驗證", () => {
 
 describe("validateYaml — status 打卡狀態", () => {
     it("接受 done / skipped，未設定維持 undefined", () => {
-        expect(validateYaml(timelineYaml(`${bookedEvent}\n        status: done`)).days[0].timeline[0].status)
+        expect(validateYaml(timelineYaml(`${bookedEvent}\n        status: done`)).days[0]?.timeline[0]?.status)
             .toBe("done");
-        expect(validateYaml(timelineYaml(`${bookedEvent}\n        status: skipped`)).days[0].timeline[0].status)
+        expect(validateYaml(timelineYaml(`${bookedEvent}\n        status: skipped`)).days[0]?.timeline[0]?.status)
             .toBe("skipped");
-        expect(validateYaml(timelineYaml(bookedEvent)).days[0].timeline[0].status).toBeUndefined();
+        expect(validateYaml(timelineYaml(bookedEvent)).days[0]?.timeline[0]?.status).toBeUndefined();
     });
 
     it("拒絕非法的 status 值", () => {
@@ -441,7 +441,7 @@ const validAlternatives = [
 describe("validateYaml — alternatives 形狀", () => {
     it("接受完整的備案清單", () => {
         const data = validateYaml(timelineYaml(bookedEvent + validAlternatives));
-        expect(data.days[0].timeline[0].alternatives).toEqual([{
+        expect(data.days[0]?.timeline[0]?.alternatives).toEqual([{
             title: "備案餐廳",
             localName: "백업식당",
             mapLink: "https://naver.me/abc",
@@ -483,7 +483,7 @@ const validStops = [
 describe("validateYaml — stops 形狀", () => {
     it("接受完整的地點清單", () => {
         const data = validateYaml(timelineYaml(bookedEvent + validStops));
-        expect(data.days[0].timeline[0].stops).toEqual([
+        expect(data.days[0]?.timeline[0]?.stops).toEqual([
             { name: "西班牙階梯", localName: "Piazza di Spagna" },
             { name: "特雷維噴泉", localName: "Fontana di Trevi", mapLink: "https://maps.app.goo.gl/xyz" },
         ]);
@@ -491,7 +491,7 @@ describe("validateYaml — stops 形狀", () => {
 
     it("接受只有 name 的地點 (只是不會有地圖按鈕)", () => {
         const data = validateYaml(timelineYaml(`${bookedEvent}\n        stops:\n          - name: '納沃納廣場'`));
-        expect(data.days[0].timeline[0].stops).toEqual([{ name: "納沃納廣場" }]);
+        expect(data.days[0]?.timeline[0]?.stops).toEqual([{ name: "納沃納廣場" }]);
     });
 
     it("拒絕非列表的 stops", () => {
@@ -527,7 +527,7 @@ describe("validateYaml — 行內 Markdown 欄位的形狀", () => {
 
     it("接受缺少 desc 的事件", () => {
         const data = validateYaml(timelineYaml(plainEvent));
-        expect(data.days[0].timeline[0].desc).toBeUndefined();
+        expect(data.days[0]?.timeline[0]?.desc).toBeUndefined();
     });
 
     it("拒絕非文字的 desc", () => {
@@ -568,7 +568,7 @@ describe("validateYaml — 行內 Markdown 欄位的形狀", () => {
 describe("validateYaml — links 形狀", () => {
     it("接受完整的連結清單", () => {
         const data = validateYaml(timelineYaml(`${bookedEvent}\n        links:\n          - label: '官網'\n            url: 'https://example.com'`));
-        expect(data.days[0].timeline[0].links).toEqual([{ label: "官網", url: "https://example.com" }]);
+        expect(data.days[0]?.timeline[0]?.links).toEqual([{ label: "官網", url: "https://example.com" }]);
     });
 
     it("拒絕非列表的 links", () => {
@@ -613,12 +613,12 @@ describe("serializeToYaml 與 round-trip", () => {
 
     it("剝除 runtime _id 與 legacy checklist id，且不輸出 trip.start、trip.end、trip.departure 與 day.day", () => {
         const data = validateYaml(richYaml);
-        expect(data.days[0].timeline[0]._id).toBeTruthy();
-        expect(data.todo[0]._id).toBeTruthy();
+        expect(data.days[0]?.timeline[0]?._id).toBeTruthy();
+        expect(data.todo[0]?._id).toBeTruthy();
         expect(data.trip.start).toBe("2026-06-11");
         expect(data.trip.end).toBe("2026-06-11");
         expect(data.trip.departure).toBe("2026-06-11T08:00:00");
-        expect(data.days[0].day).toBe(1);
+        expect(data.days[0]?.day).toBe(1);
 
         const yaml = serializeToYaml(data);
         expect(yaml).not.toContain("_id");
@@ -644,7 +644,7 @@ describe("serializeToYaml 與 round-trip", () => {
 
     it("status / confirmation / alternatives / stops 經 round-trip 不遺失", () => {
         const data = validateYaml(serializeToYaml(validateYaml(richYaml)));
-        const ev = data.days[0].timeline[0];
+        const ev = data.days[0]!.timeline[0]!;
         expect(ev.status).toBe("done");
         expect(ev.confirmation).toEqual({ code: "012345" });
         expect(ev.alternatives).toEqual([{
@@ -678,9 +678,9 @@ describe("expenses — YAML round-trip", () => {
     it("parses records and assigns a runtime _id", () => {
         const data = validateYaml(withExpenses);
         expect(data.expenses).toHaveLength(1);
-        expect(data.expenses[0].name).toBe("晚餐");
-        expect(data.expenses[0].amount).toBe(1200);
-        expect(typeof data.expenses[0]._id).toBe("string");
+        expect(data.expenses[0]?.name).toBe("晚餐");
+        expect(data.expenses[0]?.amount).toBe(1200);
+        expect(typeof data.expenses[0]?._id).toBe("string");
     });
 
     it("strips _id on serialization but keeps the record", () => {
@@ -768,7 +768,7 @@ describe("validateYaml — schema 補上的形狀檢查", () => {
     });
 
     it("欄位值留空 (YAML 的 null) 一律視為未填：選填欄位過關，必填欄位回報缺少", () => {
-        expect(validateYaml(timelineYaml("\n      - time: '08:00'\n        title: '早餐'\n        type: standard\n        desc:")).days[0].timeline[0].desc).toBeUndefined();
+        expect(validateYaml(timelineYaml("\n      - time: '08:00'\n        title: '早餐'\n        type: standard\n        desc:")).days[0]?.timeline[0]?.desc).toBeUndefined();
         expect(() => validateYaml(timelineYaml("\n      - time:\n        title: '早餐'\n        type: standard")))
             .toThrow("days 第 1 項的 timeline 第 1 項缺少 time 屬性");
     });

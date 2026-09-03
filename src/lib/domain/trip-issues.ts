@@ -100,8 +100,8 @@ function describeField(issue: BaseIssue<unknown>, container: PathKey[], field: s
 export function describeIssue(issue: BaseIssue<unknown>): string {
     // valibot reports a missing key as an issue on the parent object with the key appended, so the path always ends at the offending field or list item.
     const keys = (issue.path ?? []).map(segment => segment.key as PathKey);
-    if (keys.length === 0) return "YAML 內容為空或格式不正確";
     const last = keys[keys.length - 1];
+    if (last === undefined) return "YAML 內容為空或格式不正確";
     if (typeof last === "number") return describeListItem(issue, keys.slice(0, -2), String(keys[keys.length - 2]), last);
     return describeField(issue, keys.slice(0, -1), last);
 }

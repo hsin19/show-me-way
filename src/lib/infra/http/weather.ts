@@ -112,8 +112,8 @@ function isValidForecastCacheEntry(value: unknown): value is ForecastCacheEntry 
 // A ", XX" ISO country suffix ("Springfield, US") disambiguates common names
 // via the API's countryCode filter — exact-match heuristics proved unreliable.
 function parseCityQuery(city: string): { name: string; countryCode: string | null; } {
-    const match = city.trim().match(/^(.*\S)\s*,\s*([A-Za-z]{2})$/);
-    if (match) return { name: match[1], countryCode: match[2].toUpperCase() };
+    const [, name, code] = city.trim().match(/^(.*\S)\s*,\s*([A-Za-z]{2})$/) ?? [];
+    if (name && code) return { name, countryCode: code.toUpperCase() };
     return { name: city.trim(), countryCode: null };
 }
 
