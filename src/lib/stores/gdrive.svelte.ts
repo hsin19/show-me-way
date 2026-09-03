@@ -103,7 +103,7 @@ type CloudAction =
 // short enough that a trip added on another device shows up without a reload.
 const CLOUD_LIST_TTL_MS = 60_000;
 
-interface SyncOptions {
+export interface SyncOptions {
     /** false suppresses toasts, keeps token acquisition cache-only, and never swaps the trip. */
     interactive?: boolean;
     /** Conflict resolution: which side wins. */

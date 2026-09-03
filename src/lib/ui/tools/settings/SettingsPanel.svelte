@@ -1,27 +1,14 @@
 <script lang="ts">
-import {
-    buildShortShareUrl,
-    parseShareLink,
-} from "$lib/domain/share";
-import {
-    serializeToYaml,
-    type TripData,
-    validateYaml,
-} from "$lib/domain/trip";
+import { buildShortShareUrl } from "$lib/domain/share";
 import { formatBackupTime } from "$lib/domain/utils";
 import { fetchDefaultYamlText } from "$lib/infra/http/itinerary-loader";
-import { resolveShareLink } from "$lib/infra/http/share-link";
 import {
     ensureActiveProfileId,
-    isActiveProfile,
     type ProfileInfo,
     tripNameFromYaml,
     tripStartDateFromYaml,
 } from "$lib/infra/storage/profiles";
-import { importSharedTrip } from "$lib/infra/storage/share-import";
 import {
-    backupCurrentYaml,
-    getYamlBackup,
     listYamlBackups,
     USER_YAML_KEY,
     type YamlBackup,
@@ -33,6 +20,10 @@ import {
     copyToClipboard,
     showToast,
 } from "$lib/stores/toast.svelte";
+import {
+    type LandOutcome,
+    tripStore,
+} from "$lib/stores/trip.svelte";
 import ConfirmBar from "$lib/ui/shared/ConfirmBar.svelte";
 import Ban from "@lucide/svelte/icons/ban";
 import CloudAlert from "@lucide/svelte/icons/cloud-alert";
@@ -51,40 +42,27 @@ import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import { onMount } from "svelte";
 import ProfileManager from "./ProfileManager.svelte";
 
+// Data flows go straight to `tripStore`; only navigation comes in as props, because the
+// host owns the active tab.
 interface Props {
     /** Null while the YAML fails to load — this page has to work in exactly that case. */
     activeTripName: string | null;
     /** The parked trips only; the active one is not in this list. */
     profiles: ProfileInfo[];
-    /** Awaited after a save / restore / reset, so `onDone` navigates to fresh data. */
-    onReload: () => Promise<void>;
+    /** Leave this page for the itinerary. Every action that lands a trip ends here. */
     onDone: () => void;
     onSwitchProfile: (id: string) => void;
     onCreateProfile: () => void;
     onDeleteProfile: (id: string, name: string) => void;
-    /** 兩份都留: park `yaml` as a trip of its own. Called only once the cloud copy has landed. */
-    onBranchLocalCopy: (yaml: string) => Promise<void>;
-    onExportYaml: () => void;
-    /** The overview's 分享行程: mints the trip's persistent link, or updates the one it has. */
-    onShareTrip: () => void;
-    onRevokeShareLink: () => void;
-    /** True while any share action is mid-flight — a hop round trip — so those buttons disable. */
-    sharing?: boolean;
 }
 
 let {
     activeTripName,
     profiles,
-    onReload,
     onDone,
     onSwitchProfile,
     onCreateProfile,
     onDeleteProfile,
-    onBranchLocalCopy,
-    onExportYaml,
-    onShareTrip,
-    onRevokeShareLink,
-    sharing = false,
 }: Props = $props();
 
 let yamlInput = $state("");
@@ -119,76 +97,6 @@ function markDraft() {
     settingsDraft.yaml = yamlInput;
 }
 
-/** 儲存並解析 — also the import path for a pasted share link. */
-async function save() {
-    if (saving) return;
-    saving = true;
-    try {
-        const link = parseShareLink(yamlInput);
-        // A short link needs a network round trip, so stillActive() below now guards
-        // a much longer await than it used to — leave it where it is. resolveShareLink
-        // rejects with finished zh-TW copy, so the catch below can show it verbatim.
-        const yaml = link === null ? yamlInput : await resolveShareLink(link);
-        const parsed = validateYaml(yaml);
-        if (!stillActive()) return;
-        if (link) {
-            await landSharedLink(parsed);
-            return;
-        }
-        // Store what was parsed, not what was typed, so the editor shows the
-        // canonical form from here on.
-        const tidied = serializeToYaml(parsed);
-        if (!safeSetUserYaml(tidied)) return;
-        yamlInput = tidied;
-        yamlSnapshot = tidied;
-        settingsDraft.yaml = null;
-        validationError = null;
-
-        gdriveSync.scheduleSync(tidied, activeTripId);
-
-        showToast("自訂 YAML 行程儲存成功！");
-        await onReload();
-        onDone();
-    } catch (err) {
-        console.error("YAML Validation failed:", err);
-        validationError = err instanceof Error ? err.message : "YAML 格式錯誤，請檢查縮排！";
-    } finally {
-        saving = false;
-    }
-}
-
-/**
- * A share link pasted into the editor is a whole trip with its own identity, not new
- * contents for this slot — so it goes through the same branching as the `#s=` hash rather
- * than being written straight into `USER_YAML_KEY`, which would leave the incoming trip
- * wearing this one's Drive binding and PATCH a stranger's cloud file on the next sync.
- */
-async function landSharedLink(parsed: TripData) {
-    const outcome = importSharedTrip(parsed);
-    if (outcome.kind === "declined") return;
-    if (outcome.kind === "unchanged") {
-        showToast("這趟行程已經是連結裡的版本");
-        await onReload();
-        onDone();
-        return;
-    }
-    yamlInput = outcome.yaml;
-    yamlSnapshot = outcome.yaml;
-    settingsDraft.yaml = null;
-    validationError = null;
-    yamlBackups = listYamlBackups();
-    // `outcome.profileId`, never `activeTripId`: an import moves the active slot, and
-    // that const was captured before it did.
-    gdriveSync.scheduleSync(outcome.yaml, outcome.profileId);
-    showToast(
-        outcome.kind === "overwritten"
-            ? "已用分享連結更新行程，可在行程管理還原前一版"
-            : "已從分享連結匯入為新行程",
-    );
-    await onReload();
-    onDone();
-}
-
 // ensureActiveProfileId, matching persistTripData: this id keys the trip's Drive binding
 // and merge base, so a `?? "default"` fallback here would bind a second trip to the
 // first one's cloud file. A plain const, not `$derived`: it mints the id on first call,
@@ -205,7 +113,56 @@ let confirmingRevoke = $state(false);
 
 function revokeShareLink() {
     confirmingRevoke = false;
-    onRevokeShareLink();
+    void tripStore.revokeShareLink();
+}
+
+/** The editor after a successful write: showing exactly what storage holds, with no draft, no error, and the backup list the write just grew. */
+function adoptSaved(yaml: string) {
+    yamlInput = yaml;
+    yamlSnapshot = yaml;
+    settingsDraft.yaml = null;
+    validationError = null;
+    yamlBackups = listYamlBackups();
+}
+
+/** YAML the store refused, put where the user can fix it. The store has already seeded the draft; this is the mounted editor catching up. */
+function showInvalid(yaml: string, error: string) {
+    yamlInput = yaml;
+    validationError = error;
+}
+
+/** Mirrors a store outcome into the editor. True exactly when a trip landed. */
+function applyLanding(outcome: LandOutcome | null): boolean {
+    if (outcome?.kind === "landed") adoptSaved(outcome.yaml);
+    else if (outcome?.kind === "invalid") showInvalid(outcome.yaml, outcome.error);
+    return outcome?.kind === "landed";
+}
+
+/** 儲存並解析 — also the import path for a pasted share link. */
+async function save() {
+    if (saving) return;
+    saving = true;
+    try {
+        const outcome = await tripStore.saveFromEditor(activeTripId, yamlInput);
+        switch (outcome.kind) {
+            case "landed":
+            case "imported":
+                adoptSaved(outcome.yaml);
+                onDone();
+                break;
+            case "unchanged":
+                onDone();
+                break;
+            case "invalid":
+                // What was typed stays put; only the message changes.
+                validationError = outcome.error;
+                break;
+            case "aborted":
+                break;
+        }
+    } finally {
+        saving = false;
+    }
 }
 
 /** Login is this tap's whole job — whatever the button turns into next (上傳/同步/下載) is a separate, explicit tap once connected. */
@@ -225,8 +182,7 @@ async function checkCloudStatus() {
  * instead of blindly transferring — one reconcile covers both directions.
  */
 async function reconcileCloudTrip() {
-    const res = await gdriveSync.sync(yamlInput, activeTripId);
-    if (res?.action === "pulled" && res.yaml && await landPulled(res.yaml)) res.commit?.();
+    applyLanding(await tripStore.syncWithCloud(activeTripId, yamlInput));
 }
 
 /**
@@ -269,62 +225,18 @@ let cloudButton = $derived.by(() => {
 });
 
 /**
- * Whether it is still safe for this panel's pending async work to write the active trip:
- * every function below runs across at least one `await`, and `activeTripId` — fixed at
- * mount — cannot itself notice a profile switch that happened during that gap (switching
- * normally unmounts this panel, but an already-in-flight closure keeps running regardless).
- * Call this again right before every `USER_YAML_KEY` write, not just once up front.
- */
-function stillActive(): boolean {
-    if (isActiveProfile(activeTripId)) return true;
-    showToast("行程已切換，此操作已取消");
-    return false;
-}
-
-/** The one place that writes USER_YAML_KEY, so a quota/storage failure is always reported instead of left as an unhandled rejection. */
-function safeSetUserYaml(yaml: string): boolean {
-    try {
-        backupCurrentYaml();
-        localStorage.setItem(USER_YAML_KEY, yaml);
-        return true;
-    } catch (err) {
-        console.error("Failed to persist YAML:", err);
-        showToast("儲存失敗，請稍後再試");
-        return false;
-    }
-}
-
-/**
- * Persists an unsaved editor draft before anything uploads it. Returns false when the
- * draft does not parse, in which case nothing was written.
- *
- * Same backup and reload as `save()`: without them the app keeps serving the pre-draft
- * trip from memory and the next `persistTripData` writes that stale copy back over
- * whatever was just synced.
+ * Persists an unsaved editor draft before anything uploads it — canonical form, so what
+ * goes to Drive carries a `trip.id`. False when the draft does not parse, in which case
+ * nothing was written and the error is in the editor.
  */
 async function landDraft(): Promise<boolean> {
     if (yamlInput === yamlSnapshot) return true;
-    let tidied: string;
-    try {
-        // Serialized, not stored as typed, for the same reason `save()` does it — and
-        // here it is load-bearing rather than cosmetic: a hand-written trip has no
-        // `trip.id` until `normalizeTripData` mints one, and uploading those raw bytes
-        // puts a file on Drive with no identity for `reconcileBindings` to ever match.
-        tidied = serializeToYaml(validateYaml(yamlInput));
-    } catch (err) {
-        console.error("Draft YAML Validation failed:", err);
-        validationError = err instanceof Error ? err.message : "YAML 格式錯誤，請修正後再同步！";
+    const outcome = await tripStore.landYaml(activeTripId, yamlInput, { canonical: true });
+    if (outcome.kind === "invalid") {
+        validationError = outcome.error;
         showToast("請先修正編輯器中的 YAML 格式錯誤");
-        return false;
     }
-    if (!stillActive() || !safeSetUserYaml(tidied)) return false;
-    yamlInput = tidied;
-    yamlSnapshot = tidied;
-    settingsDraft.yaml = null;
-    validationError = null;
-    yamlBackups = listYamlBackups();
-    await onReload();
-    return true;
+    return applyLanding(outcome);
 }
 
 async function handleCloudAction() {
@@ -333,93 +245,29 @@ async function handleCloudAction() {
     await cloudButton.run?.();
 }
 
-/** Persists a copy `sync` pulled from Drive, backing up what it replaces. False when nothing was written. */
-async function landPulled(yaml: string): Promise<boolean> {
-    try {
-        validateYaml(yaml);
-    } catch (e) {
-        console.error("Downloaded cloud YAML validation failed:", e);
-        // Into the draft, not just the textarea: the draft is what survives a sub-tab
-        // switch, and without it the content the toast asks the user to fix is gone.
-        yamlInput = yaml;
-        settingsDraft.yaml = yaml;
-        validationError = e instanceof Error ? e.message : "雲端 YAML 格式錯誤，請檢查！";
-        showToast("下載的雲端行程格式有誤，已載入編輯器，請修正後再儲存");
-        return false;
-    }
-    // The realistic case for this guard: sync() ran across a real network round trip,
-    // during which the user switched to a different trip via the still-mounted
-    // ProfileManager above — landing the pulled bytes now would overwrite that trip.
-    if (!stillActive() || !safeSetUserYaml(yaml)) return false;
-    yamlInput = yaml;
-    yamlSnapshot = yaml;
-    settingsDraft.yaml = null;
-    validationError = null;
-    yamlBackups = listYamlBackups();
-    await onReload();
-    return true;
-}
-
 async function keepLocalVersion() {
     confirmingConflictSide = null;
     // Through landDraft, so what overwrites the cloud copy is the trip the app is
     // actually running rather than an unvalidated editor buffer.
     if (!await landDraft()) return;
-    await gdriveSync.sync(yamlInput, activeTripId, { force: "local" });
+    await tripStore.syncWithCloud(activeTripId, yamlInput, { force: "local" });
 }
 
 async function takeCloudVersion() {
     confirmingConflictSide = null;
-    const res = await gdriveSync.sync(yamlInput, activeTripId, { force: "remote" });
-    if (res?.action === "pulled" && res.yaml && await landPulled(res.yaml)) res.commit?.();
+    applyLanding(await tripStore.syncWithCloud(activeTripId, yamlInput, { force: "remote" }));
 }
 
-/**
- * 兩份都留 — the resolution that discards neither side. The cloud copy takes this trip's
- * slot, keeping its id and Drive binding, and what was here is parked as a trip of its own.
- *
- * Order is the whole trick: the local YAML is read out of storage before the pull
- * overwrites it, and the branch only happens once those cloud bytes have actually landed —
- * a pull that failed validation, or a trip switched out from under the round trip, must
- * leave one copy rather than fork off a second.
- */
 async function keepBothVersions() {
     confirmingConflictSide = null;
     // Through landDraft, so the copy being preserved is the trip the app is running.
     if (!await landDraft()) return;
-    const localYaml = localStorage.getItem(USER_YAML_KEY);
-    if (localYaml === null) return;
-    const res = await gdriveSync.sync(yamlInput, activeTripId, { force: "remote" });
-    if (res?.action !== "pulled" || !res.yaml) return;
-    if (!await landPulled(res.yaml)) return;
-    res.commit?.();
-    await onBranchLocalCopy(localYaml);
-    // The editor still shows the copy that just became the parked one.
-    onDone();
+    // The editor would otherwise keep showing the copy that just became the parked one.
+    if (applyLanding(await tripStore.keepBothVersions(activeTripId, yamlInput))) onDone();
 }
 
 async function handleLoadFromCloud(fileId: string, cloudName: string) {
-    const result = await gdriveSync.importCloudTripAsProfile(fileId);
-    if (!result) return;
-    if (!result.ok) {
-        console.error("Cloud YAML validation failed:", result.error);
-        yamlInput = result.yaml;
-        settingsDraft.yaml = result.yaml;
-        validationError = result.error;
-        showToast("此雲端行程格式有誤，已載入編輯器，請修正後再儲存");
-        return;
-    }
-    yamlInput = result.yaml;
-    yamlSnapshot = result.yaml;
-    settingsDraft.yaml = null;
-    validationError = null;
-    showToast(`已從 Google Drive 載入「${cloudName}」為新行程`);
-    await onReload();
-    onDone();
-}
-
-async function handleDeleteCloudTrip(fileId: string) {
-    await gdriveSync.deleteTrip(fileId);
+    if (applyLanding(await tripStore.loadCloudTrip(fileId, cloudName))) onDone();
 }
 
 let confirmingConflictSide = $state<"local" | "remote" | "both" | null>(null);
@@ -427,59 +275,20 @@ let activeConflict = $derived(gdriveSync.conflictFor(activeTripId));
 
 let confirmingBackupSavedAt = $state<string | null>(null);
 
-// Order matters twice here: the backup is read out before anything is written,
-// or a full ring could evict the very entry being restored, and validation runs
-// before the pre-restore snapshot, so a failed restore leaves the ring untouched.
 async function executeRestore(savedAt: string) {
     confirmingBackupSavedAt = null;
-    const yaml = getYamlBackup(savedAt);
-    if (!yaml) {
-        showToast("找不到此備份");
-        yamlBackups = listYamlBackups();
-        return;
-    }
-    try {
-        validateYaml(yaml);
-    } catch (err) {
-        // A backup taken under looser validation rules can fail today. Put it in
-        // the editor so the error message can guide a manual fix.
-        console.error("Backup YAML validation failed:", err);
-        yamlInput = yaml;
-        settingsDraft.yaml = yaml;
-        validationError = err instanceof Error ? err.message : "YAML 格式錯誤，請檢查縮排！";
-        yamlBackups = listYamlBackups();
-        showToast("此備份內容無效，已載入編輯器，請修正後再儲存");
-        return;
-    }
-    if (!stillActive() || !safeSetUserYaml(yaml)) return;
-    settingsDraft.yaml = null;
-    validationError = null;
-    showToast("已還原備份的行程");
-    await onReload();
-    onDone();
+    const outcome = await tripStore.restoreBackup(activeTripId, savedAt);
+    // A missing entry means the ring moved on; the list is stale either way.
+    yamlBackups = listYamlBackups();
+    if (applyLanding(outcome)) onDone();
 }
 
 let confirmingReset = $state(false);
 
 async function handleReset() {
     confirmingReset = false;
-    if (!stillActive()) return;
-    try {
-        backupCurrentYaml();
-        localStorage.removeItem(USER_YAML_KEY);
-    } catch (err) {
-        console.error("Failed to reset trip data:", err);
-        showToast("重設失敗，請稍後再試");
-        return;
-    }
-    // Unbind rather than mark dirty: this discards the trip, and marking it dirty would
-    // arm an auto-sync that pushes the bundled default template over the user's cloud
-    // itinerary. The Drive copy survives and reappears in the 雲端行程 list.
-    gdriveSync.unbindTrip(activeTripId);
-    settingsDraft.yaml = null;
+    if (!await tripStore.resetToDefault(activeTripId)) return;
     validationError = null;
-    showToast("已恢復為預設行程…");
-    await onReload();
     onDone();
 }
 
@@ -609,7 +418,7 @@ function discardDraft() {
         {onCreateProfile}
         {onDeleteProfile}
         onLoadCloudTrip={handleLoadFromCloud}
-        onDeleteCloudTrip={handleDeleteCloudTrip}
+        onDeleteCloudTrip={fileId => tripStore.deleteCloudTrip(fileId)}
     />
 </div>
 
@@ -756,9 +565,9 @@ function discardDraft() {
             </p>
             <div class="grid grid-cols-2 gap-2 mt-2">
                 <button
-                    onclick={onShareTrip}
-                    disabled={sharing}
-                    aria-busy={sharing}
+                    onclick={() => void tripStore.shareCurrentTrip()}
+                    disabled={tripStore.isSharing}
+                    aria-busy={tripStore.isSharing}
                     class="w-full min-h-[44px] flex items-center justify-center gap-1 px-1.5 rounded-lg bg-accent/10 text-[11px] font-bold text-accent hover:bg-accent/15 transition cursor-pointer text-center disabled:opacity-40 disabled:cursor-wait"
                 >
                     <RefreshCw size={12} class="shrink-0" aria-hidden="true" /> 更新分享連結
@@ -783,7 +592,7 @@ function discardDraft() {
                 <button
                     type="button"
                     onclick={() => (confirmingRevoke = true)}
-                    disabled={sharing}
+                    disabled={tripStore.isSharing}
                     class="w-full min-h-[44px] mt-2 flex items-center justify-center gap-1 rounded-lg text-[11px] font-bold text-text-muted hover:text-danger hover:bg-danger/10 transition cursor-pointer disabled:opacity-40"
                 >
                     <Ban size={12} class="shrink-0" aria-hidden="true" /> 撤銷分享連結
@@ -792,9 +601,9 @@ function discardDraft() {
         {:else}
             <p class="mt-1.5">這趟行程還沒有分享連結。建立後會得到一條加密短連結，之後每次再分享都會更新同一條連結，做成 QR code 也不會過時。</p>
             <button
-                onclick={onShareTrip}
-                disabled={sharing}
-                aria-busy={sharing}
+                onclick={() => void tripStore.shareCurrentTrip()}
+                disabled={tripStore.isSharing}
+                aria-busy={tripStore.isSharing}
                 class="w-full min-h-[44px] mt-2 flex items-center justify-center gap-1 px-1.5 rounded-lg bg-accent/10 text-[11px] font-bold text-accent hover:bg-accent/15 transition cursor-pointer text-center disabled:opacity-40 disabled:cursor-wait"
             >
                 <Share2 size={12} class="shrink-0" aria-hidden="true" /> 建立分享連結
@@ -811,7 +620,7 @@ function discardDraft() {
         </p>
         <p class="mt-1.5">下載成檔案保存（含記帳），避免裝置遺失或清除瀏覽器資料時一併消失；要在多台裝置間同步請連線 Google 雲端硬碟。</p>
         <button
-            onclick={onExportYaml}
+            onclick={() => tripStore.exportTripYaml()}
             class="w-full min-h-[44px] mt-2 flex items-center justify-center gap-1.5 px-2 rounded-lg bg-tint-1 border border-card-border text-[11px] font-bold text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-center"
         >
             <Download size={12} class="shrink-0" aria-hidden="true" /> 匯出行程 YAML

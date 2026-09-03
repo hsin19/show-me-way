@@ -2,6 +2,15 @@ import { encodeShareToken } from "$lib/domain/share";
 import { sealShareToken } from "$lib/domain/share-crypto";
 import { validateYaml } from "$lib/domain/trip";
 import {
+    ensureActiveProfileId,
+    listProfiles,
+} from "$lib/infra/storage/profiles";
+import {
+    backupCurrentYaml,
+    listYamlBackups,
+    USER_YAML_KEY,
+} from "$lib/infra/storage/yaml-storage";
+import {
     createLocalStorageStub,
     stubWindowTimers,
 } from "$lib/testing/stubs";
@@ -13,6 +22,8 @@ import {
     it,
     vi,
 } from "vitest";
+import { gdriveSync } from "./gdrive.svelte";
+import { settingsDraft } from "./settings-draft.svelte";
 import { TripStore } from "./trip.svelte";
 
 const TEST_YAML = `trip:
@@ -370,6 +381,211 @@ describe("TripStore", () => {
             expect(fetch).toHaveBeenCalledTimes(1);
             expect(writeText).toHaveBeenCalledTimes(1);
             expect(store.isSharing).toBe(false);
+        });
+    });
+});
+
+describe("TripStore whole-document writes", () => {
+    const originalLocalStorage = globalThis.localStorage;
+    // No `city`: `load()` would otherwise kick off a weather fetch these tests have no answer for.
+    const LOCAL_YAML = `trip:
+  name: 本機行程
+  id: t-local
+  hotels: []
+days:
+  - date: '2025-05-01'
+    title: 抵達
+    timeline:
+      - time: '10:00'
+        title: 抵達機場
+        type: standard
+todo:
+  - text: 買網卡
+    checked: false
+`;
+    const CLOUD_YAML = LOCAL_YAML.replace("本機行程", "雲端行程").replace("t-local", "t-cloud");
+    const BROKEN_YAML = "trip:\n  name: '壞掉的'\n";
+    let store: TripStore;
+    let profileId: string;
+
+    beforeEach(() => {
+        globalThis.localStorage = createLocalStorageStub();
+        stubWindowTimers();
+        vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("offline"))));
+        vi.stubGlobal("confirm", () => true);
+        settingsDraft.yaml = null;
+        localStorage.setItem(USER_YAML_KEY, LOCAL_YAML);
+        profileId = ensureActiveProfileId();
+        store = new TripStore();
+        store.data = validateYaml(LOCAL_YAML);
+    });
+
+    afterEach(() => {
+        globalThis.localStorage = originalLocalStorage;
+        vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+    });
+
+    describe("landYaml", () => {
+        it("stores the canonical form when asked, backing up what it replaces", async () => {
+            const handwritten = CLOUD_YAML.replace("  hotels: []\n", "  hotels: []\n  start: '2020-01-01'\n");
+            const outcome = await store.landYaml(profileId, handwritten, { canonical: true });
+            expect(outcome.kind).toBe("landed");
+            const stored = localStorage.getItem(USER_YAML_KEY);
+            expect(stored).toContain("雲端行程");
+            expect(stored).not.toMatch(/^\s+start:/m);
+            expect(outcome.kind === "landed" && outcome.yaml).toBe(stored);
+            expect(listYamlBackups()[0]?.yaml).toBe(LOCAL_YAML);
+            expect(store.data?.trip.name).toBe("雲端行程");
+        });
+
+        it("keeps the bytes as given by default, so a cloud pull stores what the sync record hashes", async () => {
+            const asDownloaded = CLOUD_YAML.replace("  hotels: []\n", "  hotels: []\n  start: '2020-01-01'\n");
+            const outcome = await store.landYaml(profileId, asDownloaded);
+            expect(outcome.kind).toBe("landed");
+            expect(localStorage.getItem(USER_YAML_KEY)).toBe(asDownloaded);
+        });
+
+        it("writes nothing for YAML that does not validate", async () => {
+            const outcome = await store.landYaml(profileId, BROKEN_YAML);
+            expect(outcome.kind).toBe("invalid");
+            expect(outcome.kind === "invalid" && outcome.yaml).toBe(BROKEN_YAML);
+            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+            expect(listYamlBackups()).toEqual([]);
+        });
+
+        it("refuses to land bytes meant for a trip that is no longer active", async () => {
+            const outcome = await store.landYaml("a-profile-switched-away-from", CLOUD_YAML);
+            expect(outcome.kind).toBe("aborted");
+            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+        });
+    });
+
+    describe("syncWithCloud", () => {
+        it("lands a pulled copy and only then records it", async () => {
+            const commit = vi.fn();
+            vi.spyOn(gdriveSync, "sync").mockResolvedValue({ action: "pulled", yaml: CLOUD_YAML, commit });
+            const outcome = await store.syncWithCloud(profileId, LOCAL_YAML);
+            expect(outcome?.kind).toBe("landed");
+            expect(localStorage.getItem(USER_YAML_KEY)).toBe(CLOUD_YAML);
+            expect(commit).toHaveBeenCalledTimes(1);
+        });
+
+        it("never records a pull that failed validation, and leaves it in the editor draft instead", async () => {
+            const commit = vi.fn();
+            vi.spyOn(gdriveSync, "sync").mockResolvedValue({ action: "pulled", yaml: BROKEN_YAML, commit });
+            const outcome = await store.syncWithCloud(profileId, LOCAL_YAML);
+            expect(outcome?.kind).toBe("invalid");
+            expect(commit).not.toHaveBeenCalled();
+            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+            expect(settingsDraft.yaml).toBe(BROKEN_YAML);
+        });
+
+        it("reports nothing to land when the sync pushed or raised a conflict", async () => {
+            vi.spyOn(gdriveSync, "sync").mockResolvedValue({ action: "conflict" });
+            expect(await store.syncWithCloud(profileId, LOCAL_YAML)).toBeNull();
+            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+        });
+    });
+
+    describe("keepBothVersions", () => {
+        it("parks the cloud copy under this trip's id and branches the local one into a trip of its own", async () => {
+            vi.spyOn(gdriveSync, "sync").mockResolvedValue({ action: "pulled", yaml: CLOUD_YAML, commit: vi.fn() });
+            const outcome = await store.keepBothVersions(profileId, LOCAL_YAML);
+            expect(outcome?.kind).toBe("landed");
+            const active = localStorage.getItem(USER_YAML_KEY) ?? "";
+            expect(active).toContain("本機行程（本機版）");
+            expect(active).not.toContain("t-local");
+            const parked = listProfiles().map(p => p.name);
+            expect(parked).toEqual(["雲端行程"]);
+        });
+
+        it("forks nothing when the cloud copy could not land", async () => {
+            vi.spyOn(gdriveSync, "sync").mockResolvedValue({ action: "pulled", yaml: BROKEN_YAML, commit: vi.fn() });
+            const outcome = await store.keepBothVersions(profileId, LOCAL_YAML);
+            expect(outcome?.kind).toBe("invalid");
+            expect(listProfiles()).toEqual([]);
+            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+        });
+    });
+
+    describe("loadCloudTrip", () => {
+        it("flushes in-memory edits before the outgoing trip is parked", async () => {
+            const spy = vi.spyOn(gdriveSync, "importCloudTripAsProfile").mockImplementation((_fileId, beforeCommit) => {
+                expect(beforeCommit?.()).toBe(true);
+                // What `createProfile` would now read out of storage carries the edit.
+                expect(localStorage.getItem(USER_YAML_KEY)).toContain("checked: true");
+                return Promise.resolve({ ok: true as const, yaml: CLOUD_YAML, profileId: "p-cloud" });
+            });
+            const item = store.data?.todo[0];
+            if (item) item.checked = true;
+            const outcome = await store.loadCloudTrip("file-1", "雲端行程");
+            expect(spy).toHaveBeenCalledTimes(1);
+            expect(outcome?.kind).toBe("landed");
+        });
+
+        it("hands an invalid download to the editor draft instead of parking anything", async () => {
+            vi.spyOn(gdriveSync, "importCloudTripAsProfile").mockResolvedValue({ ok: false, yaml: BROKEN_YAML, error: "壞了" });
+            const outcome = await store.loadCloudTrip("file-1", "雲端行程");
+            expect(outcome).toEqual({ kind: "invalid", yaml: BROKEN_YAML, error: "壞了" });
+            expect(settingsDraft.yaml).toBe(BROKEN_YAML);
+            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+        });
+    });
+
+    describe("saveFromEditor", () => {
+        it("saves typed YAML in canonical form", async () => {
+            const outcome = await store.saveFromEditor(profileId, CLOUD_YAML.replace("  hotels: []\n", "  hotels: []\n  departure: '2020-01-01T00:00:00'\n"));
+            expect(outcome.kind).toBe("landed");
+            expect(localStorage.getItem(USER_YAML_KEY)).not.toMatch(/^\s+departure:/m);
+            expect(store.data?.trip.name).toBe("雲端行程");
+        });
+
+        it("leaves what was typed alone when it does not parse", async () => {
+            const outcome = await store.saveFromEditor(profileId, BROKEN_YAML);
+            expect(outcome.kind).toBe("invalid");
+            expect(outcome.kind === "invalid" && outcome.yaml).toBe(BROKEN_YAML);
+            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+        });
+
+        it("treats a pasted share link as a trip of its own and parks the current one", async () => {
+            vi.stubGlobal("location", { origin: "https://trip.hsin19.com", pathname: "/", search: "", hash: "" });
+            const link = `https://trip.hsin19.com/#s=${await encodeShareToken(CLOUD_YAML)}`;
+            const outcome = await store.saveFromEditor(profileId, link);
+            expect(outcome.kind).toBe("imported");
+            expect(localStorage.getItem(USER_YAML_KEY)).toContain("雲端行程");
+            expect(listProfiles().map(p => p.name)).toEqual(["本機行程"]);
+            expect(store.data?.trip.name).toBe("雲端行程");
+        });
+    });
+
+    describe("restoreBackup", () => {
+        it("puts a backed-up copy back and snapshots the one it replaces", async () => {
+            backupCurrentYaml();
+            localStorage.setItem(USER_YAML_KEY, CLOUD_YAML);
+            const savedAt = listYamlBackups()[0]?.savedAt ?? "";
+            const outcome = await store.restoreBackup(profileId, savedAt);
+            expect(outcome?.kind).toBe("landed");
+            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+            expect(listYamlBackups()[0]?.yaml).toBe(CLOUD_YAML);
+        });
+
+        it("does nothing for an entry the ring no longer holds", async () => {
+            expect(await store.restoreBackup(profileId, "2020-01-01T00:00:00.000Z")).toBeNull();
+            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+        });
+    });
+
+    describe("resetToDefault", () => {
+        it("drops the active slot's YAML after backing it up", async () => {
+            expect(await store.resetToDefault(profileId)).toBe(true);
+            expect(localStorage.getItem(USER_YAML_KEY)).toBeNull();
+            expect(listYamlBackups()[0]?.yaml).toBe(LOCAL_YAML);
+        });
+
+        it("refuses once the trip has switched", async () => {
+            expect(await store.resetToDefault("a-profile-switched-away-from")).toBe(false);
+            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
         });
     });
 });

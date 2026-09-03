@@ -50,6 +50,13 @@ function openTools(tab: typeof toolsTab) {
     activeTab = "tools";
 }
 
+/** The drawer has no editor of its own, so an invalid download is handed to 行程管理's. */
+async function loadCloudTripFromOverview(fileId: string, fileName: string) {
+    const outcome = await tripStore.loadCloudTrip(fileId, fileName);
+    if (outcome?.kind === "landed") activeTab = "itinerary";
+    else if (outcome?.kind === "invalid") openTools("settings");
+}
+
 function handleWindowKeydown(e: KeyboardEvent) {
     if (e.key === "Escape" && enlargedCard) enlargedCard = null;
 }
@@ -185,16 +192,10 @@ let staleWeatherHours = $derived.by(() => {
                     <SettingsPanel
                         activeTripName={tripStore.data?.trip.name ?? null}
                         profiles={tripStore.profiles}
-                        onReload={() => tripStore.load()}
                         onDone={() => (activeTab = "itinerary")}
                         onSwitchProfile={id => tripStore.switchProfile(id, () => (activeTab = "itinerary"))}
                         onCreateProfile={() => tripStore.createProfile(() => openTools("settings"))}
                         onDeleteProfile={id => tripStore.deleteProfile(id)}
-                        onBranchLocalCopy={localYaml => tripStore.branchLocalCopy(localYaml)}
-                        onExportYaml={() => tripStore.exportTripYaml()}
-                        onShareTrip={() => tripStore.shareCurrentTrip()}
-                        onRevokeShareLink={() => tripStore.revokeShareLink()}
-                        sharing={tripStore.isSharing}
                     />
                 {/snippet}
                 {#snippet prefs()}
@@ -234,7 +235,7 @@ let staleWeatherHours = $derived.by(() => {
                         onSwitchProfile={id => tripStore.switchProfile(id, () => (activeTab = "itinerary"))}
                         onCreateProfile={() => tripStore.createProfile(() => openTools("settings"))}
                         onDeleteProfile={id => tripStore.deleteProfile(id)}
-                        onLoadCloudTrip={(fileId, fileName) => tripStore.loadCloudTrip(fileId, fileName, () => (activeTab = "itinerary"), () => openTools("settings"))}
+                        onLoadCloudTrip={loadCloudTripFromOverview}
                         onDeleteCloudTrip={fileId => tripStore.deleteCloudTrip(fileId)}
                         onEnlarge={card => (enlargedCard = card)}
                         onSetEventStatus={(id, status) => tripStore.setEventStatus(id, status)}
