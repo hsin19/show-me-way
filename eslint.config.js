@@ -19,7 +19,7 @@ export default defineConfig(
         },
     },
     {
-        // Type-aware rules scoped to src TypeScript only; config .js files stay untyped.
+        // Type-aware rules scoped to src; config .js files stay untyped.
         files: ["src/**/*.ts"],
         extends: [ts.configs.recommendedTypeChecked],
         languageOptions: {
@@ -37,6 +37,25 @@ export default defineConfig(
                 extraFileExtensions: [".svelte"],
                 svelteConfig,
             },
+        },
+    },
+    {
+        // Only the promise rules, not the full recommendedTypeChecked set: the
+        // `no-unsafe-*` rules fire on the `any`s svelte2tsx emits for template
+        // bindings, not on real code. `no-misused-promises` cannot check
+        // template attributes (it only knows JSX), so `onclick={asyncFn}` still
+        // passes; these three cover the `<script>` block.
+        files: ["src/**/*.svelte"],
+        languageOptions: {
+            parserOptions: {
+                projectService: true,
+                tsconfigRootDir: import.meta.dirname,
+            },
+        },
+        rules: {
+            "@typescript-eslint/await-thenable": "error",
+            "@typescript-eslint/no-floating-promises": "error",
+            "@typescript-eslint/no-misused-promises": "error",
         },
     },
     {
