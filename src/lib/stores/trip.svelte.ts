@@ -14,17 +14,13 @@ import {
     type TripData,
     validateYaml,
 } from "$lib/domain/trip";
-import {
-    getTodayIsoString,
-    insertAtClamped,
-} from "$lib/domain/utils";
+import { insertAtClamped } from "$lib/domain/utils";
 import { migrateGdriveSyncState } from "$lib/infra/http/gdrive";
 import {
     fetchDefaultYamlText,
     fetchItinerary,
 } from "$lib/infra/http/itinerary-loader";
 import { resolveShareLink } from "$lib/infra/http/share-link";
-import { downloadTextFile } from "$lib/infra/pwa/file-download";
 import {
     createProfile,
     deleteProfile,
@@ -56,10 +52,6 @@ import {
     showToast,
 } from "./toast.svelte";
 import { weatherStore } from "./weather.svelte";
-
-function exportDateStamp(): string {
-    return getTodayIsoString().replaceAll("-", "");
-}
 
 /** Say the upload happened, on both the clipboard and the share-sheet path — the privacy policy promises the user is told when data leaves the device. */
 const UPLOADED_NOTE = "行程已加密上傳，連結一年內有效";
@@ -344,20 +336,6 @@ export class TripStore {
         if (!this.data) return;
         const text = buildDayReport(dayData, this.data.trip.hotels, this.data.trip.name);
         await shareOrCopyToClipboard({ text }, text, "已複製今日行程，可直接貼上分享");
-    }
-
-    exportTripYaml() {
-        if (!this.data) {
-            showToast("目前沒有可匯出的行程");
-            return;
-        }
-        try {
-            downloadTextFile(`show-me-way-行程-${exportDateStamp()}.yaml`, serializeToYaml(this.data), "application/yaml;charset=utf-8");
-            showToast("已匯出行程 YAML");
-        } catch (err) {
-            console.error("Failed to export trip YAML:", err);
-            showToast("匯出失敗，請稍後再試");
-        }
     }
 
     async createProfile(onSuccess?: () => void) {

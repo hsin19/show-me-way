@@ -32,7 +32,6 @@ import CloudOff from "@lucide/svelte/icons/cloud-off";
 import CloudSync from "@lucide/svelte/icons/cloud-sync";
 import CloudUpload from "@lucide/svelte/icons/cloud-upload";
 import Copy from "@lucide/svelte/icons/copy";
-import Download from "@lucide/svelte/icons/download";
 import History from "@lucide/svelte/icons/history";
 import Lightbulb from "@lucide/svelte/icons/lightbulb";
 import RefreshCw from "@lucide/svelte/icons/refresh-cw";
@@ -301,12 +300,6 @@ function selectAll() {
     }
 }
 
-function clearEditor() {
-    yamlInput = "";
-    settingsDraft.yaml = "";
-    showToast("已清空編輯器內容");
-}
-
 function discardDraft() {
     yamlInput = yamlSnapshot;
     settingsDraft.yaml = null;
@@ -437,12 +430,6 @@ function discardDraft() {
                     全選
                 </button>
                 <button
-                    onclick={clearEditor}
-                    class="text-[11px] font-bold text-text-muted min-h-[44px] flex items-center hover:text-danger cursor-pointer"
-                >
-                    清空
-                </button>
-                <button
                     onclick={() => copyToClipboard(yamlInput, "已複製編輯器中的 YAML")}
                     class="text-[11px] font-bold text-text-muted min-h-[44px] flex items-center gap-1 hover:text-accent cursor-pointer"
                 >
@@ -503,7 +490,7 @@ function discardDraft() {
         </p>
         <ul class="list-disc pl-4 mt-1.5 space-y-1.5">
             <li>貼上 YAML 行程內容，或他人的分享連結，按「儲存並解析」即可匯入；原本的行程會留在下方的備份紀錄。</li>
-            <li>清空並儲存會還原為預設的 <a href="./itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-accent underline hover:text-text-primary transition">itinerary.yaml</a>。</li>
+            <li>要回到預設的 <a href="./itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-accent underline hover:text-text-primary transition">itinerary.yaml</a>，用最下方的「回復預設行程」。</li>
             <li>行程存在這台裝置上。產生分享連結時，行程會先在瀏覽器加密，只有密文上傳到短連結服務；連線 Google 雲端硬碟後，同步會把整份行程複製到你自己的 Drive。</li>
             <li>
                 可用此指令安裝行程小幫手 Skill：
@@ -609,21 +596,6 @@ function discardDraft() {
                 <Share2 size={12} class="shrink-0" aria-hidden="true" /> 建立分享連結
             </button>
         {/if}
-    </div>
-
-    <!-- A file for the trip's owner. Sharing with other people is the 分享連結 above;
-         moving between one's own devices is Drive sync. -->
-    <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint">
-        <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
-            <Download size={12} class="shrink-0 text-accent" aria-hidden="true" />匯出資料
-        </p>
-        <p class="mt-1.5">下載成檔案保存，避免裝置遺失或清除瀏覽器資料時一併消失；要在多台裝置間同步請連線 Google 雲端硬碟。</p>
-        <button
-            onclick={() => tripStore.exportTripYaml()}
-            class="w-full min-h-[44px] mt-2 flex items-center justify-center gap-1.5 px-2 rounded-lg bg-tint-1 border border-card-border text-[11px] font-bold text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-center"
-        >
-            <Download size={12} class="shrink-0" aria-hidden="true" /> 匯出行程 YAML
-        </button>
     </div>
 
     {#if confirmingReset}

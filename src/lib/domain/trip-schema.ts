@@ -139,7 +139,7 @@ const tripSchema = v.object({
     name: v.pipe(v.string(), v.minLength(1), v.description("行程名稱")),
     id: v.optional(v.pipe(
         v.string(),
-        v.description("[自動產生 / 請勿手動編輯] App 產生的行程識別碼，會跟著匯出檔、分享連結與雲端備份走，用來認出「同一趟行程」。手動修改或刪除會讓這趟行程與它的雲端檔案失去關聯。"),
+        v.description("[自動產生 / 請勿手動編輯] App 產生的行程識別碼，會跟著分享連結與雲端備份走，用來認出「同一趟行程」。手動修改或刪除會讓這趟行程與它的雲端檔案失去關聯。"),
         v.metadata({ readOnly: true }),
     )),
     start: deprecated(v.string(), "不需填寫。App 會自動取 days 中最早的 date 作為出發日期。"),

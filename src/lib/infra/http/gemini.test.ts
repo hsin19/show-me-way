@@ -19,7 +19,6 @@ import {
     pickDefaultModel,
     saveGeminiApiKey,
     saveGeminiModel,
-    saveGeminiModelFilter,
     sendChatMessage,
 } from "./gemini";
 
@@ -130,24 +129,6 @@ describe("listGeminiModels", () => {
         expect(models.map(m => m.id)).toEqual(["gemma-3-270m-it"]);
     });
 
-    it("returns all generateContent models when filterMode is 'all'", async () => {
-        const payload = {
-            models: [
-                { name: "models/gemini-3.5-flash", displayName: "Gemini 3.5 Flash", supportedGenerationMethods: ["generateContent"] },
-                { name: "models/gemini-2.0-flash-001", displayName: "Flash 001", supportedGenerationMethods: ["generateContent"] },
-                { name: "models/gemini-3.1-pro-preview", displayName: "Pro Preview", supportedGenerationMethods: ["generateContent"] },
-                { name: "models/embedding-001", displayName: "Embedding", supportedGenerationMethods: ["embedContent"] },
-            ],
-        };
-        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(payload) })));
-        const models = await listGeminiModels("key", "all");
-        expect(models.map(m => m.id)).toEqual([
-            "gemini-3.5-flash",
-            "gemini-3.1-pro-preview",
-            "gemini-2.0-flash-001",
-        ]);
-    });
-
     it("sorts models descending alphabetically by name", async () => {
         const payload = {
             models: [
@@ -250,28 +231,6 @@ describe("listGeminiModels", () => {
         await listGeminiModels("key-a");
         clearGeminiApiKey();
         await listGeminiModels("key-a");
-        expect(fetchMock).toHaveBeenCalledTimes(2);
-    });
-
-    it("drops the memo when the filter mode is saved", async () => {
-        const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(modelsPayload()) }));
-        vi.stubGlobal("fetch", fetchMock);
-
-        await listGeminiModels("key-a");
-        saveGeminiModelFilter("all");
-        await listGeminiModels("key-a");
-        expect(fetchMock).toHaveBeenCalledTimes(2);
-    });
-
-    it("keys the memo by filter mode — switching mode misses, repeating it hits", async () => {
-        const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(modelsPayload()) }));
-        vi.stubGlobal("fetch", fetchMock);
-
-        await listGeminiModels("key-a", "default");
-        await listGeminiModels("key-a", "all");
-        expect(fetchMock).toHaveBeenCalledTimes(2);
-
-        await listGeminiModels("key-a", "all");
         expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 });

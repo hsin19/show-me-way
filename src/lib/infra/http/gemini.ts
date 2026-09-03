@@ -9,9 +9,6 @@ import {
 
 export const GEMINI_API_KEY_STORAGE = "showmeway_gemini_api_key";
 export const GEMINI_MODEL_STORAGE = "showmeway_gemini_model";
-const GEMINI_MODEL_FILTER_STORAGE = "showmeway_gemini_model_filter";
-
-export type GeminiModelFilterMode = "default" | "all";
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
@@ -26,8 +23,8 @@ export interface ChatMessage {
     content: string;
 }
 
-// One session-scoped slot, keyed `apiKey:filterMode`. Never persisted: a stale
-// model list would outlive a revoked key.
+// One session-scoped slot, keyed by API key. Never persisted: a stale model
+// list would outlive a revoked key.
 let cachedModelsKey: string | null = null;
 let cachedModelsPromise: Promise<GeminiModel[]> | null = null;
 
@@ -81,25 +78,6 @@ export function saveGeminiModel(model: string): void {
         localStorage.setItem(GEMINI_MODEL_STORAGE, model.trim());
     } catch (e) {
         console.warn("Failed to save Gemini model", e);
-    }
-}
-
-export function loadGeminiModelFilter(): GeminiModelFilterMode {
-    try {
-        const filter = localStorage.getItem(GEMINI_MODEL_FILTER_STORAGE);
-        return filter === "all" ? "all" : "default";
-    } catch (e) {
-        console.warn("Failed to read Gemini model filter", e);
-        return "default";
-    }
-}
-
-export function saveGeminiModelFilter(mode: GeminiModelFilterMode): void {
-    try {
-        localStorage.setItem(GEMINI_MODEL_FILTER_STORAGE, mode);
-        clearGeminiModelsMemory();
-    } catch (e) {
-        console.warn("Failed to save Gemini model filter", e);
     }
 }
 
@@ -260,13 +238,13 @@ interface RawModel {
     supportedGenerationMethods?: string[];
 }
 
-// What "default" filtering hides: experimental and non-text variants, leaving the
-// clean Gemini and Gemma release names. The snapshot rule is anchored because a
+// Hidden from the picker: experimental and non-text variants, leaving the clean
+// Gemini and Gemma release names. The snapshot rule is anchored because a
 // pinned build is always a trailing `-001`, while an unanchored `-\d{3}` would
 // also swallow parameter counts like `gemma-3-270m-it`.
 const UNWANTED_MODEL_REGEX = /(?:preview|latest|exp|tts|image|banana|computer-use|lyria|robotics|-\d{3}$)/i;
 
-function parseModels(payload: unknown, filterMode: GeminiModelFilterMode = "default"): GeminiModel[] {
+function parseModels(payload: unknown): GeminiModel[] {
     if (typeof payload !== "object" || payload === null) return [];
     const models = (payload as { models?: unknown; }).models;
     if (!Array.isArray(models)) return [];
@@ -277,7 +255,6 @@ function parseModels(payload: unknown, filterMode: GeminiModelFilterMode = "defa
             if (!Array.isArray(m.supportedGenerationMethods) || !m.supportedGenerationMethods.includes("generateContent")) {
                 return false;
             }
-            if (filterMode === "all") return true;
             return !UNWANTED_MODEL_REGEX.test(m.name);
         })
         .map(m => ({
@@ -289,18 +266,15 @@ function parseModels(payload: unknown, filterMode: GeminiModelFilterMode = "defa
 /**
  * The chat-capable models this key can use. Doubles as key validation — the API
  * has no verify endpoint — so it rejects rather than degrading, and the UI is
- * expected to render the reason. Repeat calls with the same key and filter share
- * one in-flight/settled promise for the session.
+ * expected to render the reason. Repeat calls with the same key share one
+ * in-flight/settled promise for the session.
  */
-export function listGeminiModels(apiKey: string, filterMode?: GeminiModelFilterMode): Promise<GeminiModel[]> {
-    const mode = filterMode ?? loadGeminiModelFilter();
-    const cacheKey = `${apiKey}:${mode}`;
-
-    if (cachedModelsKey === cacheKey && cachedModelsPromise) {
+export function listGeminiModels(apiKey: string): Promise<GeminiModel[]> {
+    if (cachedModelsKey === apiKey && cachedModelsPromise) {
         return cachedModelsPromise;
     }
 
-    cachedModelsKey = cacheKey;
+    cachedModelsKey = apiKey;
     cachedModelsPromise = (async () => {
         const collected: GeminiModel[] = [];
         let pageToken: string | undefined;
@@ -321,7 +295,7 @@ export function listGeminiModels(apiKey: string, filterMode?: GeminiModelFilterM
                 await handleErrorResponse(res);
             }
             const payload: unknown = await res.json();
-            collected.push(...parseModels(payload, mode));
+            collected.push(...parseModels(payload));
             pageToken = (payload as { nextPageToken?: string; }).nextPageToken;
         } while (pageToken);
 
@@ -329,7 +303,7 @@ export function listGeminiModels(apiKey: string, filterMode?: GeminiModelFilterM
     })().catch(err => {
         // Drop the memo on failure, or the picker's 重試 button would keep handing
         // back the same rejection.
-        if (cachedModelsKey === cacheKey) {
+        if (cachedModelsKey === apiKey) {
             clearGeminiModelsMemory();
         }
         throw err;

@@ -112,7 +112,7 @@ test("編輯器：複製鈕可用，且保留手機輸入必要屬性與說明",
     await expect(page.getByRole("status")).toContainText("已複製編輯器中的 YAML");
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("name: 測試行程");
 
-    // 說明卡：清空後的行為、資料出境、以及產生 YAML 的 Skill 從哪來。
+    // 說明卡：回復預設的入口、資料出境、以及產生 YAML 的 Skill 從哪來。
     await expect(page.getByRole("link", { name: "itinerary.yaml" })).toBeVisible();
     await expect(page.getByText(/同步會把整份行程複製到你自己的 Drive/)).toBeVisible();
     await expect(page.getByText(/npx skills add .*itinerary-yaml-builder/)).toBeVisible();

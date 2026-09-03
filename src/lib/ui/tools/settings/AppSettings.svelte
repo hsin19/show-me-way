@@ -7,11 +7,8 @@ import {
 } from "$lib/domain/version";
 import {
     clearGeminiApiKey,
-    type GeminiModelFilterMode,
     loadGeminiApiKey,
-    loadGeminiModelFilter,
     saveGeminiApiKey,
-    saveGeminiModelFilter,
 } from "$lib/infra/http/gemini";
 import {
     clearApiCache,
@@ -73,10 +70,9 @@ let activeHint = $derived(THEMES.find(t => t.id === theme.pref)?.hint ?? "");
 
 let apiKey = $state<string | null>(loadGeminiApiKey());
 let keyInput = $state(loadGeminiApiKey() ?? "");
-let filterMode = $state<GeminiModelFilterMode>(loadGeminiModelFilter());
-// The same helper ChatPanel's header select runs on, so the two cannot disagree
-// about which model is default.
-const modelPicker = createModelPicker(() => apiKey, () => filterMode);
+// Only its `error` / `loading` are read here, for the key badge: the models call
+// is the one way to find out whether a key works.
+const modelPicker = createModelPicker(() => apiKey);
 
 function handleSaveKey(e: SubmitEvent) {
     e.preventDefault();
@@ -94,11 +90,6 @@ function handleClearKey() {
     modelPicker.reset();
     confirming = null;
     showToast("已清除 API 金鑰");
-}
-
-function handleFilterModeChange(newMode: GeminiModelFilterMode) {
-    filterMode = newMode;
-    saveGeminiModelFilter(newMode);
 }
 
 // Read once per mount, which is enough because TabPager rebuilds this page every
@@ -325,57 +316,6 @@ function handleFullReset() {
             <div role="alert" class="flex items-start gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2">
                 <TriangleAlert size={14} class="text-danger shrink-0 mt-0.5" aria-hidden="true" />
                 <p class="text-[11px] text-text-secondary leading-relaxed whitespace-pre-line">{modelPicker.error}</p>
-            </div>
-        {/if}
-
-        {#if apiKey}
-            <div>
-                <span class="block text-xs font-semibold text-text-secondary mb-1">
-                    模型篩選範圍
-                </span>
-                <div class="flex gap-2 mb-3">
-                    <button
-                        type="button"
-                        onclick={() => handleFilterModeChange("default")}
-                        class="flex-1 py-1.5 px-3 rounded-xl border text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 {filterMode === 'default' ? 'bg-accent/15 border-accent/40 text-accent' : 'bg-tint-1 border-card-border text-text-secondary hover:bg-tint-2'}"
-                    >
-                        {#if filterMode === "default"}
-                            <Check size={14} aria-hidden="true" />
-                        {/if}
-                        預設 (推薦)
-                    </button>
-                    <button
-                        type="button"
-                        onclick={() => handleFilterModeChange("all")}
-                        class="flex-1 py-1.5 px-3 rounded-xl border text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 {filterMode === 'all' ? 'bg-accent/15 border-accent/40 text-accent' : 'bg-tint-1 border-card-border text-text-secondary hover:bg-tint-2'}"
-                    >
-                        {#if filterMode === "all"}
-                            <Check size={14} aria-hidden="true" />
-                        {/if}
-                        全部 (不篩選)
-                    </button>
-                </div>
-            </div>
-
-            <div>
-                <label for="gemini-model-select" class="block text-xs font-semibold text-text-secondary mb-1">
-                    AI 模型選擇
-                </label>
-                <select
-                    id="gemini-model-select"
-                    bind:value={modelPicker.selected}
-                    disabled={modelPicker.loading}
-                    aria-label="選擇 AI 模型"
-                    class="w-full bg-well-deep border border-card-border rounded-xl px-3 py-2 text-xs text-text-primary outline-none focus:border-accent transition cursor-pointer disabled:opacity-50"
-                >
-                    {#if modelPicker.list.length === 0}
-                        <option value={modelPicker.selected}>{modelPicker.selected || (modelPicker.loading ? "載入模型中…" : "自動選擇")}</option>
-                    {:else}
-                        {#each modelPicker.list as m (m.id)}
-                            <option value={m.id}>{m.displayName}</option>
-                        {/each}
-                    {/if}
-                </select>
             </div>
         {/if}
 

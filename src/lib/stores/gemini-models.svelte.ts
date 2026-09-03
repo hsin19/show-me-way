@@ -1,6 +1,5 @@
 import {
     type GeminiModel,
-    type GeminiModelFilterMode,
     listGeminiModels,
     loadGeminiModel,
     pickDefaultModel,
@@ -12,18 +11,14 @@ import {
 const FALLBACK_MODEL = "gemini-3.5-flash";
 
 /**
- * Which models this key can use, and which one is picked — shared by App 設定's
- * picker and ChatPanel's header select. They write the same localStorage key, so
- * the "no stored preference yet" decision has to be made in one place or
- * whichever screen opens first silently wins.
+ * Which models this key can use, and which one is picked. ChatPanel's header
+ * select is the only place the pick is made; App 設定 mounts one too, but only
+ * reads `error` / `loading` — listing the models is the sole key validation there is.
  *
  * Call it at component init: it registers an `$effect`, so the fetch is torn down
  * with the component and a late response cannot write into a dead one.
  */
-export function createModelPicker(
-    getKey: () => string | null,
-    getFilterMode?: () => GeminiModelFilterMode,
-) {
+export function createModelPicker(getKey: () => string | null) {
     let list = $state<GeminiModel[]>([]);
     let loading = $state(false);
     // Worth rendering, not swallowing: listing the models is the only key
@@ -35,7 +30,6 @@ export function createModelPicker(
 
     $effect(() => {
         const key = getKey();
-        const mode = getFilterMode?.();
         void retryToken;
         if (!key) {
             list = [];
@@ -45,7 +39,7 @@ export function createModelPicker(
         loading = true;
         error = null;
         let cancelled = false;
-        listGeminiModels(key, mode)
+        listGeminiModels(key)
             .then(models => {
                 if (cancelled) return;
                 list = models;

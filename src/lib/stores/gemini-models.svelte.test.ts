@@ -5,7 +5,6 @@ import { createLocalStorageStub } from "$lib/testing/stubs";
 import {
     clearGeminiModelsMemory,
     GEMINI_MODEL_STORAGE,
-    type GeminiModelFilterMode,
     loadGeminiModel,
 } from "$lib/infra/http/gemini";
 import { flushSync } from "svelte";
@@ -41,10 +40,10 @@ function settle(): Promise<void> {
 
 const roots: (() => void)[] = [];
 
-function mountPicker(getKey: () => string | null, getFilterMode?: () => GeminiModelFilterMode) {
+function mountPicker(getKey: () => string | null) {
     let picker!: ReturnType<typeof createModelPicker>;
     roots.push($effect.root(() => {
-        picker = createModelPicker(getKey, getFilterMode);
+        picker = createModelPicker(getKey);
     }));
     flushSync();
     return picker;
@@ -52,7 +51,7 @@ function mountPicker(getKey: () => string | null, getFilterMode?: () => GeminiMo
 
 beforeEach(() => {
     vi.stubGlobal("localStorage", createLocalStorageStub());
-    // The models memo is module-level and keyed by apiKey:filterMode; tests reuse
+    // The models memo is module-level and keyed by apiKey; tests reuse
     // key names, so a leftover settled promise would make a fetch stub dead code.
     clearGeminiModelsMemory();
     vi.spyOn(console, "error").mockImplementation(() => {});
@@ -103,13 +102,6 @@ describe("createModelPicker", () => {
         await settle();
         expect(picker.selected).toBe("gemini-2.5-flash");
         expect(loadGeminiModel()).toBe("gemini-2.5-flash");
-    });
-
-    it("hands the filter mode through to the listing", async () => {
-        stubModels(["gemini-3.1-pro-preview"]);
-        const picker = mountPicker(() => "key-a", () => "all");
-        await settle();
-        expect(picker.list.map(m => m.id)).toEqual(["gemini-3.1-pro-preview"]);
     });
 
     it("persists an assignment to selected", () => {
