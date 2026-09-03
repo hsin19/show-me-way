@@ -197,6 +197,9 @@ export class TripStore {
             if (migrated) this.persist();
         } catch (err) {
             console.error("Failed to load trip data:", err);
+            // Drop the previous trip too: with it still here, the tools tab keeps rendering it and the
+            // next `persist()` would write it over whatever slot just failed to load, with no backup taken.
+            this.data = null;
             this.loadError = "無法載入或解析行程資料。請開啟設定確認 YAML 語法。";
         } finally {
             this.isLoading = false;
@@ -520,8 +523,9 @@ export class TripStore {
     }
 
     async switchProfile(id: string, onSuccess?: () => void) {
-        if (!this.data) return;
-        if (!this.persist()) return;
+        // No trip in memory means the active slot failed to load; it is parked as-is so the user can
+        // still switch to a trip that works and repair this one from the editor later.
+        if (this.data && !this.persist()) return;
         try {
             switchToProfile(id);
         } catch (err) {

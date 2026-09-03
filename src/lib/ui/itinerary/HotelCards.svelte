@@ -45,7 +45,8 @@ function showAddressForDriver(hotel: HotelInfo) {
 </script>
 
 <div class="space-y-3">
-    {#each sortedHotels as hotel (hotel.name)}
+    <!-- Index in the key: two stays at the same hotel are legal YAML, and a duplicate key throws in production. -->
+    {#each sortedHotels as hotel, i (`${i}-${hotel.name}`)}
         <div
             class="
                 panel rounded-2xl p-5

@@ -189,7 +189,7 @@ export function listProfiles(): ProfileInfo[] {
  * Make a parked trip the active one and park the current trip in its place.
  * Whatever sits in USER_YAML_KEY is what gets parked, so the caller must persist
  * the live trip first, and must reload trip data afterwards. Throws if `targetId`
- * is unknown.
+ * is unknown, or if storage refuses a write — in which case no trip has been lost.
  */
 export function switchToProfile(targetId: string): void {
     const list = readStoredProfiles();
@@ -197,13 +197,16 @@ export function switchToProfile(targetId: string): void {
     if (!target) throw new Error("找不到要切換的行程");
     const activeId = ensureActiveProfileId();
     const activeYaml = localStorage.getItem(USER_YAML_KEY);
-    const rest = list.filter(p => p.id !== targetId);
-    if (activeYaml != null) {
-        rest.unshift({ id: activeId, yaml: activeYaml, savedAt: new Date().toISOString() });
-    }
-    writeStoredProfiles(rest);
+    // The target stays in the parked list until the active slot holds it: a quota
+    // failure on any write then leaves a trip duplicated, never missing. Removing it
+    // first and failing on the next write left the target in no key at all.
+    const parked = activeYaml != null
+        ? [{ id: activeId, yaml: activeYaml, savedAt: new Date().toISOString() }, ...list]
+        : list;
+    writeStoredProfiles(parked);
     localStorage.setItem(USER_YAML_KEY, target.yaml);
     localStorage.setItem(ACTIVE_PROFILE_KEY, target.id);
+    writeStoredProfiles(parked.filter(p => p.id !== targetId));
 }
 
 /** Start a new trip from `yaml`, parking the current one. Same caller contract as `switchToProfile`; returns the new profile's id. */

@@ -271,7 +271,7 @@ function classifyMapHref(href: string): "naver" | "google" | "other" {
 
                 {#if event.bullets && event.bullets.length > 0}
                     <ul class="list-disc list-inside mt-2.5 pl-2 text-xs text-text-secondary space-y-1">
-                        {#each event.bullets as bullet (bullet)}
+                        {#each event.bullets as bullet, k (`${k}-${bullet}`)}
                             <li><RichText text={bullet} /></li>
                         {/each}
                     </ul>
@@ -283,7 +283,7 @@ function classifyMapHref(href: string): "naver" | "google" | "other" {
                             <ConfirmationChips confirmation={event.confirmation} title={event.title} {onEnlarge} />
                         {/if}
                         {@render placeActions(event.localName, event.title, undefined, event.mapLink)}
-                        {#each event.links ?? [] as link (link.url)}
+                        {#each event.links ?? [] as link, k (`${k}-${link.url}`)}
                             {@render linkChip(link.label, link.url)}
                         {/each}
                     </div>

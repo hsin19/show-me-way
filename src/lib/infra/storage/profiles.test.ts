@@ -203,6 +203,25 @@ describe("trip profiles", () => {
             expect(parkedAfter[0].name).toBe("行程B");
         });
 
+        it("keeps the target parked when the active-slot write fails, so a quota error loses nothing", () => {
+            storage.setItem(USER_YAML_KEY, yamlNamed("行程A"));
+            const idA = ensureActiveProfileId();
+            createProfile(yamlNamed("行程B"));
+            const idB = getActiveProfileId();
+
+            const realSetItem = storage.setItem.bind(storage);
+            vi.spyOn(storage, "setItem").mockImplementation((key: string, value: string) => {
+                if (key === USER_YAML_KEY) throw new DOMException("quota", "QuotaExceededError");
+                realSetItem(key, value);
+            });
+            expect(() => switchToProfile(idA)).toThrow();
+
+            // B is still active, and A — the one we were switching to — is still parked somewhere.
+            expect(getActiveProfileId()).toBe(idB);
+            expect(storage.getItem(USER_YAML_KEY)).toBe(yamlNamed("行程B"));
+            expect(listProfiles().some(p => p.id === idA && p.name === "行程A")).toBe(true);
+        });
+
         it("throws on an unknown profile id and leaves storage untouched", () => {
             storage.setItem(USER_YAML_KEY, yamlNamed("行程A"));
             ensureActiveProfileId();

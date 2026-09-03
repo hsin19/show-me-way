@@ -748,6 +748,11 @@ describe("validateYaml — schema 補上的形狀檢查", () => {
             .toThrow("hotels 第 1 項的 checkIn 必須是 YYYY-MM-DD 日期格式");
     });
 
+    it("trip.wallets 去重：Ledger 以錢包名稱當 key，重複會在 production 拋錯", () => {
+        const data = validateYaml([validTripBlock, "  wallets: [Suica, WOWPASS, Suica]", validDaysBlock].join("\n"));
+        expect(data.trip.wallets).toEqual(["Suica", "WOWPASS"]);
+    });
+
     it("trip.wallets 必須是文字列表，trip.mapProvider 只接受 naver / google", () => {
         expect(() => validateYaml([validTripBlock, "  wallets: Suica", validDaysBlock].join("\n")))
             .toThrow("trip.wallets 必須是文字列表");

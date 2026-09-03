@@ -232,6 +232,8 @@ function normalizeTripData(raw: unknown): TripData {
     }
     filledDays.forEach((day, index) => day.day = index + 1);
 
+    // Ledger renders one option per wallet keyed by name, and a duplicate key throws in production.
+    if (doc.trip.wallets) doc.trip.wallets = [...new Set(doc.trip.wallets)];
     // `id` sits right after `name` whether authored or minted, for the same round-trip stability as `pace`.
     const { name, id, ...rest } = doc.trip;
     const trip: TripInfo = {

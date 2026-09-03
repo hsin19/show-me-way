@@ -63,6 +63,17 @@ describe("TripStore", () => {
         vi.unstubAllGlobals();
     });
 
+    it("a failed load leaves no trip behind, so nothing can be persisted over the slot that failed", async () => {
+        const broken = "trip:\n  name: '壞掉的'\n";
+        localStorage.setItem("showmeway_user_yaml", broken);
+        await store.load();
+        expect(store.data).toBeNull();
+        expect(store.loadError).toBeTruthy();
+        // The previous trip used to survive here and get written into this slot by the next toggle.
+        expect(store.persist()).toBe(false);
+        expect(localStorage.getItem("showmeway_user_yaml")).toBe(broken);
+    });
+
     it("derives prep totals and done count correctly", () => {
         expect(store.prepTotal).toBe(2);
         expect(store.prepDone).toBe(1);
