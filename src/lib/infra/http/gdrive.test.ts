@@ -1,3 +1,4 @@
+import { createLocalStorageStub } from "$lib/testing/stubs";
 import {
     afterEach,
     beforeEach,
@@ -43,21 +44,6 @@ function fetchCall(index: number): { url: string; method: string; headers: Recor
         method: init.method ?? "GET",
         headers: (init.headers ?? {}) as Record<string, string>,
         body: typeof init.body === "string" ? init.body : "",
-    };
-}
-
-function createLocalStorageStub() {
-    const store = new Map<string, string>();
-    return {
-        // length/key included so the prefix sweeps under test can actually see anything.
-        get length() {
-            return store.size;
-        },
-        key: (i: number) => [...store.keys()][i] ?? null,
-        getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => void store.set(key, value),
-        removeItem: (key: string) => void store.delete(key),
-        clear: () => store.clear(),
     };
 }
 

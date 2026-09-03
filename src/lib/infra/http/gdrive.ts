@@ -1,9 +1,7 @@
 export const GDRIVE_USER_STORAGE = "showmeway_gdrive_user";
 const GDRIVE_TOKEN_STORAGE = "showmeway_gdrive_token";
-/** @public */
-export const GDRIVE_AUTO_SYNC_STORAGE = "showmeway_gdrive_auto_sync";
-/** @public */
-export const GDRIVE_FOLDER_ID_STORAGE = "showmeway_gdrive_folder_id";
+const GDRIVE_AUTO_SYNC_STORAGE = "showmeway_gdrive_auto_sync";
+const GDRIVE_FOLDER_ID_STORAGE = "showmeway_gdrive_folder_id";
 export const GDRIVE_TRIPS_STORAGE = "showmeway_gdrive_trips";
 
 import { tripStartDateFromYaml } from "$lib/infra/storage/profiles";
@@ -17,8 +15,7 @@ export const GDRIVE_FOLDER_NAME = "ShowMeWay";
 /** Checked explicitly after consent; the userinfo scopes fail loudly in `connect()` instead. */
 const GDRIVE_SCOPE_DRIVE_FILE = "https://www.googleapis.com/auth/drive.file";
 
-/** @public */
-export const GDRIVE_OAUTH_SCOPES = [
+const GDRIVE_OAUTH_SCOPES = [
     GDRIVE_SCOPE_DRIVE_FILE,
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
@@ -116,8 +113,7 @@ export function saveGdriveAutoSync(enabled: boolean): void {
     writeCachedJson(GDRIVE_AUTO_SYNC_STORAGE, enabled);
 }
 
-/** @public */
-export function loadGdriveFolderId(): string | null {
+function loadGdriveFolderId(): string | null {
     try {
         return localStorage.getItem(GDRIVE_FOLDER_ID_STORAGE);
     } catch {
@@ -125,7 +121,7 @@ export function loadGdriveFolderId(): string | null {
     }
 }
 
-/** @public */
+/** Exported for the store tests, which pre-seed the folder to skip the lookup round trip. */
 export function saveGdriveFolderId(folderId: string): void {
     try {
         localStorage.setItem(GDRIVE_FOLDER_ID_STORAGE, folderId);

@@ -277,7 +277,6 @@ export function serializeToYaml(data: TripData): string {
     }
     for (const item of [...clean.todo, ...clean.packing, ...clean.expenses]) {
         delete item._id;
-        delete (item as { id?: string; }).id;
     }
 
     const body = dumpYaml(clean, {

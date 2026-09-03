@@ -13,7 +13,7 @@ export const THEME_KEY = "showmeway_theme";
 export type ThemePref = "system" | "dark" | "light";
 
 /** What actually gets rendered once `system` is resolved. */
-export type ResolvedTheme = "dark" | "light";
+type ResolvedTheme = "dark" | "light";
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 

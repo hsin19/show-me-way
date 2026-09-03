@@ -29,9 +29,9 @@ import {
  * hop's maximum. A persistent link gets printed and pinned to a fridge months before a
  * trip; hop's 90-day default was chosen for one-shot links. Every update restarts it.
  */
-export const PERSISTENT_LINK_TTL_SECONDS = 365 * 86400;
+const PERSISTENT_LINK_TTL_SECONDS = 365 * 86400;
 
-export type PublishOutcome =
+type PublishOutcome =
     /** First link for this trip. */
     | { kind: "created"; url: string; }
     /** Same id and key as before; whoever holds the old link now gets this version. */
@@ -47,7 +47,7 @@ export type PublishOutcome =
      */
     | { kind: "unreachable"; };
 
-export type RevokeOutcome = "revoked" | "unreachable";
+type RevokeOutcome = "revoked" | "unreachable";
 
 function isoOrNull(epochMs: number | null): string | null {
     return epochMs === null ? null : new Date(epochMs).toISOString();

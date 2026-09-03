@@ -1,4 +1,5 @@
 import type { TripData } from "$lib/domain/trip";
+import { createLocalStorageStub } from "$lib/testing/stubs";
 import {
     afterEach,
     beforeEach,
@@ -21,16 +22,6 @@ import {
     saveGeminiModelFilter,
     sendChatMessage,
 } from "./gemini";
-
-function createLocalStorageStub() {
-    const store = new Map<string, string>();
-    return {
-        getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => void store.set(key, value),
-        removeItem: (key: string) => void store.delete(key),
-        clear: () => store.clear(),
-    };
-}
 
 const tripData: TripData = {
     trip: { name: "Test Trip", id: "t-test", start: "2026-06-11", end: "2026-06-13", departure: "2026-06-11T14:00:00+08:00", hotels: [] },

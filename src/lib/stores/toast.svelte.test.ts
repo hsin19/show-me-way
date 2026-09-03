@@ -1,3 +1,4 @@
+import { stubWindowTimers } from "$lib/testing/stubs";
 import {
     afterEach,
     beforeEach,
@@ -17,11 +18,7 @@ import {
 describe("toast stack", () => {
     beforeEach(() => {
         vi.useFakeTimers();
-        // showToast schedules via window.setTimeout; node has no window, so
-        // delegate to the (fake-timer-patched) global setTimeout at call time.
-        vi.stubGlobal("window", {
-            setTimeout: (handler: () => void, timeout?: number) => setTimeout(handler, timeout),
-        });
+        stubWindowTimers();
     });
 
     afterEach(() => {
@@ -265,9 +262,7 @@ describe("toast stack", () => {
 describe("shareOrCopyToClipboard", () => {
     beforeEach(() => {
         vi.useFakeTimers();
-        vi.stubGlobal("window", {
-            setTimeout: (handler: () => void, timeout?: number) => setTimeout(handler, timeout),
-        });
+        stubWindowTimers();
     });
 
     afterEach(() => {

@@ -1,3 +1,4 @@
+import { createLocalStorageStub } from "$lib/testing/stubs";
 // The sync executor: `decideSyncAction` decides, this layer carries the decision out
 // against Drive and the record store. `gdrive.test.ts` covers the decision truth table;
 // what is only reachable here is whether the right request goes out, whether the record
@@ -32,20 +33,6 @@ let sync: SyncModule["gdriveSync"];
 const TRIP = "p-tokyo";
 const YAML_A = "trip:\n  name: 東京\ndays:\n  - date: '2026-10-01'\n";
 const YAML_B = "trip:\n  name: 東京改\ndays:\n  - date: '2026-10-01'\n";
-
-function createLocalStorageStub() {
-    const store = new Map<string, string>();
-    return {
-        get length() {
-            return store.size;
-        },
-        key: (i: number) => [...store.keys()][i] ?? null,
-        getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => void store.set(key, value),
-        removeItem: (key: string) => void store.delete(key),
-        clear: () => store.clear(),
-    };
-}
 
 /** A fetch stub that answers by URL+method, so tests assert on shape not call order. */
 function createDriveStub(routes: {

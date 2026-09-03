@@ -6,8 +6,7 @@
 check.yml   workflow_call → check: format · lint · typecheck · knip · unit tests
                                    · build → Codecov upload
                           → e2e:   Playwright smoke (parallel with check)
-pr.yml      pull_request  → check.yml · dependency-review
-                          → auto-merge (Dependabot) | jules-fix (on failure)
+pr.yml      pull_request  → check.yml → auto-merge (Dependabot)
 deploy.yml  push to main  → check.yml → build (BASE_PATH) → deploy to GitHub Pages
 ```
 
@@ -32,7 +31,7 @@ instead of hiding inside a long step list. It builds its own `dist`, since a
 separate runner has none to reuse — which is why `E2E_SKIP_BUILD`, the local
 chain's shortcut, has no counterpart in CI.
 
-`pr.yml` gates pull requests (`check.yml` plus dependency review); `deploy.yml`
+`pr.yml` gates pull requests with `check.yml`; `deploy.yml`
 verifies and ships to GitHub Pages on every push to `main`. It calls `check.yml`
 first — so a commit pushed straight to `main`, never having been a PR, still gets
 the full suite including e2e before it ships — then builds again in its own job.
@@ -56,21 +55,17 @@ token, **not** the default `GITHUB_TOKEN`) so the resulting push to `main`
 triggers `deploy.yml`. A push made with `GITHUB_TOKEN` would not — GitHub never
 lets a `GITHUB_TOKEN` push start another workflow.
 
-> `AUTOMERGE_TOKEN` and `JULES_API_KEY` must live in **Dependabot** secrets
-> (Settings → Secrets and variables → Dependabot), not Actions secrets —
-> Dependabot-triggered runs only see the Dependabot secret store.
+> `AUTOMERGE_TOKEN` must live in **Dependabot** secrets (Settings → Secrets and
+> variables → Dependabot), not Actions secrets — Dependabot-triggered runs only
+> see the Dependabot secret store.
 
 `AUTOMERGE_TOKEN` is a fine-grained PAT scoped to this repository with
 `contents: read/write` and `pull requests: read/write` permissions (or a classic
 PAT with `repo` scope). The same PAT as InTheGreenYet's can be reused only if
 its repository access list includes this repo. Fine-grained PATs expire (max
 1 year) — an expired token makes auto-merge silently stop merging while CI
-stays green, so track the expiry date.
-
-The `jules-fix` job asks Google Jules to repair a failing Dependabot PR
-(typically peer-dependency skew). It needs `JULES_API_KEY` in Dependabot
-secrets; without it the job fails, which is harmless but noisy — delete the job
-if Jules is not wanted here.
+stays green, so track the expiry date. A red Dependabot PR (typically
+peer-dependency skew) is left for a human; there is no auto-repair job.
 
 ## Coverage → Codecov
 
@@ -85,7 +80,7 @@ reports through `pr.yml`, and the `main` baseline those are diffed against is th
 upload from `deploy.yml`'s call — the only run of the suite on the default branch.
 
 > `CODECOV_TOKEN` is an **Actions** secret (Settings → Secrets and variables →
-> Actions) — unlike the two above. A Dependabot PR therefore cannot read it, so
+> Actions) — unlike `AUTOMERGE_TOKEN`. A Dependabot PR therefore cannot read it, so
 > the upload no-ops there; `fail_ci_if_error: false` on both steps is what keeps
 > that from failing an otherwise green bump.
 

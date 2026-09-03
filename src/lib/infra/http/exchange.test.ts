@@ -1,3 +1,4 @@
+import { createLocalStorageStub } from "$lib/testing/stubs";
 import {
     afterEach,
     beforeEach,
@@ -15,16 +16,6 @@ import {
 } from "./exchange";
 const NOW = new Date("2026-06-11T08:00:00Z").getTime();
 const KEY = "showmeway_exchange_rates_usd";
-
-function createLocalStorageStub() {
-    const store = new Map<string, string>();
-    return {
-        getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => void store.set(key, value),
-        removeItem: (key: string) => void store.delete(key),
-        clear: () => store.clear(),
-    };
-}
 
 function ratesOf(twd: number): ExchangeRates {
     return { date: "2026-06-11", usd: { twd } };

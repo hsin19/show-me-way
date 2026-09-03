@@ -24,12 +24,8 @@ export interface DailyWeather {
 export type DailyWeatherByDate = Record<string, DailyWeather>;
 
 const GEOCODE_CACHE_KEY = "showmeway_geocode_v1";
-/** Pre-v1 geocode entries ({lat, lon}, no TTL). Only ever removed, never read. */
-const LEGACY_GEOCODE_CACHE_KEY = "showmeway_geocode";
 const FORECAST_CACHE_KEY = "showmeway_weather";
 // Source models refresh every ~3-6 hours, so refetching sooner buys nothing.
-// Exported so a "flag this as stale" threshold elsewhere can be defined relative
-// to it instead of drifting out of sync as an independent literal.
 export const FORECAST_TTL = 1000 * 60 * 60 * 3;
 const GEOCODE_TTL = 1000 * 60 * 60 * 24 * 30;
 const GEOCODE_MISS_TTL = FORECAST_TTL;
@@ -47,14 +43,9 @@ export function resetWeatherCacheForTests(): void {
 
 /** The keys this cache occupies right now, so App 設定 can size it without knowing their shape. */
 export function weatherCacheKeys(): string[] {
-    // Deduped: the legacy prefix is also a prefix of the v1 keys, so every v1
-    // entry matches twice and the caller would double-count it.
     return [
-        ...new Set([
-            ...cachedKeysWithPrefix(`${GEOCODE_CACHE_KEY}_`),
-            ...cachedKeysWithPrefix(`${LEGACY_GEOCODE_CACHE_KEY}_`),
-            ...cachedKeysWithPrefix(`${FORECAST_CACHE_KEY}_`),
-        ]),
+        ...cachedKeysWithPrefix(`${GEOCODE_CACHE_KEY}_`),
+        ...cachedKeysWithPrefix(`${FORECAST_CACHE_KEY}_`),
     ];
 }
 
@@ -122,8 +113,6 @@ function parseCityQuery(city: string): { name: string; countryCode: string | nul
 // cached — those are worth retrying.
 async function geocodeCity(city: string): Promise<GeoPoint | null> {
     const key = `${GEOCODE_CACHE_KEY}_${cityKey(city)}`;
-    // Pre-v1 entries ({lat, lon}, no TTL) are unreadable now — clear, don't migrate.
-    localStorage.removeItem(`${LEGACY_GEOCODE_CACHE_KEY}_${cityKey(city)}`);
     const cached = readCachedJson(key, isValidGeocodeEntry);
     const now = Date.now();
     if (cached && isFresh(cached.cachedAt, GEOCODE_TTL, now)) {

@@ -82,7 +82,7 @@ type TokenMode =
     | "interactive";
 
 /** Where the cloud trip list stands, so the switcher can render one row instead of guessing. */
-export type CloudListState = "idle" | "loading" | "ready" | "failed";
+type CloudListState = "idle" | "loading" | "ready" | "failed";
 
 /**
  * What the cloud button's next tap means, decided by `cloudActionFor` from this module's

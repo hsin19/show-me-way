@@ -19,7 +19,7 @@ const DISMISS_COOL_OFF_MS = 7 * 24 * 60 * 60 * 1000;
 const FALLBACK_DELAY_MS = 3500;
 const TOAST_MS = 10000;
 
-export interface BeforeInstallPromptEvent extends Event {
+interface BeforeInstallPromptEvent extends Event {
     prompt: () => Promise<void>;
     userChoice: Promise<{ outcome: "accepted" | "dismissed"; }>;
 }

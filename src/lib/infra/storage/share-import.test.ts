@@ -1,3 +1,4 @@
+import { createLocalStorageStub } from "$lib/testing/stubs";
 // The branching a share link goes through before anything is written. Both entry points
 // (the `#s=` hash on startup, and pasting the link into the YAML editor) run this, and the
 // property under test throughout is that the incoming trip never silently inherits the
@@ -27,16 +28,6 @@ import {
     listYamlBackups,
     USER_YAML_KEY,
 } from "./yaml-storage";
-
-function createLocalStorageStub() {
-    const store = new Map<string, string>();
-    return {
-        getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => void store.set(key, value),
-        removeItem: (key: string) => void store.delete(key),
-        clear: () => store.clear(),
-    };
-}
 
 function trip(name: string, id?: string): TripData {
     return validateYaml([

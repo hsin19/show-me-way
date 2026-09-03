@@ -1,5 +1,6 @@
 import { validateYaml } from "$lib/domain/trip";
 import { USER_YAML_KEY } from "$lib/infra/storage/yaml-storage";
+import { createLocalStorageStub } from "$lib/testing/stubs";
 import {
     afterEach,
     beforeEach,
@@ -39,16 +40,6 @@ const SPA_FALLBACK_HTML = "<!doctype html>\n<html><head><title>ShowMeWay</title>
 
 const LOCAL_URL = "./itinerary.local.yaml";
 const BUNDLED_URL = "./itinerary.yaml";
-
-function createLocalStorageStub() {
-    const store = new Map<string, string>();
-    return {
-        getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => void store.set(key, value),
-        removeItem: (key: string) => void store.delete(key),
-        clear: () => store.clear(),
-    };
-}
 
 /** Stub global fetch so each candidate URL resolves per the given plan. */
 function stubFetch(plan: Record<string, () => Promise<Response>>) {

@@ -4,7 +4,7 @@ import {
     test,
 } from "./fixtures";
 
-// 刪除／復原流程：App.svelte 的刪除 handler 會先 persist、再以帶「復原」動作的
+// 刪除／復原流程：TripStore.deleteWithUndo 會先 persist、再以帶「復原」動作的
 // toast（role=status，4500ms 窗口）提供 undo，undo 透過 insertAtClamped 把快照
 // 插回原本的 index。刪除與復原之間不可 reload 或切換分頁 — toast 狀態只存在
 // 記憶體中。

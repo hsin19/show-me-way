@@ -8,7 +8,7 @@
 // still evicts the oldest, so an undo can be crowded out by three of them.
 
 /** Picks the leading glyph. `update` is the PWA new-version notice. */
-export type ToastKind = "success" | "update" | "download";
+type ToastKind = "success" | "update" | "download";
 
 export type ToastInput = string | {
     message: string;

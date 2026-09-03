@@ -1,4 +1,5 @@
 import { openShareToken } from "$lib/domain/share-crypto";
+import { createLocalStorageStub } from "$lib/testing/stubs";
 import {
     afterEach,
     beforeEach,
@@ -13,15 +14,6 @@ import {
 async function freshStore() {
     vi.resetModules();
     return (await import("./share-link.svelte")).shareLinks;
-}
-
-function createLocalStorageStub() {
-    const store = new Map<string, string>();
-    return {
-        getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => void store.set(key, value),
-        removeItem: (key: string) => void store.delete(key),
-    };
 }
 
 type Call = { method: string; url: string; body: string | undefined; auth: string | null; };

@@ -133,8 +133,6 @@ const checklistItemSchema = v.object({
     // Optional for the same reason as an event's `desc`.
     text: v.optional(text(`項目文字，${MARKDOWN_HINT}`)),
     checked: v.optional(v.pipe(v.boolean(), v.description("是否已勾選 (選填，預設 false)。App 會隨勾選狀態寫回這個欄位。"))),
-    // Read once by `TripStore.load()`'s legacy-key migration, then dropped on save.
-    id: deprecated(v.string(), "舊版項目識別碼，App 存檔時會移除。"),
 });
 
 const expenseSchema = v.object({

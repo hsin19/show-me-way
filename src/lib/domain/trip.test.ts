@@ -606,12 +606,11 @@ describe("serializeToYaml 與 round-trip", () => {
         "todo:",
         "  - text: '換錢'",
         "    checked: true",
-        "    id: 'legacy-1'",
         "packing:",
         "  - text: '充電器'",
     ].join("\n");
 
-    it("剝除 runtime _id 與 legacy checklist id，且不輸出 trip.start、trip.end、trip.departure 與 day.day", () => {
+    it("剝除 runtime _id，且不輸出 trip.start、trip.end、trip.departure 與 day.day", () => {
         const data = validateYaml(richYaml);
         expect(data.days[0]?.timeline[0]?._id).toBeTruthy();
         expect(data.todo[0]?._id).toBeTruthy();
@@ -622,7 +621,6 @@ describe("serializeToYaml 與 round-trip", () => {
 
         const yaml = serializeToYaml(data);
         expect(yaml).not.toContain("_id");
-        expect(yaml).not.toContain("legacy-1");
         expect(yaml).not.toMatch(/^\s+start:/m);
         expect(yaml).not.toMatch(/^\s+end:/m);
         expect(yaml).not.toMatch(/^\s+departure:/m);

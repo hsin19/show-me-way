@@ -1,3 +1,4 @@
+import { createLocalStorageStub } from "$lib/testing/stubs";
 // The module keeps session state (`deferredPrompt`, `initialized`, `toastShown`)
 // that no exported function resets — by design, since a page load is the only
 // thing that should. Every test therefore re-imports it through
@@ -25,16 +26,6 @@ const TOAST_MS = 10000;
 
 const MAC_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)";
 const IPHONE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)";
-
-function createLocalStorageStub() {
-    const store = new Map<string, string>();
-    return {
-        getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => void store.set(key, value),
-        removeItem: (key: string) => void store.delete(key),
-        clear: () => store.clear(),
-    };
-}
 
 /** Captures listeners so a test can fire `beforeinstallprompt` by hand. */
 function createWindowStub({ standalone = false } = {}) {

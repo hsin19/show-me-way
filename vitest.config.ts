@@ -35,7 +35,7 @@ export default defineConfig({
             // `App.svelte`'s helpers) would report every one of them at 0% and bury
             // the number this is here to track -- Playwright is their coverage.
             include: ["src/lib/**/*.ts"],
-            exclude: ["src/lib/**/*.test.ts"],
+            exclude: ["src/lib/**/*.test.ts", "src/lib/testing/**"],
         },
     },
 });

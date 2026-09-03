@@ -1,3 +1,4 @@
+import { createLocalStorageStub } from "$lib/testing/stubs";
 import {
     afterEach,
     beforeEach,
@@ -12,15 +13,6 @@ import {
     SHARE_LINKS_KEY,
     type ShareLinkRecord,
 } from "./share-links";
-
-function createLocalStorageStub() {
-    const store = new Map<string, string>();
-    return {
-        getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => void store.set(key, value),
-        removeItem: (key: string) => void store.delete(key),
-    };
-}
 
 const RECORD: ShareLinkRecord = {
     id: "abcd1234",

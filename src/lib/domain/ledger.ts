@@ -145,29 +145,6 @@ export function twdToForeign(twdValue: string, exchangeRate: number): string {
     return Math.round(twd * exchangeRate).toString();
 }
 
-/**
- * Coerce whatever the legacy `ledger_expenses` key holds into usable records.
- * Nothing is trusted and nothing throws: a bad entry is skipped and a bad field
- * takes a default, because a decade-old localStorage value is not worth failing
- * a boot over.
- */
-export function parseLegacyExpenses(raw: unknown, today: string, makeId: () => string): ExpenseItem[] {
-    if (!Array.isArray(raw)) return [];
-    const out: ExpenseItem[] = [];
-    for (const entry of raw) {
-        if (!entry || typeof entry !== "object") continue;
-        const r = entry as Partial<Record<"name" | "amount" | "type" | "date", unknown>>;
-        out.push({
-            name: typeof r.name === "string" ? r.name : "",
-            amount: typeof r.amount === "number" ? r.amount : 0,
-            type: typeof r.type === "string" ? r.type : "Cash",
-            date: typeof r.date === "string" ? r.date : today,
-            _id: makeId(),
-        });
-    }
-    return out;
-}
-
 /** `-` goes before the symbol (`-NT$1,200`), the way the wallet rows have always shown negatives. */
 export function formatAmount(symbol: string, amount: number): string {
     return `${amount < 0 ? "-" : ""}${symbol}${Math.abs(amount).toLocaleString()}`;

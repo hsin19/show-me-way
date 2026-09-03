@@ -347,11 +347,6 @@
           "checked": {
             "type": "boolean",
             "description": "是否已勾選 (選填，預設 false)。App 會隨勾選狀態寫回這個欄位。"
-          },
-          "id": {
-            "type": "string",
-            "description": "[已過時 / Deprecated] 舊版項目識別碼，App 存檔時會移除。",
-            "deprecated": true
           }
         },
         "additionalProperties": false
@@ -370,11 +365,6 @@
           "checked": {
             "type": "boolean",
             "description": "是否已勾選 (選填，預設 false)。App 會隨勾選狀態寫回這個欄位。"
-          },
-          "id": {
-            "type": "string",
-            "description": "[已過時 / Deprecated] 舊版項目識別碼，App 存檔時會移除。",
-            "deprecated": true
           }
         },
         "additionalProperties": false

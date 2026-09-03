@@ -1,7 +1,4 @@
-import {
-    buildLedgerCsv,
-    parseLegacyExpenses,
-} from "$lib/domain/ledger";
+import { buildLedgerCsv } from "$lib/domain/ledger";
 import { getLanguageConfig } from "$lib/domain/phrases";
 import {
     clearShareHash,
@@ -20,8 +17,8 @@ import {
     validateYaml,
 } from "$lib/domain/trip";
 import {
+    getTodayIsoString,
     insertAtClamped,
-    toLocalIsoDate,
 } from "$lib/domain/utils";
 import { migrateGdriveSyncState } from "$lib/infra/http/gdrive";
 import {
@@ -46,7 +43,6 @@ import {
     saveTripData,
     USER_YAML_KEY,
 } from "$lib/infra/storage/yaml-storage";
-import { SvelteDate } from "svelte/reactivity";
 import { gdriveSync } from "./gdrive.svelte";
 import { settingsDraft } from "./settings-draft.svelte";
 import { shareLinks } from "./share-link.svelte";
@@ -57,51 +53,7 @@ import {
 import { weatherStore } from "./weather.svelte";
 
 function exportDateStamp(): string {
-    return toLocalIsoDate(new SvelteDate()).replaceAll("-", "");
-}
-
-// Older versions kept checked-state in its own localStorage keys. Runs once —
-// the keys are removed on the way out — and reports whether a save is owed.
-function migrateLegacyChecklistState(data: TripData): boolean {
-    let migrated = false;
-    const legacy: Array<["todo" | "packing", string]> = [
-        ["todo", "todo_state"],
-        ["packing", "packing_state"],
-    ];
-    for (const [listKey, storageKey] of legacy) {
-        const saved = localStorage.getItem(storageKey);
-        if (!saved) continue;
-        try {
-            const map = JSON.parse(saved) as Record<string, boolean>;
-            for (const item of data[listKey]) {
-                const legacyId = (item as { id?: string; }).id;
-                if (legacyId && legacyId in map) item.checked = map[legacyId];
-            }
-            migrated = true;
-        } catch (e) {
-            console.error("Failed to migrate legacy checklist state:", e);
-        }
-        localStorage.removeItem(storageKey);
-    }
-    return migrated;
-}
-
-// Older versions kept expense records in their own localStorage key; in the YAML
-// they travel with the trip profile instead. Runs once — the key is removed on
-// the way out — and reports whether a save is owed.
-function migrateLegacyLedger(data: TripData): boolean {
-    const saved = localStorage.getItem("ledger_expenses");
-    if (saved === null) return false;
-    try {
-        const parsed: unknown = JSON.parse(saved);
-        if (data.expenses.length === 0) {
-            data.expenses.push(...parseLegacyExpenses(parsed, toLocalIsoDate(new SvelteDate()), createExpenseId));
-        }
-    } catch (e) {
-        console.error("Failed to migrate legacy ledger:", e);
-    }
-    localStorage.removeItem("ledger_expenses");
-    return true;
+    return getTodayIsoString().replaceAll("-", "");
 }
 
 /** Say the upload happened, on both the clipboard and the share-sheet path — the privacy policy promises the user is told when data leaves the device. */
@@ -168,11 +120,10 @@ export class TripStore {
             weatherStore.loadTrip(data.days, data.trip.city);
 
             migrateGdriveSyncState();
-            let migrated = migrateLegacyChecklistState(data);
-            if (migrateLegacyLedger(data)) migrated = true;
+            // A trip stored before ids existed gets its minted id persisted once;
+            // an identity that changes every launch is worse than none.
             const storedYaml = localStorage.getItem(USER_YAML_KEY);
-            if (storedYaml !== null && tripIdFromYaml(storedYaml) !== data.trip.id) migrated = true;
-            if (migrated) this.persist();
+            if (storedYaml !== null && tripIdFromYaml(storedYaml) !== data.trip.id) this.persist();
         } catch (err) {
             console.error("Failed to load trip data:", err);
             // Drop the previous trip too: with it still here, the tools tab keeps rendering it and the
@@ -299,7 +250,7 @@ export class TripStore {
             name,
             amount,
             type,
-            date: date || toLocalIsoDate(new SvelteDate()),
+            date: date || getTodayIsoString(),
         });
         this.persist();
     }

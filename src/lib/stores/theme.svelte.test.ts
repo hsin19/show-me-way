@@ -1,3 +1,4 @@
+import { createLocalStorageStub } from "$lib/testing/stubs";
 import {
     afterEach,
     beforeEach,
@@ -19,16 +20,6 @@ import {
 // the stylesheet, so these only need to be distinguishable.
 const DARK_CHROME = "#0f172a";
 const LIGHT_CHROME = "#ece5d8";
-
-function createLocalStorageStub() {
-    const store = new Map<string, string>();
-    return {
-        getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => void store.set(key, value),
-        removeItem: (key: string) => void store.delete(key),
-        clear: () => store.clear(),
-    };
-}
 
 /** Fake `prefers-color-scheme: dark` list whose `matches` can be flipped, and
  *  whose registered change listener can be fired by hand. */

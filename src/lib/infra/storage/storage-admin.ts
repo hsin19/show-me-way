@@ -29,7 +29,7 @@ export { clearYamlBackups } from "./yaml-storage";
 /** Every key this app writes carries this prefix, except the two cases below. */
 const APP_KEY_PREFIX = "showmeway_";
 
-/** Swept too, so a copy that outlived a failed migration cannot sit there with nothing left to read it. */
+/** Written by 2026-06 builds and long since migrated into the YAML; the migration is gone, so this sweep is all that can still remove a stray copy. */
 const LEGACY_KEYS = ["todo_state", "packing_state", "ledger_expenses"];
 
 interface CategoryStorageStats {

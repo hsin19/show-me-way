@@ -1,3 +1,4 @@
+import { createLocalStorageStub } from "$lib/testing/stubs";
 import {
     afterEach,
     beforeEach,
@@ -18,20 +19,6 @@ import {
     readCachedJson,
     writeCachedJson,
 } from "./storage-cache";
-
-function createLocalStorageStub() {
-    const store = new Map<string, string>();
-    return {
-        getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => void store.set(key, value),
-        removeItem: (key: string) => void store.delete(key),
-        clear: () => store.clear(),
-        key: (i: number) => Array.from(store.keys())[i] ?? null,
-        get length() {
-            return store.size;
-        },
-    };
-}
 
 interface Entry {
     n: number;
@@ -70,17 +57,6 @@ describe("getStorageSummary", () => {
         expect(summary.totalBytes).toBe(
             summary.apiCache.sizeBytes + summary.backups.sizeBytes + summary.other.sizeBytes,
         );
-    });
-
-    it("counts pre-v1 geocode entries as API cache", () => {
-        storage.setItem("showmeway_geocode_tokyo", '{"lat":35}');
-        expect(getStorageSummary().apiCache.keyCount).toBe(1);
-    });
-
-    it("counts a v1 geocode entry once, though the legacy prefix matches it too", () => {
-        storage.setItem("showmeway_geocode_v1_tokyo", '{"lat":35}');
-        storage.setItem("showmeway_geocode_osaka", '{"lat":34}');
-        expect(getStorageSummary().apiCache.keyCount).toBe(2);
     });
 
     it("sizes entries in UTF-16 code units, matching how browsers bill the quota", () => {

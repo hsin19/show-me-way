@@ -1,3 +1,4 @@
+import { createLocalStorageStub } from "$lib/testing/stubs";
 // `createModelPicker` registers an `$effect`, so every test mounts it inside an
 // `$effect.root` and drives it with `flushSync` — the `.svelte.` infix in this
 // filename is what makes the plugin compile those runes.
@@ -17,16 +18,6 @@ import {
     vi,
 } from "vitest";
 import { createModelPicker } from "./gemini-models.svelte";
-
-function createLocalStorageStub() {
-    const store = new Map<string, string>();
-    return {
-        getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => void store.set(key, value),
-        removeItem: (key: string) => void store.delete(key),
-        clear: () => store.clear(),
-    };
-}
 
 function modelsResponse(names: string[]) {
     return {

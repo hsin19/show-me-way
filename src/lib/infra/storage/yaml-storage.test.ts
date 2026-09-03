@@ -1,3 +1,4 @@
+import { createLocalStorageStub } from "$lib/testing/stubs";
 // The backup ring behind the only undo in the app: every destructive overwrite of
 // showmeway_user_yaml snapshots the outgoing copy here first, newest first, max 5.
 
@@ -16,17 +17,6 @@ import {
     USER_YAML_KEY,
     YAML_BACKUPS_KEY,
 } from "./yaml-storage";
-
-function createLocalStorageStub() {
-    const store = new Map<string, string>();
-    return {
-        getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => void store.set(key, value),
-        removeItem: (key: string) => void store.delete(key),
-        clear: () => store.clear(),
-        _store: store,
-    };
-}
 
 describe("backupCurrentYaml / listYamlBackups / getYamlBackup", () => {
     let storage: ReturnType<typeof createLocalStorageStub>;

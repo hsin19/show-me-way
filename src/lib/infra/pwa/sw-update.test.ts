@@ -1,3 +1,4 @@
+import { stubWindowTimers } from "$lib/testing/stubs";
 // The module keeps session state (`swRegistration`, `lastSwUpdateCheck`,
 // `initialized`) that no exported function resets — by design, since a page
 // load is the only thing that should. Every test therefore re-imports it
@@ -55,17 +56,6 @@ function registerWith(registration: ServiceWorkerRegistration) {
     getRegisterOptions()?.onRegisteredSW?.("/sw.js", registration);
 }
 
-// The module (and toast.svelte's own `window.setTimeout` for a non-persistent
-// toast) both reach `window` directly, which `environment: "node"` does not
-// provide. Delegating to the bare (fake-timer-patched) globals keeps
-// `vi.advanceTimersByTime` in control of both.
-function stubWindow() {
-    vi.stubGlobal("window", {
-        setInterval: (handler: () => void, timeout?: number) => setInterval(handler, timeout),
-        setTimeout: (handler: () => void, timeout?: number) => setTimeout(handler, timeout),
-    });
-}
-
 async function loadModule() {
     vi.resetModules();
     registerSWMock.mockClear();
@@ -76,7 +66,7 @@ async function loadModule() {
 
 describe("sw-update module", () => {
     beforeEach(async () => {
-        stubWindow();
+        stubWindowTimers();
         vi.stubGlobal("navigator", { onLine: true });
         await loadModule();
         vi.useFakeTimers();

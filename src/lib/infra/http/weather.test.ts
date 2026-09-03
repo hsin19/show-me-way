@@ -1,3 +1,4 @@
+import { createLocalStorageStub } from "$lib/testing/stubs";
 import {
     afterEach,
     beforeEach,
@@ -88,16 +89,6 @@ const GEOCODE_TTL = 1000 * 60 * 60 * 24 * 30;
 const NOW = new Date("2026-06-11T08:00:00Z").getTime();
 const FORECAST_KEY = "showmeway_weather_tokyo";
 const GEOCODE_KEY = "showmeway_geocode_v1_tokyo";
-
-function createLocalStorageStub() {
-    const store = new Map<string, string>();
-    return {
-        getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => void store.set(key, value),
-        removeItem: (key: string) => void store.delete(key),
-        clear: () => store.clear(),
-    };
-}
 
 function forecastOf(tempMax: number): DailyWeatherByDate {
     return { "2026-06-11": { code: 0, tempMax, tempMin: 20, precipProb: 10 } };

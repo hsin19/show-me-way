@@ -2,6 +2,10 @@ import { encodeShareToken } from "$lib/domain/share";
 import { sealShareToken } from "$lib/domain/share-crypto";
 import { validateYaml } from "$lib/domain/trip";
 import {
+    createLocalStorageStub,
+    stubWindowTimers,
+} from "$lib/testing/stubs";
+import {
     afterEach,
     beforeEach,
     describe,
@@ -35,25 +39,13 @@ packing:
 expenses: []
 `;
 
-function createLocalStorageStub() {
-    const store = new Map<string, string>();
-    return {
-        getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => void store.set(key, value),
-        removeItem: (key: string) => void store.delete(key),
-        clear: () => store.clear(),
-    };
-}
-
 describe("TripStore", () => {
     let store: TripStore;
     const originalLocalStorage = globalThis.localStorage;
 
     beforeEach(() => {
-        globalThis.localStorage = createLocalStorageStub() as unknown as Storage;
-        vi.stubGlobal("window", {
-            setTimeout: (handler: () => void, timeout?: number) => setTimeout(handler, timeout),
-        });
+        globalThis.localStorage = createLocalStorageStub();
+        stubWindowTimers();
         store = new TripStore();
         store.data = validateYaml(TEST_YAML);
     });
