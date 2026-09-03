@@ -444,7 +444,7 @@ function handleFullReset() {
     <div class="grid grid-cols-2 gap-2">
         {@render storageTile(
             "API 快取",
-            "天氣與匯率，清除後重抓",
+            "天氣預報，清除後重抓",
             CloudOff,
             storageSummary.apiCache,
             handleClearApiCache,

@@ -135,13 +135,6 @@ const checklistItemSchema = v.object({
     checked: v.optional(v.pipe(v.boolean(), v.description("是否已勾選 (選填，預設 false)。App 會隨勾選狀態寫回這個欄位。"))),
 });
 
-const expenseSchema = v.object({
-    name: text("消費項目名稱"),
-    amount: v.pipe(v.number(), v.description("金額 (當地幣別整數)")),
-    type: text("支付方式：錢包/卡片名稱、Cash，或加值 Deposit-<錢包> / Deposit-Cash"),
-    date: text("日期 (YYYY-MM-DD)"),
-});
-
 const tripSchema = v.object({
     name: v.pipe(v.string(), v.minLength(1), v.description("行程名稱")),
     id: v.optional(v.pipe(
@@ -152,19 +145,17 @@ const tripSchema = v.object({
     start: deprecated(v.string(), "不需填寫。App 會自動取 days 中最早的 date 作為出發日期。"),
     end: deprecated(v.string(), "不需填寫。App 會自動取 days 中最晚的 date 作為回程日期。"),
     departure: deprecated(v.string(), "不需填寫。App 會自動以第一天的第一個行程時間作為首頁倒數計時的目標。"),
-    // Any string loads -- `phrases.ts` falls back to English for a code it does not know -- so the enum is an editor hint, not a gate.
+    // Any string loads -- `language.ts` falls back to English for a code it does not know -- so the enum is an editor hint, not a gate.
     lang: v.optional(v.pipe(
         v.string(),
-        v.description("目的地語言代碼，用於選擇內建的實用常用語與計程車司機提示 (ko=韓文, ja=日文, en=英文)。未設定或不支援時預設為英文 (en)。"),
+        v.description("目的地語言代碼，決定放大給計程車司機看的卡片標題語言 (ko=韓文, ja=日文, en=英文)。未設定或不支援時預設為英文 (en)。"),
         v.metadata({ enum: ["ko", "ja", "en"] }),
     )),
-    currency: v.optional(text("記帳功能使用的貨幣代碼 (例如: KRW, JPY, USD)。未設定時預設為 TWD。")),
     mapProvider: v.optional(v.pipe(
         v.picklist(["naver", "google"]),
         v.description("地圖搜尋使用的服務 (選填)。韓國因地圖法規建議設 naver，未設定時預設使用 Google Maps。"),
     )),
     city: v.optional(text("目的地城市，用於查詢每日天氣預報 (選填，未設定或留空字串時不顯示天氣)。建議使用英文名稱 (例如: Tokyo, Seoul, Osaka)；中文名稱僅部分可查 (東京、京都可，首爾、大阪、釜山等查不到或比對錯國家)。同名城市可加兩碼國碼後綴消歧 (例如: 'Springfield, US')。可在個別 day 以 city 覆蓋 (多城市行程)。")),
-    wallets: v.optional(v.pipe(v.array(v.string()), v.description("記帳使用的自訂電子錢包/卡片清單 (例如: Suica, WOWPASS。現金預設會自動存在)"))),
     hotels: v.array(hotelSchema),
 });
 
@@ -174,7 +165,6 @@ export const itinerarySchema = v.object({
     days: v.pipe(v.array(daySchema), v.minLength(1), v.description("每日行程細節列表 (順序不敏感，系統會自動按日期排序並補齊中間空白天)")),
     todo: v.optional(v.pipe(v.array(checklistItemSchema), v.description("行前待辦清單"))),
     packing: v.optional(v.pipe(v.array(checklistItemSchema), v.description("隨身行李與打包清單"))),
-    expenses: v.optional(v.pipe(v.array(expenseSchema), v.description("記帳消費紀錄 (通常由 App 自動維護，亦可手動編輯)"))),
 });
 
 export type ItineraryDocument = v.InferOutput<typeof itinerarySchema>;

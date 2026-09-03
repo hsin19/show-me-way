@@ -37,7 +37,7 @@ export function clearGeminiModelsMemory(): void {
 }
 
 // Every accessor below swallows storage failures (quota, private mode, blocked
-// storage) rather than throwing into the UI — same policy as exchange.ts.
+// storage) rather than throwing into the UI — same policy as weather.ts.
 export function loadGeminiApiKey(): string | null {
     try {
         const key = localStorage.getItem(GEMINI_API_KEY_STORAGE);

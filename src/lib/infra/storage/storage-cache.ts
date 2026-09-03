@@ -1,5 +1,5 @@
-// Leaf helpers shared by `exchange.ts` and `weather.ts`, extracted after the two
-// near-identical copies drifted apart once. Deliberately NOT a generic SWR
+// Leaf helpers for the localStorage-backed caches (`weather.ts`, the Drive user and
+// auto-sync flags), extracted after two near-identical copies drifted apart once. Deliberately NOT a generic SWR
 // engine: the consumers' fetch and refresh shapes differ enough that
 // parameterising them would cost more than it saves (see tech-debt.md).
 

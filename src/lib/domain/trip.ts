@@ -3,7 +3,6 @@ import {
     loadAll as loadYamlDocuments,
 } from "js-yaml";
 import { safeParse } from "valibot";
-import { type ExpenseItem } from "./ledger";
 import {
     formatEventMinutes,
     parseEventStartMinutes,
@@ -61,8 +60,6 @@ export interface TripData {
     todo: ChecklistItem[];
     packing: ChecklistItem[];
     days: DayItinerary[];
-    /** Optional in source YAML, normalized to `[]` on load. Lives in the itinerary YAML so spending travels with the profile and share links. */
-    expenses: ExpenseItem[];
 }
 
 /**
@@ -95,9 +92,6 @@ function attachRuntimeIds(data: TripData): TripData {
     }
     for (const item of data.packing) {
         item._id = `pack-${runtimeIdSeq++}`;
-    }
-    for (const item of data.expenses) {
-        item._id = `exp-${runtimeIdSeq++}`;
     }
     return data;
 }
@@ -232,8 +226,6 @@ function normalizeTripData(raw: unknown): TripData {
     }
     filledDays.forEach((day, index) => day.day = index + 1);
 
-    // Ledger renders one option per wallet keyed by name, and a duplicate key throws in production.
-    if (doc.trip.wallets) doc.trip.wallets = [...new Set(doc.trip.wallets)];
     // `id` sits right after `name` whether authored or minted, for the same round-trip stability as `pace`.
     const { name, id, ...rest } = doc.trip;
     const firstDay = filledDays[0]!;
@@ -252,7 +244,6 @@ function normalizeTripData(raw: unknown): TripData {
         days: filledDays,
         todo: doc.todo ?? [],
         packing: doc.packing ?? [],
-        expenses: doc.expenses ?? [],
     };
 
     return attachRuntimeIds(normalized);
@@ -275,7 +266,7 @@ export function serializeToYaml(data: TripData): string {
             delete ev._id;
         }
     }
-    for (const item of [...clean.todo, ...clean.packing, ...clean.expenses]) {
+    for (const item of [...clean.todo, ...clean.packing]) {
         delete item._id;
     }
 
@@ -292,11 +283,6 @@ export function serializeToYaml(data: TripData): string {
 /** `_id` for an item created at runtime: unique for the session, and stripped again on save. */
 export function createChecklistItemId(prefix: "todo" | "pack"): string {
     return `${prefix}-${runtimeIdSeq++}`;
-}
-
-/** `_id` for a record created at runtime: unique for the session, and stripped again on save. */
-export function createExpenseId(): string {
-    return `exp-${runtimeIdSeq++}`;
 }
 
 /**

@@ -1,11 +1,5 @@
 <script lang="ts">
-import {
-    computeLedgerTotals,
-    type ExpenseItem,
-    formatAmount,
-    getCurrencyConfig,
-} from "$lib/domain/ledger";
-import { getLanguageConfig } from "$lib/domain/phrases";
+import { getLanguageConfig } from "$lib/domain/language";
 import { isOvernightStay } from "$lib/domain/timeline";
 import type {
     DayItinerary,
@@ -28,7 +22,6 @@ import ListChecks from "@lucide/svelte/icons/list-checks";
 import Loader2 from "@lucide/svelte/icons/loader-2";
 import Maximize2 from "@lucide/svelte/icons/maximize-2";
 import Share2 from "@lucide/svelte/icons/share-2";
-import Wallet from "@lucide/svelte/icons/wallet";
 import HotelCards from "./HotelCards.svelte";
 import WeatherBadge from "./WeatherBadge.svelte";
 
@@ -41,7 +34,6 @@ interface Props {
     todayIso: string;
     prepDone: number;
     prepTotal: number;
-    expenses: ExpenseItem[];
     profiles?: ProfileInfo[];
     /** Null hides the badge, same contract as Timeline. */
     weatherFor: (day: DayItinerary) => DailyWeather | null;
@@ -50,7 +42,6 @@ interface Props {
     onEnlarge: (card: EnlargedCard) => void;
     /** Deep-links out of the phase card into a 工具 sub-page. */
     onOpenPrepare: () => void;
-    onOpenLedger: () => void;
     onShare: () => void;
     /** Building a share link is a hop round trip now, so the button disables while it runs. */
     sharing?: boolean;
@@ -68,13 +59,11 @@ let {
     todayIso,
     prepDone,
     prepTotal,
-    expenses,
     profiles = [],
     weatherFor,
     onSelectDay,
     onEnlarge,
     onOpenPrepare,
-    onOpenLedger,
     onShare,
     sharing = false,
     onSwitchProfile,
@@ -97,9 +86,6 @@ let hotelList = $derived(trip.hotels ?? []);
 let tonightHotel = $derived(hotelList.find(h => isOvernightStay(h, todayIso)) ?? null);
 
 let langConfig = $derived(getLanguageConfig(trip.lang));
-
-let ledgerTotals = $derived(computeLedgerTotals(expenses));
-let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpperCase()).currencySymbol);
 </script>
 
 <div class="panel rounded-2xl p-6 mb-6">
@@ -201,18 +187,6 @@ let currencySymbol = $derived(getCurrencyConfig((trip.currency ?? "TWD").toUpper
             <Maximize2 size={15} aria-hidden="true" />
         </button>
     </div>
-{:else if phase === "after" && expenses.length > 0}
-    <button
-        onclick={onOpenLedger}
-        class="w-full panel rounded-xl p-3.5 mb-6 flex items-center gap-3 text-left hover:bg-tint-2 transition cursor-pointer"
-    >
-        <Wallet size={16} class="shrink-0 text-accent" aria-hidden="true" />
-        <span class="flex-1 min-w-0">
-            <span class="block text-[11px] font-bold text-text-muted">旅程消費總結</span>
-            <span class="block text-sm font-bold text-text-primary">共 {expenses.length} 筆・花費 {formatAmount(currencySymbol, ledgerTotals.totalSpent)}</span>
-        </span>
-        <ChevronRight size={16} class="text-text-muted shrink-0" aria-hidden="true" />
-    </button>
 {/if}
 
 <div class="space-y-2">

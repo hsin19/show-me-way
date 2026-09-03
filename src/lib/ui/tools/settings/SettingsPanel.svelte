@@ -504,7 +504,7 @@ function discardDraft() {
         <ul class="list-disc pl-4 mt-1.5 space-y-1.5">
             <li>貼上 YAML 行程內容，或他人的分享連結，按「儲存並解析」即可匯入；原本的行程會留在下方的備份紀錄。</li>
             <li>清空並儲存會還原為預設的 <a href="./itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-accent underline hover:text-text-primary transition">itinerary.yaml</a>。</li>
-            <li>行程存在這台裝置上。產生分享連結時，行程會先在瀏覽器加密，只有密文上傳到短連結服務；連線 Google 雲端硬碟後，同步會把整份行程（含記帳明細）複製到你自己的 Drive。</li>
+            <li>行程存在這台裝置上。產生分享連結時，行程會先在瀏覽器加密，只有密文上傳到短連結服務；連線 Google 雲端硬碟後，同步會把整份行程複製到你自己的 Drive。</li>
             <li>
                 可用此指令安裝行程小幫手 Skill：
                 <div class="bg-well-deep border border-line rounded px-2 py-1 mt-1 font-mono text-[10px] select-all break-all text-text-primary">
@@ -561,7 +561,7 @@ function discardDraft() {
         </p>
         {#if shareLink && shareLinkUrl}
             <p class="mt-1.5">
-                建立於 {formatBackupTime(shareLink.createdAt)}，最後更新 {formatBackupTime(shareLink.updatedAt)}{shareLink.expiresAt ? `，有效至 ${shareLink.expiresAt.slice(0, 10)}` : ""}。再按一次「更新」會把目前的行程（不含記帳）加密上傳到同一條連結，已分享出去的連結與 QR code 不用換。
+                建立於 {formatBackupTime(shareLink.createdAt)}，最後更新 {formatBackupTime(shareLink.updatedAt)}{shareLink.expiresAt ? `，有效至 ${shareLink.expiresAt.slice(0, 10)}` : ""}。再按一次「更新」會把目前的行程加密上傳到同一條連結，已分享出去的連結與 QR code 不用換。
             </p>
             <div class="grid grid-cols-2 gap-2 mt-2">
                 <button
@@ -611,14 +611,13 @@ function discardDraft() {
         {/if}
     </div>
 
-    <!-- The export carries expenses: it is for the trip's owner. Sharing with other
-         people is the 分享連結 above, which strips them; moving between one's own
-         devices is Drive sync. -->
+    <!-- A file for the trip's owner. Sharing with other people is the 分享連結 above;
+         moving between one's own devices is Drive sync. -->
     <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint">
         <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
             <Download size={12} class="shrink-0 text-accent" aria-hidden="true" />匯出資料
         </p>
-        <p class="mt-1.5">下載成檔案保存（含記帳），避免裝置遺失或清除瀏覽器資料時一併消失；要在多台裝置間同步請連線 Google 雲端硬碟。</p>
+        <p class="mt-1.5">下載成檔案保存，避免裝置遺失或清除瀏覽器資料時一併消失；要在多台裝置間同步請連線 Google 雲端硬碟。</p>
         <button
             onclick={() => tripStore.exportTripYaml()}
             class="w-full min-h-[44px] mt-2 flex items-center justify-center gap-1.5 px-2 rounded-lg bg-tint-1 border border-card-border text-[11px] font-bold text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-center"

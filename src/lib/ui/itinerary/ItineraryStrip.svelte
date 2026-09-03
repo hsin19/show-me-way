@@ -1,5 +1,4 @@
 <script lang="ts">
-import type { ExpenseItem } from "$lib/domain/ledger";
 import {
     findScrollTargetEventIndex,
     formatNextEventLabel,
@@ -28,7 +27,6 @@ interface Props {
     clockNow: Date;
     prepDone: number;
     prepTotal: number;
-    expenses: ExpenseItem[];
     profiles?: ProfileInfo[];
     showWeatherAttribution: boolean;
     staleWeatherHours: number | null;
@@ -38,7 +36,6 @@ interface Props {
     onShareDay: (day: DayItinerary) => void;
     /** Deep-links out of the overview's phase card into a 工具 sub-page. */
     onOpenPrepare: () => void;
-    onOpenLedger: () => void;
     onShare: () => void;
     sharing?: boolean;
     onSwitchProfile?: (id: string) => void;
@@ -55,7 +52,6 @@ let {
     clockNow,
     prepDone,
     prepTotal,
-    expenses,
     profiles = [],
     showWeatherAttribution,
     staleWeatherHours,
@@ -64,7 +60,6 @@ let {
     onSetEventStatus,
     onShareDay,
     onOpenPrepare,
-    onOpenLedger,
     onShare,
     sharing = false,
     onSwitchProfile,
@@ -122,13 +117,11 @@ function positionPanel(day: number, panel: HTMLElement) {
                 {todayIso}
                 {prepDone}
                 {prepTotal}
-                {expenses}
                 {profiles}
                 weatherFor={weatherForDay}
                 onSelectDay={select}
                 {onEnlarge}
                 {onOpenPrepare}
-                {onOpenLedger}
                 {onShare}
                 {sharing}
                 {onSwitchProfile}

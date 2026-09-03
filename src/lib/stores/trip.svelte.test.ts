@@ -29,7 +29,6 @@ import { TripStore } from "./trip.svelte";
 const TEST_YAML = `trip:
   name: 東京之旅
   city: 東京
-  currency: JPY
   start: '2025-05-01'
   end: '2025-05-02'
   departure: '2025-05-01T08:00:00+08:00'
@@ -47,7 +46,6 @@ todo:
 packing:
   - text: 護照
     checked: true
-expenses: []
 `;
 
 describe("TripStore", () => {
@@ -101,32 +99,6 @@ describe("TripStore", () => {
         const newId = store.data!.todo[1]!._id!;
         store.deleteChecklistItem("todo", newId);
         expect(store.data!.todo.length).toBe(1);
-    });
-
-    it("manages trip wallets", () => {
-        expect(store.data!.trip.wallets).toBeUndefined();
-        store.addTripWallet("公費");
-        expect(store.data!.trip.wallets).toEqual(["公費"]);
-
-        // Duplicate wallet ignored
-        store.addTripWallet("公費");
-        expect(store.data!.trip.wallets).toEqual(["公費"]);
-    });
-
-    it("adds, deletes, and resets expenses", () => {
-        store.addExpense("拉麵", 1200, "現金", "2025-05-01");
-        expect(store.data!.expenses.length).toBe(1);
-        expect(store.data!.expenses[0]?.name).toBe("拉麵");
-        expect(store.data!.expenses[0]?.amount).toBe(1200);
-
-        const expId = store.data!.expenses[0]!._id!;
-        store.deleteExpense(expId);
-        expect(store.data!.expenses.length).toBe(0);
-
-        store.addExpense("壽司", 3000, "刷卡");
-        expect(store.data!.expenses.length).toBe(1);
-        store.resetLedger();
-        expect(store.data!.expenses.length).toBe(0);
     });
 
     it("updates timeline event status", () => {

@@ -6,7 +6,7 @@ import {
 } from "./fixtures";
 
 // Smoke suite for the built app (vite build + vite preview): boots the PWA,
-// walks the bottom tabs (行程/工具/AI — 準備/記帳/常用語/行程管理/App 設定 are sub-pages
+// walks the bottom tabs (行程/工具/AI — 準備/行程管理/App 設定 are sub-pages
 // inside 工具) and the overview tool entries, and verifies that edits
 // round-trip through the YAML in localStorage (showmeway_user_yaml) across a
 // reload. All assertions use the app's real Traditional Chinese UI strings —
@@ -92,65 +92,6 @@ test("清單：勾選與新增項目並於重新載入後保留", async ({ page 
     await expect(page.getByRole("checkbox", { name: "新增的測試項目" })).toBeVisible();
 });
 
-test("記帳：新增一筆消費並於重新載入後保留", async ({ page }) => {
-    await seedItinerary(page);
-    await page.goto("/");
-
-    // 記帳是工具分頁的子頁
-    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
-    await page.getByRole("button", { name: "記帳", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "匯率與消費記帳" })).toBeVisible();
-
-    await page.getByLabel("消費項目名稱").fill("測試消費");
-    await page.getByLabel("金額", { exact: true }).fill("100");
-    await page.getByRole("button", { name: "記一筆" }).click();
-
-    // fixture 無 currency → 台幣模式（NT$）；金額出現在紀錄列、現金餘額磚與剩餘餘額磚
-    await expect(page.getByText("測試消費")).toBeVisible();
-    await expect(page.getByText("-NT$100")).toHaveCount(3);
-
-    await page.reload();
-    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
-    await page.getByRole("button", { name: "記帳", exact: true }).click();
-    await expect(page.getByText("-NT$100")).toHaveCount(3);
-});
-
-test("記帳可指定日期補記，日期顯示在紀錄列", async ({ page }) => {
-    await seedItinerary(page);
-    await page.goto("/");
-
-    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
-    await page.getByRole("button", { name: "記帳", exact: true }).click();
-
-    await page.getByLabel("消費項目名稱").fill("補記晚餐");
-    await page.getByLabel("金額", { exact: true }).fill("250");
-    await page.getByLabel("消費日期").fill("2099-01-02");
-    await page.getByRole("button", { name: "記一筆" }).click();
-
-    // 紀錄列顯示補記的日期（MM/DD），不會悄悄變成今天
-    const row = page.locator("li", { hasText: "補記晚餐" });
-    await expect(row).toContainText("01/02");
-
-    // 重新載入後日期仍在（寫進 YAML 的是指定日）
-    await page.reload();
-    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
-    await page.getByRole("button", { name: "記帳", exact: true }).click();
-    await expect(page.locator("li", { hasText: "補記晚餐" })).toContainText("01/02");
-});
-
-test("工具分頁：常用語頁可開啟並返回行程", async ({ page }) => {
-    await seedItinerary(page);
-    await page.goto("/");
-
-    // fixture 未指定 trip.lang → 回退英文字卡組，chip 仍會顯示
-    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
-    await page.getByRole("button", { name: "常用語", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "實用常用語" })).toBeVisible();
-
-    await page.locator("nav").getByRole("button", { name: "行程", exact: true }).click();
-    await expect(page.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
-});
-
 // TabPager renders the 總覽 chip OUTSIDE the scroller (pinnedCount=1), so it
 // cannot scroll away however long the trip is. Asserted structurally rather than
 // by offset: the point is that it is not part of the scrolling content.
@@ -190,28 +131,6 @@ test("日程列：總覽 chip 不隨日期捲動離開", async ({ page }) => {
     expect(pinned.scrolled).toBe(true);
     expect(pinned.insideScroller).toBe(false);
     expect(pinned.leadsRow).toBe(true);
-});
-
-// The chip row overflows a narrow phone and will only get longer, so selecting a
-// chip has to scroll it into view — otherwise deep-linking (e.g. the overview's
-// phase card jumping to 記帳) lands on a page whose active chip is off screen.
-test("工具分頁：選中的 chip 會捲進視野（窄螢幕）", async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await seedItinerary(page);
-    await page.goto("/");
-    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
-
-    const lastChip = page.getByRole("button", { name: "App 設定", exact: true });
-    await lastChip.click();
-    await expect(page.getByRole("heading", { level: 3, name: "外觀" })).toBeVisible();
-
-    // Fully inside the scroller, not clipped at its trailing edge.
-    const fits = await lastChip.evaluate(chip => {
-        const row = chip.closest("[data-pager-scroller]")!;
-        const c = chip.getBoundingClientRect(), r = row.getBoundingClientRect();
-        return c.left >= r.left - 1 && c.right <= r.right + 1;
-    });
-    expect(fits).toBe(true);
 });
 
 test("無效的使用者 YAML：顯示錯誤畫面與設定入口", async ({ page }) => {

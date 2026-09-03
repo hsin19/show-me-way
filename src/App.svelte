@@ -14,8 +14,6 @@ import ItineraryStrip from "$lib/ui/itinerary/ItineraryStrip.svelte";
 import type { EnlargedCard } from "$lib/ui/shared/enlarge";
 import Toast from "$lib/ui/shared/Toast.svelte";
 import Checklist from "$lib/ui/tools/Checklist.svelte";
-import Ledger from "$lib/ui/tools/Ledger.svelte";
-import PhraseDeck from "$lib/ui/tools/PhraseDeck.svelte";
 import AppSettings from "$lib/ui/tools/settings/AppSettings.svelte";
 import SettingsPanel from "$lib/ui/tools/settings/SettingsPanel.svelte";
 import ToolsTab from "$lib/ui/tools/ToolsTab.svelte";
@@ -25,15 +23,13 @@ import ListChecks from "@lucide/svelte/icons/list-checks";
 import ListTodo from "@lucide/svelte/icons/list-todo";
 import Loader2 from "@lucide/svelte/icons/loader-2";
 import Luggage from "@lucide/svelte/icons/luggage";
-import MessageSquareText from "@lucide/svelte/icons/message-square-text";
 import Sparkles from "@lucide/svelte/icons/sparkles";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
-import Wallet from "@lucide/svelte/icons/wallet";
 import { onMount } from "svelte";
 
 let currentDay = $state(1);
 let activeTab = $state("itinerary"); // itinerary | tools | ai
-let toolsTab = $state<"prep" | "ledger" | "phrases" | "settings" | "prefs">("prep");
+let toolsTab = $state<"prep" | "settings" | "prefs">("prep");
 let enlargedCard = $state<EnlargedCard | null>(null);
 
 // Wall-clock time, deliberately not named `now`: the scroll handlers keep
@@ -132,7 +128,7 @@ let staleWeatherHours = $derived.by(() => {
         {:else if activeTab === "tools"}
             <!-- 工具 tab renders even on a YAML load error so 行程管理 stays
                  reachable to fix the data; trip-dependent pages hide instead. -->
-            <ToolsTab bind:tab={toolsTab} hasTrip={!!tripStore.data} hasPhrases={tripStore.langConfig.phrases.length > 0}>
+            <ToolsTab bind:tab={toolsTab} hasTrip={!!tripStore.data}>
                 {#snippet prep()}
                     {#if tripStore.data}
                         <div class="mb-4">
@@ -158,35 +154,6 @@ let staleWeatherHours = $derived.by(() => {
                             onDelete={id => tripStore.deleteChecklistItem("packing", id)}
                         />
                     {/if}
-                {/snippet}
-                {#snippet ledger()}
-                    {#if tripStore.data}
-                        <div class="mb-4">
-                            <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
-                                <Wallet size={22} class="text-accent" aria-hidden="true" />匯率與消費記帳
-                            </h2>
-                            <p class="text-xs text-text-secondary mt-0.5">出國換算與儲值餘額管理</p>
-                        </div>
-                        <Ledger
-                            currency={tripStore.data.trip.currency}
-                            wallets={tripStore.data.trip.wallets}
-                            expenses={tripStore.data.expenses}
-                            onAddWallet={name => tripStore.addTripWallet(name)}
-                            onAddExpense={(name, amount, type, date) => tripStore.addExpense(name, amount, type, date)}
-                            onDeleteExpense={id => tripStore.deleteExpense(id)}
-                            onReset={() => tripStore.resetLedger()}
-                            onExportCsv={() => tripStore.exportLedgerCsv()}
-                        />
-                    {/if}
-                {/snippet}
-                {#snippet phrases()}
-                    <div class="mb-4">
-                        <h2 class="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
-                            <MessageSquareText size={22} class="text-accent" aria-hidden="true" />實用常用語
-                        </h2>
-                        <p class="text-xs text-text-secondary mt-0.5">點字卡即可複製，出示給店員或司機看</p>
-                    </div>
-                    <PhraseDeck phrases={tripStore.langConfig.phrases} />
                 {/snippet}
                 {#snippet settings()}
                     <SettingsPanel
@@ -227,7 +194,6 @@ let staleWeatherHours = $derived.by(() => {
                         {clockNow}
                         prepDone={tripStore.prepDone}
                         prepTotal={tripStore.prepTotal}
-                        expenses={tripStore.data.expenses}
                         profiles={tripStore.profiles}
                         {showWeatherAttribution}
                         {staleWeatherHours}
@@ -241,7 +207,6 @@ let staleWeatherHours = $derived.by(() => {
                         onSetEventStatus={(id, status) => tripStore.setEventStatus(id, status)}
                         onShareDay={dayData => tripStore.shareDayReport(dayData)}
                         onOpenPrepare={() => openTools("prep")}
-                        onOpenLedger={() => openTools("ledger")}
                         onShare={() => tripStore.shareCurrentTrip()}
                         sharing={tripStore.isSharing}
                     />

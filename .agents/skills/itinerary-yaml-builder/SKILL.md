@@ -20,9 +20,9 @@ Convert messy trip notes into a schema-valid `public/itinerary.local.yaml` for t
 
 ## Shape at a glance
 
-Top-level keys: `trip` and `days` (required); `todo`, `packing` (optional); `expenses` (ledger records the app maintains — preserve when merging, never author).
+Top-level keys: `trip` and `days` (required); `todo`, `packing` (optional).
 
-- `trip` — requires `name`, `hotels[]`; optional `lang`, `city`, `currency`, `mapProvider`, `wallets[]`; app-owned `id`.
+- `trip` — requires `name`, `hotels[]`; optional `lang`, `city`, `mapProvider`; app-owned `id`.
 - `trip.hotels[]` — requires `name`, `address`, `checkIn`, `checkOut`; optional `localName`, `mapLink`, `confirmation`.
 - `days[]` — requires `date`, `title`, `timeline[]`; optional `pace`, `city`. Order-insensitive: the app sorts by `date` and fills skipped dates in as free days.
 - `days[].timeline[]` — requires `time`, `title`, `type`; optional `desc`, `bullets[]`, `localName`, `mapLink`, `stops[]`, `links[]`, `alternatives[]`, `confirmation`, `status`.
@@ -37,7 +37,7 @@ What each field means, its examples, the `stops` vs `links` vs `alternatives` di
 - **Never emit `_id`, and never write `id` on a todo/packing item** — both are runtime-only and stripped on save. `trip.id` is the opposite case: also app-generated, but persisted — never invent one, and never drop one that is already there.
 - **`time` is `HH:MM` or a range `14:00 - 15:30`.** An unquoted `800` is a number and is rejected.
 - **`title` idiom:** short, emoji prefix welcome (✈️ 🏨 🍜 🛍️ ☕ 🎁). The schema's `maxLength` on `days[].title` / `pace` is a layout hint for a 390px phone, not a hard limit.
-- **`status` and `expenses` are the app's to write.** Leave `status` out when drafting a new trip; preserve existing `status`, `expenses`, `city`, `wallets` and `trip.id` when merging into an existing file.
+- **`status` is the app's to write.** Leave it out when drafting a new trip; preserve existing `status`, `city` and `trip.id` when merging into an existing file.
 - **`stops` need a `localName` or `mapLink` each** or the stop has no map button; when an event has `stops`, do not repeat one of them in the event-level `localName`. Never hand-write a `google.com/maps/search/...` URL in `links[]` to list a place — that is what `stops` is for, and a hand-written Google URL ignores the trip's `mapProvider` (Naver for Korea).
 - **`links[].url` accepts `http(s)`, `mailto:`, `tel:`, `sms:`, `geo:` or a bare domain — anything else renders no chip**, so a restaurant's phone goes in as `tel:+81312345678`, never a `line://` deep link.
 - **Language:** keep all user-facing copy (titles, desc, pace) in Traditional Chinese to match the app.

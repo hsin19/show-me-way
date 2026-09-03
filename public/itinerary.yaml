@@ -2,12 +2,8 @@
 trip:
   name: 下面一way-我的探索之旅
   lang: ja
-  currency: JPY
   city: Tokyo
   mapProvider: google
-  wallets:
-    - Suica
-    - ICOCA
   hotels:
     - name: 極簡設計精選飯店
       address: 東京都新宿區西新宿 1-1-1
@@ -186,20 +182,3 @@ packing:
   - text: 證件影本與大頭照備份
   - text: 環保袋 / 購物袋（裝戰利品）
   - text: 行李秤（回程怕超重）
-expenses:
-  - name: 'Suica 儲值'
-    amount: 5000
-    type: 'Deposit-Suica'
-    date: '2026-10-01'
-  - name: '日幣現金預提'
-    amount: 10000
-    type: 'Deposit-Cash'
-    date: '2026-10-01'
-  - name: '一蘭拉麵 晚餐'
-    amount: 1980
-    type: 'Suica'
-    date: '2026-10-01'
-  - name: 'teamLab 展覽門票'
-    amount: 3800
-    type: 'Cash'
-    date: '2026-10-02'

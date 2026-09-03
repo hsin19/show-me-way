@@ -150,7 +150,7 @@ function applyEdit(message: UiMessage) {
     if (!message.editYaml || message.editApplied) return;
     // The trip may have moved since this suggestion's snapshot was taken —
     // applying replaces the WHOLE document, silently rolling back everything
-    // done in between (manual edits, check-ins, new expenses). The card's diff
+    // done in between (manual edits, check-ins, checklist ticks). The card's diff
     // is against the snapshot, so the user cannot see that rollback in it.
     if (confirmingStaleApply !== message && buildItineraryContext(tripData) !== message.baseYaml) {
         confirmingStaleApply = message;

@@ -1,8 +1,8 @@
 // The active trip deliberately stays in USER_YAML_KEY, with the others parked as
 // snapshots in PROFILES_KEY, so multi-trip support left every existing read/write
 // path untouched. Unlike the backup ring this list is user-managed and never
-// auto-evicted. Only the itinerary travels with a profile — per-trip state outside
-// the YAML (the ledger's working rate, say) is not swapped.
+// auto-evicted. Only the itinerary travels with a profile — app-level state outside
+// the YAML (the theme, the Gemini key) is not swapped.
 
 import {
     genTripId,

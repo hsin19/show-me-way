@@ -1,5 +1,3 @@
-import { buildLedgerCsv } from "$lib/domain/ledger";
-import { getLanguageConfig } from "$lib/domain/phrases";
 import {
     clearShareHash,
     isShareSupported,
@@ -10,7 +8,6 @@ import {
 import { buildDayReport } from "$lib/domain/timeline";
 import {
     createChecklistItemId,
-    createExpenseId,
     type DayItinerary,
     genTripId,
     serializeToYaml,
@@ -96,7 +93,6 @@ export class TripStore {
 
     prepDone = $derived(this.data ? [...this.data.todo, ...this.data.packing].filter(i => i.checked).length : 0);
     prepTotal = $derived(this.data ? this.data.todo.length + this.data.packing.length : 0);
-    langConfig = $derived(getLanguageConfig(this.data?.trip.lang));
 
     /**
      * Remove `id` from a `_id`-keyed list, persist, and offer an undo toast that
@@ -254,46 +250,6 @@ export class TripStore {
         }
     }
 
-    addTripWallet(name: string) {
-        if (!this.data) return;
-        if (!this.data.trip.wallets) {
-            this.data.trip.wallets = [];
-        }
-        if (!this.data.trip.wallets.includes(name)) {
-            this.data.trip.wallets.push(name);
-            this.persist();
-        }
-    }
-
-    addExpense(name: string, amount: number, type: string, date?: string) {
-        if (!this.data) return;
-        this.data.expenses.unshift({
-            _id: createExpenseId(),
-            name,
-            amount,
-            type,
-            date: date || getTodayIsoString(),
-        });
-        this.persist();
-    }
-
-    deleteExpense(id: string) {
-        this.deleteWithUndo(
-            () => this.data?.expenses ?? null,
-            next => {
-                if (this.data) this.data.expenses = next;
-            },
-            id,
-            () => "紀錄已刪除",
-        );
-    }
-
-    resetLedger() {
-        if (!this.data) return;
-        this.data.expenses = [];
-        this.persist();
-    }
-
     applyAiEdit(yaml: string): boolean {
         let parsed: TripData;
         try {
@@ -348,9 +304,7 @@ export class TripStore {
         }
         this.isSharing = true;
         try {
-            // expenses stripped: this link is for whoever it reaches. The user's own
-            // cross-device copy is Drive sync and the YAML export, which ship the ledger.
-            const yaml = serializeToYaml({ ...this.data, expenses: [] });
+            const yaml = serializeToYaml(this.data);
             // Keyed by profile slot, like the Drive binding: a second tap must update the
             // link this trip already has rather than mint one the printed QR does not know.
             const outcome = await shareLinks.publish(ensureActiveProfileId(), yaml);
@@ -402,21 +356,6 @@ export class TripStore {
             showToast("已匯出行程 YAML");
         } catch (err) {
             console.error("Failed to export trip YAML:", err);
-            showToast("匯出失敗，請稍後再試");
-        }
-    }
-
-    exportLedgerCsv() {
-        try {
-            const csv = buildLedgerCsv(this.data?.expenses ?? []);
-            if (csv === null) {
-                showToast("尚無記帳紀錄可匯出");
-                return;
-            }
-            downloadTextFile(`show-me-way-記帳-${exportDateStamp()}.csv`, csv, "text/csv;charset=utf-8");
-            showToast("已匯出記帳 CSV");
-        } catch (err) {
-            console.error("Failed to export ledger CSV:", err);
             showToast("匯出失敗，請稍後再試");
         }
     }

@@ -9,8 +9,8 @@ const BASE_ORIGIN = "http://localhost:8046";
 // Minimal itinerary that passes normalizeTripData (src/lib/domain/trip.ts). Dates are
 // far-future on purpose: no day ever equals "today", so the app always lands on
 // the day-0 overview and never shows time-dependent UI (countdown badges,
-// aria-current chips). No trip.city / trip.currency — that keeps the weather
-// and exchange-rate fetch paths dormant, so tests stay hermetic. Dates and
+// aria-current chips). No trip.city — that keeps the weather fetch path
+// dormant, so tests stay hermetic. Dates and
 // times stay quoted: js-yaml would otherwise parse them as UTC Date objects,
 // but the app expects plain local-time strings. `trip.id` is load-bearing rather
 // than decorative: without one the app mints and persists it on first load, and

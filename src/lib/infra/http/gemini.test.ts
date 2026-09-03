@@ -28,7 +28,6 @@ const tripData: TripData = {
     todo: [],
     packing: [],
     days: [],
-    expenses: [],
 };
 
 beforeEach(() => {

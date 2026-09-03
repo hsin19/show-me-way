@@ -660,40 +660,6 @@ describe("serializeToYaml 與 round-trip", () => {
     });
 });
 
-describe("expenses — YAML round-trip", () => {
-    const withExpenses = tripYaml(validHotel) + "\n" + [
-        "expenses:",
-        "  - name: '晚餐'",
-        "    amount: 1200",
-        "    type: 'Cash'",
-        "    date: '2026-06-11'",
-    ].join("\n");
-
-    it("defaults to an empty list when absent", () => {
-        expect(validateYaml(tripYaml(validHotel)).expenses).toEqual([]);
-    });
-
-    it("parses records and assigns a runtime _id", () => {
-        const data = validateYaml(withExpenses);
-        expect(data.expenses).toHaveLength(1);
-        expect(data.expenses[0]?.name).toBe("晚餐");
-        expect(data.expenses[0]?.amount).toBe(1200);
-        expect(typeof data.expenses[0]?._id).toBe("string");
-    });
-
-    it("strips _id on serialization but keeps the record", () => {
-        const yaml = serializeToYaml(validateYaml(withExpenses));
-        expect(yaml).toContain("expenses:");
-        expect(yaml).toContain("晚餐");
-        expect(yaml).not.toContain("_id");
-    });
-
-    it("rejects a non-object expense entry with a zh-TW message", () => {
-        expect(() => validateYaml(tripYaml(validHotel) + "\nexpenses:\n  - 'x'"))
-            .toThrow("expenses 第 1 項必須是物件");
-    });
-});
-
 describe("YAML alias bomb", () => {
     it("rejects excessive aliasing instead of expanding it (share links carry other people's YAML)", () => {
         const bomb = "anchor: &x '爆'\nlist: [" + Array(150).fill("*x").join(",") + "]";
@@ -730,30 +696,13 @@ describe("validateYaml — schema 補上的形狀檢查", () => {
             .toThrow("todo 第 1 項的 checked 必須是 true 或 false");
     });
 
-    it("expenses 每筆都要有 name / amount / type / date，且 amount 必須是數字", () => {
-        const expense = (fields: string) => [validTripBlock, validDaysBlock, "expenses:", fields].join("\n");
-        expect(() => validateYaml(expense("  - amount: 1200\n    type: Cash\n    date: '2026-06-11'")))
-            .toThrow("expenses 第 1 項缺少 name 屬性");
-        expect(() => validateYaml(expense("  - name: '午餐'\n    amount: '1200'\n    type: Cash\n    date: '2026-06-11'")))
-            .toThrow("expenses 第 1 項的 amount 必須是數字");
-        expect(() => validateYaml(expense("  - name: '午餐'\n    amount: 1200\n    date: '2026-06-11'")))
-            .toThrow("expenses 第 1 項缺少 type 屬性");
-    });
-
     it("hotels 的 checkIn / checkOut 必須是 YYYY-MM-DD，否則退房節點會靜靜消失", () => {
         const slashDates = validHotel.replace("checkIn: '2026-06-11'", "checkIn: '2026/06/11'");
         expect(() => validateYaml(tripYaml(slashDates)))
             .toThrow("hotels 第 1 項的 checkIn 必須是 YYYY-MM-DD 日期格式");
     });
 
-    it("trip.wallets 去重：Ledger 以錢包名稱當 key，重複會在 production 拋錯", () => {
-        const data = validateYaml([validTripBlock, "  wallets: [Suica, WOWPASS, Suica]", validDaysBlock].join("\n"));
-        expect(data.trip.wallets).toEqual(["Suica", "WOWPASS"]);
-    });
-
-    it("trip.wallets 必須是文字列表，trip.mapProvider 只接受 naver / google", () => {
-        expect(() => validateYaml([validTripBlock, "  wallets: Suica", validDaysBlock].join("\n")))
-            .toThrow("trip.wallets 必須是文字列表");
+    it("trip.mapProvider 只接受 naver / google", () => {
         expect(() => validateYaml([validTripBlock, "  mapProvider: apple", validDaysBlock].join("\n")))
             .toThrow("trip.mapProvider 必須是 'naver' 或 'google'");
     });

@@ -10,11 +10,6 @@
 // *project* site, so the origin is shared with every other project on the
 // account and a blanket clear would take their data too.
 
-import { MANUAL_RATE_KEY_PREFIX } from "$lib/domain/ledger";
-import {
-    clearExchangeCache,
-    exchangeCacheKeys,
-} from "$lib/infra/http/exchange";
 import {
     clearWeatherCache,
     weatherCacheKeys,
@@ -26,11 +21,13 @@ import { yamlBackupKeys } from "./yaml-storage";
 // removal itself stays with the backup ring's owner.
 export { clearYamlBackups } from "./yaml-storage";
 
-/** Every key this app writes carries this prefix, except the two cases below. */
+/** Every key this app writes carries this prefix; the legacy lists below are the only exceptions, and nothing writes those any more. */
 const APP_KEY_PREFIX = "showmeway_";
 
 /** Written by 2026-06 builds and long since migrated into the YAML; the migration is gone, so this sweep is all that can still remove a stray copy. */
 const LEGACY_KEYS = ["todo_state", "packing_state", "ledger_expenses"];
+/** The removed 記帳 page's manual exchange rate, `exchange_rate_<currency>`; swept so a reset leaves nothing of it behind. */
+const LEGACY_KEY_PREFIXES = ["exchange_rate_"];
 
 interface CategoryStorageStats {
     keyCount: number;
@@ -42,7 +39,7 @@ export interface StorageSummary {
     totalBytes: number;
     apiCache: CategoryStorageStats;
     backups: CategoryStorageStats;
-    /** The rest: itinerary YAML, trip profiles, theme, AI settings, manual rates. */
+    /** The rest: itinerary YAML, trip profiles, theme, AI settings. */
     other: CategoryStorageStats;
 }
 
@@ -63,8 +60,8 @@ export function formatBytes(bytes: number): string {
 function isAppKey(key: string): boolean {
     return (
         key.startsWith(APP_KEY_PREFIX)
-        || key.startsWith(MANUAL_RATE_KEY_PREFIX)
         || LEGACY_KEYS.includes(key)
+        || LEGACY_KEY_PREFIXES.some(prefix => key.startsWith(prefix))
     );
 }
 
@@ -87,7 +84,7 @@ function statsFor(keys: readonly string[]): CategoryStorageStats {
 
 /** localStorage usage of this app, grouped by what clearing each group costs. */
 export function getStorageSummary(): StorageSummary {
-    const apiCacheKeys = [...weatherCacheKeys(), ...exchangeCacheKeys()];
+    const apiCacheKeys = weatherCacheKeys();
     const backupKeys = yamlBackupKeys();
     const claimed = new Set([...apiCacheKeys, ...backupKeys]);
     const otherKeys = appKeys().filter(key => !claimed.has(key));
@@ -105,7 +102,7 @@ export function getStorageSummary(): StorageSummary {
 
 /** Drops everything refetchable; returns how many keys went. Costs the user only a re-fetch. */
 export function clearApiCache(): number {
-    return clearWeatherCache() + clearExchangeCache();
+    return clearWeatherCache();
 }
 
 /**

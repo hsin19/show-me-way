@@ -45,7 +45,6 @@ function describeListItem(issue: BaseIssue<unknown>, container: PathKey[], listN
             : `${prefix}${item} 必須是文字`;
     }
     if (listName === "todo" || listName === "packing") return `${item}必須是物件 (例如 - text: '項目內容')`;
-    if (listName === "expenses") return `${item}必須是物件`;
     return `${prefix}${item}必須是物件 (不可為空白列表項)`;
 }
 
@@ -59,7 +58,6 @@ function describeField(issue: BaseIssue<unknown>, container: PathKey[], field: s
     if (container.length === 1 && container[0] === "trip") {
         if (field === "name" || field === "hotels") return "trip 區塊缺少 name (文字) 或 hotels 屬性";
         if (field === "city") return "trip.city 必須是文字 (例如 'Tokyo')";
-        if (field === "wallets") return "trip.wallets 必須是文字列表";
         if (field === "mapProvider") return `trip.mapProvider 必須是 ${listChoices(issue.expected ?? "")}`;
     }
     const where = describeContainer(container);

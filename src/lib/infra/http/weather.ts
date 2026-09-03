@@ -1,6 +1,6 @@
 // Daily weather from Open-Meteo: key-less, but CC BY 4.0, so any screen showing a
-// forecast owes the attribution link. Same shape as `lib/exchange.ts` — serve the
-// cache first, refresh behind it, never surface an error to the traveler.
+// forecast owes the attribution link. Serve the cache first, refresh behind it,
+// never surface an error to the traveler.
 
 import {
     cachedKeysWithPrefix,

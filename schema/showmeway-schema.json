@@ -33,16 +33,12 @@
         },
         "lang": {
           "type": "string",
-          "description": "目的地語言代碼，用於選擇內建的實用常用語與計程車司機提示 (ko=韓文, ja=日文, en=英文)。未設定或不支援時預設為英文 (en)。",
+          "description": "目的地語言代碼，決定放大給計程車司機看的卡片標題語言 (ko=韓文, ja=日文, en=英文)。未設定或不支援時預設為英文 (en)。",
           "enum": [
             "ko",
             "ja",
             "en"
           ]
-        },
-        "currency": {
-          "type": "string",
-          "description": "記帳功能使用的貨幣代碼 (例如: KRW, JPY, USD)。未設定時預設為 TWD。"
         },
         "mapProvider": {
           "enum": [
@@ -55,13 +51,6 @@
         "city": {
           "type": "string",
           "description": "目的地城市，用於查詢每日天氣預報 (選填，未設定或留空字串時不顯示天氣)。建議使用英文名稱 (例如: Tokyo, Seoul, Osaka)；中文名稱僅部分可查 (東京、京都可，首爾、大阪、釜山等查不到或比對錯國家)。同名城市可加兩碼國碼後綴消歧 (例如: 'Springfield, US')。可在個別 day 以 city 覆蓋 (多城市行程)。"
-        },
-        "wallets": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "記帳使用的自訂電子錢包/卡片清單 (例如: Suica, WOWPASS。現金預設會自動存在)"
         },
         "hotels": {
           "type": "array",
@@ -370,38 +359,6 @@
         "additionalProperties": false
       },
       "description": "隨身行李與打包清單"
-    },
-    "expenses": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "消費項目名稱"
-          },
-          "amount": {
-            "type": "number",
-            "description": "金額 (當地幣別整數)"
-          },
-          "type": {
-            "type": "string",
-            "description": "支付方式：錢包/卡片名稱、Cash，或加值 Deposit-<錢包> / Deposit-Cash"
-          },
-          "date": {
-            "type": "string",
-            "description": "日期 (YYYY-MM-DD)"
-          }
-        },
-        "required": [
-          "name",
-          "amount",
-          "type",
-          "date"
-        ],
-        "additionalProperties": false
-      },
-      "description": "記帳消費紀錄 (通常由 App 自動維護，亦可手動編輯)"
     }
   },
   "required": [

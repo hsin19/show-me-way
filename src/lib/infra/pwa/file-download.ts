@@ -1,5 +1,5 @@
 /**
- * Hand a generated file (YAML export, ledger CSV) to the device. On an iOS
+ * Hand a generated file (the YAML export) to the device. On an iOS
  * standalone PWA it arrives via the Files app / share sheet rather than a
  * downloads folder.
  */

@@ -43,16 +43,15 @@ describe("getStorageSummary", () => {
     it("groups the app's keys by what clearing them costs", () => {
         storage.setItem("showmeway_weather_tokyo", '{"temp":25}');
         storage.setItem("showmeway_geocode_v1_tokyo", '{"lat":35}');
-        storage.setItem("showmeway_exchange_rates_twd", '{"jpy":4.5}');
         storage.setItem("showmeway_yaml_backups", '[{"id":1}]');
         storage.setItem("showmeway_user_yaml", "title: test trip");
         storage.setItem("showmeway_gemini_api_key", "test-key");
         storage.setItem("exchange_rate_JPY", "0.21");
 
         const summary = getStorageSummary();
-        expect(summary.apiCache.keyCount).toBe(3);
+        expect(summary.apiCache.keyCount).toBe(2);
         expect(summary.backups.keyCount).toBe(1);
-        // itinerary YAML + Gemini key + manual rate
+        // itinerary YAML + Gemini key + a manual rate left by the removed 記帳 page
         expect(summary.other.keyCount).toBe(3);
         expect(summary.totalBytes).toBe(
             summary.apiCache.sizeBytes + summary.backups.sizeBytes + summary.other.sizeBytes,
@@ -85,17 +84,16 @@ describe("clearApiCache", () => {
         expect(storage.getItem("showmeway_user_yaml")).toBe("keep me");
     });
 
-    it("covers weather, geocode and exchange entries alike", () => {
+    it("covers weather and geocode entries alike", () => {
         storage.setItem("showmeway_weather_tokyo", "{}");
         storage.setItem("showmeway_geocode_v1_tokyo", "{}");
-        storage.setItem("showmeway_exchange_rates_twd", "{}");
 
-        expect(clearApiCache()).toBe(3);
+        expect(clearApiCache()).toBe(2);
         expect(storage.length).toBe(0);
     });
 
     it("leaves backups and trip data alone", () => {
-        storage.setItem("showmeway_exchange_rates_twd", "{}");
+        storage.setItem("showmeway_weather_tokyo", "{}");
         storage.setItem("showmeway_yaml_backups", '[{"id":1}]');
 
         expect(clearApiCache()).toBe(1);

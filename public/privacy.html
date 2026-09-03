@@ -132,7 +132,7 @@
                 </div>
                 <ul>
                     <li>
-                        <strong>本機儲存 (Local Storage)：</strong>您的所有行程資料（YAML）、待辦與行李清單、記帳紀錄及個人偏好設定，均僅儲存在您裝置的瀏覽器本機儲存空間（<code>localStorage</code>）中。
+                        <strong>本機儲存 (Local Storage)：</strong>您的所有行程資料（YAML）、待辦與行李清單及個人偏好設定，均僅儲存在您裝置的瀏覽器本機儲存空間（<code>localStorage</code>）中。
                     </li>
                     <li>
                         <strong>不進行非必要的資料轉移：</strong>除了您主動啟用的 Google 雲端硬碟同步、AI 功能，以及您主動產生的加密分享連結外，本應用程式不會將任何資料傳送至外部伺服器。
@@ -172,7 +172,7 @@
 
                 <h2 id="short-link">加密分享連結 (Encrypted Share Links)</h2>
                 <p>
-                    當您主動點選「分享行程」時，行程內容（不含記帳明細）會先在您的瀏覽器中以 <code>AES-GCM</code> 128 位元金鑰加密，<strong>僅有加密後的密文</strong>會上傳至我們自行運作的短連結服務（<code>hop.hsin19.com</code>）以換取一組短代碼。
+                    當您主動點選「分享行程」時，行程內容會先在您的瀏覽器中以 <code>AES-GCM</code> 128 位元金鑰加密，<strong>僅有加密後的密文</strong>會上傳至我們自行運作的短連結服務（<code>hop.hsin19.com</code>）以換取一組短代碼。
                 </p>
                 <div class="highlight-box">
                     <strong>解密金鑰只存在於連結網址的片段</strong>（<code>#</code> 之後的部分）。依照瀏覽器規範，網址片段不會隨任何網路請求送出，因此該短連結服務及其 CDN 只會看到<strong>無法解讀的密文</strong>。<br><br>
