@@ -7,11 +7,12 @@
 import {
     serializeToYaml,
     type TripData,
+    validateYaml,
 } from "$lib/domain/trip";
 import {
     createProfile,
     ensureUniqueTripId,
-    findProfileByTripId,
+    findLocalTripByTripId,
     getActiveProfileId,
     switchToProfile,
 } from "./profiles";
@@ -24,6 +25,8 @@ import {
 export type ShareImportOutcome =
     /** Replaced this device's copy of that same trip, keeping its profile slot, id, and Drive binding. */
     | { kind: "overwritten"; profileId: string; yaml: string; }
+    /** The link carries exactly the version this device already holds; switched to it, wrote nothing. */
+    | { kind: "unchanged"; profileId: string; }
     /** Landed as a trip of its own, with the previously active one parked. */
     | { kind: "imported"; profileId: string; yaml: string; }
     /** The user turned down every offer; nothing was written. */
@@ -37,20 +40,37 @@ export type ShareImportOutcome =
  * captured earlier, to anything keyed by trip: an import moves the active slot, so a
  * stale id would bind the new trip to the old one's cloud file.
  */
+function canonical(yaml: string): string | null {
+    try {
+        return serializeToYaml(validateYaml(yaml));
+    } catch {
+        // A stored copy that no longer validates is by definition not this version.
+        return null;
+    }
+}
+
 export function importSharedTrip(incoming: TripData): ShareImportOutcome {
     // Same id means the same trip, not a similar one, so replacing this device's copy is a
     // real option — and usually the wanted one. A copy stays available behind it for the
     // case where the two are meant to diverge from here.
-    const existing = findProfileByTripId(incoming.trip.id);
+    const existing = findLocalTripByTripId(incoming.trip.id);
     if (existing !== null) {
+        // A persistent link is reopened to pick up updates, so the common case is that
+        // nothing changed since last time — asking to "overwrite" with identical bytes
+        // would only teach the user to dismiss the prompt. Compared canonically: the
+        // stored copy went through serializeToYaml too, so any difference is real.
+        if (canonical(existing.yaml) === serializeToYaml(incoming)) {
+            if (existing.profileId !== getActiveProfileId()) switchToProfile(existing.profileId);
+            return { kind: "unchanged", profileId: existing.profileId };
+        }
         if (confirm(`「${incoming.trip.name}」你已經有這趟行程了。要用連結裡的版本覆蓋原本那份嗎？（可以復原）`)) {
             // Switching first is both what the user asked for and what puts the copy being
             // replaced in the backup ring, rather than whichever trip happened to be active.
-            if (existing !== getActiveProfileId()) switchToProfile(existing);
+            if (existing.profileId !== getActiveProfileId()) switchToProfile(existing.profileId);
             backupCurrentYaml();
             const yaml = serializeToYaml(incoming);
             saveTripData(incoming, yaml);
-            return { kind: "overwritten", profileId: existing, yaml };
+            return { kind: "overwritten", profileId: existing.profileId, yaml };
         }
         if (!confirm("那要另外匯入成一份副本嗎？原本那份會保留。")) return { kind: "declined" };
     } else if (

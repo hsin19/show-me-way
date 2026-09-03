@@ -50,13 +50,32 @@ export function isEncryptedShareSupported(): boolean {
 }
 
 /**
- * Always generates its own IV and key. The signature deliberately accepts neither:
- * updating an existing blob (a printed QR must keep working) is the one place a key
- * would be reused, and reusing an IV with it is what breaks AES-GCM outright.
+ * Always generates its own IV and key; the signature accepts neither. A new link
+ * has no reason to reuse a key, and taking one here would invite the bug where a
+ * fixed IV rides along with it — see `resealShareToken` for the one place a key is
+ * legitimately reused.
  */
 export async function sealShareToken(yaml: string): Promise<SealedShare> {
-    const compressed = await compressText(yaml);
     const rawKey = crypto.getRandomValues(new Uint8Array(KEY_BYTES));
+    return { payload: await encryptWithKey(yaml, rawKey), key: bytesToBase64url(rawKey) };
+}
+
+/**
+ * Re-encrypt `yaml` under the key an existing link already carries, for uploading a
+ * newer version to the same hop id: the key is printed in someone's QR code, so it
+ * has to stay. The IV is fresh random every call — AES-GCM breaks outright on an IV
+ * reused under one key, and the 96-bit random IV is safe here because a link is
+ * updated a handful of times, nowhere near the 2^32-message bound. Rejects with a
+ * `ShareLinkError` on a malformed key.
+ */
+export async function resealShareToken(yaml: string, rawKeyText: string): Promise<string> {
+    const rawKey = base64urlToBytes(rawKeyText);
+    if (rawKey.length !== KEY_BYTES) throw new ShareLinkError("分享連結內容無效");
+    return encryptWithKey(yaml, rawKey);
+}
+
+async function encryptWithKey(yaml: string, rawKey: Uint8Array): Promise<string> {
+    const compressed = await compressText(yaml);
     const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
 
     const key = await crypto.subtle.importKey("raw", rawKey as BufferSource, "AES-GCM", false, ["encrypt"]);
@@ -67,8 +86,7 @@ export async function sealShareToken(yaml: string): Promise<SealedShare> {
     const packed = new Uint8Array(IV_BYTES + ciphertext.length);
     packed.set(iv, 0);
     packed.set(ciphertext, IV_BYTES);
-
-    return { payload: bytesToBase64url(packed), key: bytesToBase64url(rawKey) };
+    return bytesToBase64url(packed);
 }
 
 /**

@@ -111,6 +111,17 @@ async function localTripIds(page: Page): Promise<{ active: string | null; parked
 }
 
 /**
+ * 讓本機那份和連結裡的內容不一樣（改一個待辦文字），否則收件端會認出「已經是同一版」而直接略過，
+ * 覆蓋／副本的分支就跑不到。在 sender 頁改就行：兩個分頁共用同一個 localStorage。
+ */
+async function ageLocalCopy(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const yaml = localStorage.getItem("showmeway_user_yaml")!;
+        localStorage.setItem("showmeway_user_yaml", yaml.replace("測試待辦項目", "舊版待辦項目"));
+    });
+}
+
+/**
  * 分享自己的行程，回傳連結。收件端刻意用同一個 context 的新分頁，所以共用 localStorage ——
  * 那正是「連結帶進來的行程本機已經有」的情境。
  */
@@ -139,6 +150,7 @@ function answerDialogs(page: Page, answers: boolean[]): { asked: () => number; }
 
 test("分享行程按鈕：連結帶回同一趟行程時，第一個選項是覆蓋原本那份", async ({ page, context }) => {
     const sharedUrl = await shareOwnTrip(page, context);
+    await ageLocalCopy(page);
     const before = await localTripIds(page);
 
     const receiver = await context.newPage();
@@ -159,6 +171,7 @@ test("分享行程按鈕：連結帶回同一趟行程時，第一個選項是�
 
 test("分享行程按鈕：拒絕覆蓋後可以改成另存副本，副本會拿到自己的 trip.id", async ({ page, context }) => {
     const sharedUrl = await shareOwnTrip(page, context);
+    await ageLocalCopy(page);
     const before = await localTripIds(page);
 
     const receiver = await context.newPage();
@@ -178,6 +191,7 @@ test("分享行程按鈕：拒絕覆蓋後可以改成另存副本，副本會�
 
 test("分享行程按鈕：兩問都拒絕時什麼都不動，網址 token 仍被清除", async ({ page, context }) => {
     const sharedUrl = await shareOwnTrip(page, context);
+    await ageLocalCopy(page);
     const before = await localTripIds(page);
 
     const receiver = await context.newPage();
@@ -190,15 +204,33 @@ test("分享行程按鈕：兩問都拒絕時什麼都不動，網址 token 仍�
     expect(receiver.url()).not.toContain("#s=");
 });
 
+// 持久性連結會被重開來「看看有沒有更新」，沒更新才是常態；這時跳覆蓋確認只會教人按取消。
+test("分享行程按鈕：連結裡的版本和本機一樣時不問也不寫，直接提示已是最新", async ({ page, context }) => {
+    const sharedUrl = await shareOwnTrip(page, context);
+    const before = await localTripIds(page);
+    const backupsBefore = await page.evaluate(() => JSON.parse(localStorage.getItem("showmeway_yaml_backups") ?? "[]").length as number);
+
+    const receiver = await context.newPage();
+    const dialogs = answerDialogs(receiver, [true, true]);
+    await receiver.goto(sharedUrl);
+
+    await expect(receiver.getByRole("status")).toContainText("已經是連結裡的版本");
+    expect(dialogs.asked()).toBe(0);
+    expect(await localTripIds(receiver)).toEqual(before);
+    const backupsAfter = await receiver.evaluate(() => JSON.parse(localStorage.getItem("showmeway_yaml_backups") ?? "[]").length as number);
+    expect(backupsAfter).toBe(backupsBefore);
+    expect(receiver.url()).not.toContain("#s=");
+});
+
 // 上面每一個測試走的都是 inline fallback：fixtures.ts 擋掉所有非 localhost 請求，
 // 所以 hop 連不上、buildBestShareUrl 退回 #s=。以下的短連結（#h=<id>.<key>）測試
 // 改成在 test 內用 page.route 掛上 hop 的假伺服器（page 層級優先於 context 層級的 abort）。
 
-type HopStore = { uploaded: string; };
+type HopStore = { uploaded: string; puts: { auth: string | null; url: string; }[]; };
 
 /**
  * POST 把 body 存起來、GET 再吐回去 —— 這樣就得到一次真的往返，跑的是 app 自己那份
- * 加解密，完全不需要伺服器。
+ * 加解密，完全不需要伺服器。PUT 同樣覆寫存起來的 body，並記下帶來的 bearer。
  */
 async function mockHop(page: Page, store: HopStore, opts: { getFails?: boolean; corrupt?: boolean; } = {}) {
     await page.route(url => url.origin === "https://hop.hsin19.com", route => {
@@ -211,9 +243,26 @@ async function mockHop(page: Page, store: HopStore, opts: { getFails?: boolean; 
                 body: JSON.stringify(body),
             });
 
-        if (route.request().method() === "POST") {
+        const method = route.request().method();
+        // PUT 帶 Authorization，瀏覽器會先發 preflight；真正的 hop 由 hono/cors 回這些。
+        if (method === "OPTIONS") {
+            return route.fulfill({
+                status: 204,
+                headers: {
+                    "access-control-allow-origin": "*",
+                    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+                    "access-control-allow-headers": "authorization,content-type",
+                },
+            });
+        }
+        if (method === "POST") {
             store.uploaded = route.request().postData() ?? "";
-            return json({ id: "abcd1234", editToken: "edit-token" });
+            return json({ id: "abcd1234", editToken: "edit-token", expiresAt: Date.now() + 365 * 86400_000 });
+        }
+        if (method === "PUT") {
+            store.uploaded = route.request().postData() ?? "";
+            store.puts.push({ auth: route.request().headers()["authorization"] ?? null, url: route.request().url() });
+            return json({ id: "abcd1234", expiresAt: Date.now() + 365 * 86400_000 });
         }
         if (opts.getFails) return route.abort();
         if (opts.corrupt) return json({ payload: "AAAAAAAAAAAAAAAAAAAA" });
@@ -237,7 +286,7 @@ async function shareOwnTripShort(page: Page, context: BrowserContext, store: Hop
 }
 
 test("短連結分享：上傳的是密文，連結短到可以做成 QR code", async ({ page, context }) => {
-    const hop: HopStore = { uploaded: "" };
+    const hop: HopStore = { uploaded: "", puts: [] };
     const sharedUrl = await shareOwnTripShort(page, context, hop);
 
     // 這一行就是整個功能的核心不變條件：離開裝置的是密文，不是行程內容。
@@ -250,9 +299,47 @@ test("短連結分享：上傳的是密文，連結短到可以做成 QR code", 
     expect(sharedUrl.length).toBeLessThan(100);
 });
 
+// 持久性分享的核心：第二次分享不是再造一條連結，而是拿 editToken 覆寫同一個 id 的密文，
+// 所以印出去的 QR code 不會過時。金鑰只在網址片段裡，PUT 的網址與 header 都不能帶到。
+test("再次分享同一趟行程：更新同一條連結而不是換一條，收件端拿到新版本", async ({ page, context }) => {
+    const hop: HopStore = { uploaded: "", puts: [] };
+    const firstUrl = await shareOwnTripShort(page, context, hop);
+    const firstUpload = hop.uploaded;
+
+    // 改個名字再分享一次。
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    await page.getByRole("button", { name: "行程管理", exact: true }).click();
+    // 行程管理頁看得到這條連結，並提供更新。
+    await expect(page.getByText(/最後更新/)).toBeVisible();
+    const editor = page.locator("#yaml-editor");
+    await editor.fill((await editor.inputValue()).replace("name: 測試行程", "name: 測試行程二版"));
+    await page.getByRole("button", { name: "儲存並解析" }).click();
+    await expect(page.getByRole("heading", { level: 2, name: "測試行程二版" })).toBeVisible();
+
+    await page.getByRole("button", { name: "分享行程", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("分享連結已更新");
+
+    const secondUrl = await page.evaluate(() => navigator.clipboard.readText());
+    expect(secondUrl).toBe(firstUrl);
+    expect(hop.puts).toHaveLength(1);
+    expect(hop.puts[0]!.auth).toBe("Bearer edit-token");
+    expect(hop.uploaded).not.toBe(firstUpload);
+    const key = firstUrl.split(".").pop()!;
+    expect(hop.puts[0]!.url).not.toContain(key);
+    expect(hop.uploaded).not.toContain("測試行程二版");
+
+    // 同一條連結在另一個裝置打開，看到的是新版本。
+    const receiver = await context.newPage();
+    await mockHop(receiver, hop);
+    answerDialogs(receiver, [true]);
+    await receiver.goto(secondUrl);
+    await expect(receiver.getByRole("heading", { level: 2, name: "測試行程二版" })).toBeVisible();
+});
+
 test("短連結匯入：收件端解密後正常匯入，網址片段被清除", async ({ page, context }) => {
-    const hop: HopStore = { uploaded: "" };
+    const hop: HopStore = { uploaded: "", puts: [] };
     const sharedUrl = await shareOwnTripShort(page, context, hop);
+    await ageLocalCopy(page);
 
     const receiver = await context.newPage();
     await mockHop(receiver, hop);
@@ -265,7 +352,7 @@ test("短連結匯入：收件端解密後正常匯入，網址片段被清除",
 });
 
 test("短連結匯入：取不到密文時保留網址片段 —— 金鑰只存在於那裡", async ({ page, context }) => {
-    const hop: HopStore = { uploaded: "" };
+    const hop: HopStore = { uploaded: "", puts: [] };
     const sharedUrl = await shareOwnTripShort(page, context, hop);
 
     const receiver = await context.newPage();
@@ -279,7 +366,7 @@ test("短連結匯入：取不到密文時保留網址片段 —— 金鑰只存
 });
 
 test("短連結匯入：密文無法解密時提示內容無效並清除網址片段", async ({ page, context }) => {
-    const hop: HopStore = { uploaded: "" };
+    const hop: HopStore = { uploaded: "", puts: [] };
     const sharedUrl = await shareOwnTripShort(page, context, hop);
 
     const receiver = await context.newPage();

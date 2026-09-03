@@ -262,36 +262,101 @@ describe("TripStore", () => {
 
     describe("share link building", () => {
         let writeText: ReturnType<typeof vi.fn>;
+        let calls: { method: string; url: string; auth: string | null; }[];
 
         beforeEach(() => {
             writeText = vi.fn(() => Promise.resolve());
+            calls = [];
             // No `share` on this navigator, so the clipboard path is taken and the link
             // can be read back from writeText.
             vi.stubGlobal("navigator", { clipboard: { writeText } });
             vi.stubGlobal("location", { origin: "https://trip.hsin19.com", pathname: "/", search: "", hash: "" });
         });
 
-        function stubHopCreate(id: string) {
+        function json(body: unknown, status = 200) {
+            return { ok: status >= 200 && status < 300, status, json: () => Promise.resolve(body), text: () => Promise.resolve(JSON.stringify(body)) };
+        }
+
+        /** hop that mints `id` on POST and answers PUT with `putStatus`. Records every call. */
+        function stubHop(id: string, putStatus = 200) {
             vi.stubGlobal(
                 "fetch",
-                vi.fn(() => Promise.resolve({ ok: true, status: 201, json: () => Promise.resolve({ id }), text: () => Promise.resolve(JSON.stringify({ id })) })),
+                vi.fn((url: string, init?: RequestInit) => {
+                    const headers = (init?.headers ?? {}) as Record<string, string>;
+                    calls.push({ method: init?.method ?? "GET", url, auth: headers["Authorization"] ?? null });
+                    if (init?.method === "POST") return Promise.resolve(json({ id, editToken: `tok-${id}`, expiresAt: 1 }, 201));
+                    return Promise.resolve(json(putStatus === 200 ? { expiresAt: 2 } : { error: "x" }, putStatus));
+                }),
             );
         }
 
+        const SHORT = /^https:\/\/trip\.hsin19\.com\/#h=([A-Za-z0-9]+)\.([A-Za-z0-9_-]{22})$/;
+
         it("mints a short link when hop returns a well-formed id", async () => {
-            stubHopCreate("abcd1234");
-            await store.exportTripUrl();
+            stubHop("abcd1234");
+            await store.shareCurrentTrip();
             expect(writeText).toHaveBeenCalledTimes(1);
             expect(writeText.mock.calls[0]?.[0]).toMatch(/^https:\/\/trip\.hsin19\.com\/#h=abcd1234\.[A-Za-z0-9_-]{22}$/);
+            // A persistent link asks for hop's maximum lifetime, not its 90-day default.
+            expect(calls[0]?.url).toBe("https://hop.hsin19.com/api/v1/blobs?ttl=31536000");
         });
 
         // hop owns its id format. An id parseShareLink refuses would be a dead QR with a
         // success toast on the sender's side, so the inline link is the safe answer.
         it("falls back to the inline link when hop hands back an id no receiver would parse", async () => {
-            stubHopCreate("x".repeat(40));
-            await store.exportTripUrl();
+            stubHop("x".repeat(40));
+            await store.shareCurrentTrip();
             expect(writeText).toHaveBeenCalledTimes(1);
             expect(writeText.mock.calls[0]?.[0]).toMatch(/^https:\/\/trip\.hsin19\.com\/#s=/);
+        });
+
+        // The whole point of remembering the link: a QR code printed from the first tap
+        // must keep resolving to whatever the trip says now.
+        it("updates the same id and key on the second tap instead of minting a new link", async () => {
+            stubHop("abcd1234");
+            await store.shareCurrentTrip();
+            const first = writeText.mock.calls[0]?.[0] as string;
+            store.data!.trip.name = "改名了";
+            await store.shareCurrentTrip();
+
+            expect(writeText.mock.calls[1]?.[0]).toBe(first);
+            expect(calls.map(c => c.method)).toEqual(["POST", "PUT"]);
+            expect(calls[1]?.url).toBe("https://hop.hsin19.com/api/v1/blobs/abcd1234?ttl=31536000");
+            expect(calls[1]?.auth).toBe("Bearer tok-abcd1234");
+            // The key rides in the fragment only — never in the update request either.
+            const key = SHORT.exec(first)![2]!;
+            expect(JSON.stringify(calls)).not.toContain(key);
+        });
+
+        it("mints a new link when hop says the old one is gone, so the user gets a working URL", async () => {
+            stubHop("abcd1234");
+            await store.shareCurrentTrip();
+            const first = writeText.mock.calls[0]?.[0] as string;
+            stubHop("efgh5678", 404);
+            calls = [];
+            await store.shareCurrentTrip();
+
+            const second = writeText.mock.calls[1]?.[0] as string;
+            expect(second).toMatch(/#h=efgh5678\./);
+            expect(second).not.toBe(first);
+            expect(calls.map(c => c.method)).toEqual(["PUT", "POST"]);
+        });
+
+        // Minting a fresh link here would split the audience across two ids, and the
+        // inline fallback would hand over a URL different from the one already sent around.
+        it("hands out nothing when an existing link cannot be updated because hop is unreachable", async () => {
+            stubHop("abcd1234");
+            await store.shareCurrentTrip();
+            vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new TypeError("Failed to fetch"))));
+            await store.shareCurrentTrip();
+
+            expect(writeText).toHaveBeenCalledTimes(1);
+            expect(store.isSharing).toBe(false);
+            // The record survives, so the next tap retries the same link.
+            stubHop("zzzz9999");
+            await store.shareCurrentTrip();
+            expect(calls.at(-1)?.method).toBe("PUT");
+            expect(calls.at(-1)?.url).toContain("/abcd1234");
         });
 
         // Building a link is a network round trip now; a second tap mid-flight must not

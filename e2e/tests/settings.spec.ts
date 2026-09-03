@@ -107,7 +107,7 @@ test("編輯器：複製鈕可用，且保留手機輸入必要屬性與說明",
     await expect(editor).toHaveAttribute("spellcheck", "false");
     await expect(editor).toHaveAttribute("autocapitalize", "off");
 
-    // exact：不加會連「複製跨裝置連結」一起命中。
+    // exact：不加會連「複製分享連結」一起命中。
     await page.getByRole("button", { name: "複製", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("已複製編輯器中的 YAML");
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("name: 測試行程");

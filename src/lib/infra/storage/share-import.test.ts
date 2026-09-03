@@ -141,11 +141,41 @@ describe("importSharedTrip", () => {
         // Declines the overwrite, accepts the copy.
         vi.stubGlobal("confirm", vi.fn().mockReturnValueOnce(false).mockReturnValue(true));
 
-        const outcome = importSharedTrip(trip("東京", "t-tokyo"));
+        const outcome = importSharedTrip(trip("東京改", "t-tokyo"));
 
         expect(outcome.kind).toBe("imported");
         expect(tripIdFromYaml(storage.getItem(USER_YAML_KEY)!)).not.toBe("t-tokyo");
         expect(listProfiles().length).toBe(1);
+    });
+
+    // A persistent link gets reopened to check for updates, so "nothing changed" is the
+    // common case — and an overwrite prompt for identical bytes only teaches dismissal.
+    it("asks nothing and writes nothing when the link carries the version already held", () => {
+        seedActive("東京", "t-tokyo");
+        const before = storage.getItem(USER_YAML_KEY);
+        const ask = vi.fn(() => true);
+        vi.stubGlobal("confirm", ask);
+
+        const outcome = importSharedTrip(trip("東京", "t-tokyo"));
+
+        expect(outcome).toEqual({ kind: "unchanged", profileId: "p-active" });
+        expect(ask).not.toHaveBeenCalled();
+        expect(storage.getItem(USER_YAML_KEY)).toBe(before);
+        expect(listYamlBackups()).toEqual([]);
+    });
+
+    it("switches to a parked trip the link turns out to match exactly", () => {
+        seedActive("京都", "t-kyoto");
+        vi.stubGlobal("confirm", vi.fn(() => true));
+        importSharedTrip(trip("東京", "t-tokyo"));
+        const tokyoSlot = getActiveProfileId();
+        importSharedTrip(trip("大阪", "t-osaka"));
+
+        const outcome = importSharedTrip(trip("東京", "t-tokyo"));
+
+        expect(outcome).toEqual({ kind: "unchanged", profileId: tokyoSlot });
+        expect(getActiveProfileId()).toBe(tokyoSlot);
+        expect(tripIdFromYaml(storage.getItem(USER_YAML_KEY)!)).toBe("t-tokyo");
     });
 
     it("writes nothing when the user declines both the overwrite and the copy", () => {
@@ -164,7 +194,7 @@ describe("importSharedTrip", () => {
 
         const outcome = importSharedTrip(trip("東京", "t-tokyo"));
 
-        if (outcome.kind === "declined") throw new Error("expected a write");
+        if (outcome.kind === "declined" || outcome.kind === "unchanged") throw new Error("expected a write");
         expect(outcome.yaml).toBe(storage.getItem(USER_YAML_KEY));
         expect(outcome.yaml).toContain("$schema");
     });

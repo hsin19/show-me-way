@@ -4,7 +4,9 @@
  * It only ever handles ciphertext produced by `domain/share-crypto.ts`. The
  * decryption key must never appear in a URL, header or body here — hop holding
  * both an id and its key would make the payload readable, which is the one thing
- * this whole design exists to prevent.
+ * this whole design exists to prevent. The `editToken` is a different secret: it
+ * only authorizes replacing or deleting the ciphertext, and hop minted it, so it
+ * may travel back to hop.
  */
 
 import { MAX_TOKEN_CHARS } from "$lib/domain/share";
@@ -36,17 +38,33 @@ export type HopFetchResult =
     | { ok: false; reason: "gone" | "network"; };
 
 export type HopCreateResult =
-    | { ok: true; id: string; editToken: string; }
+    /** `expiresAt` is epoch ms, or null when hop did not say. */
+    | { ok: true; id: string; editToken: string; expiresAt: number | null; }
     | { ok: false; };
 
-/** Upload ciphertext, returning the short id. `editToken` is reserved for updatable links. */
-export async function createHopBlob(payload: string): Promise<HopCreateResult> {
+export type HopUpdateResult =
+    | { ok: true; expiresAt: number | null; }
+    /**
+     * `gone` and `unauthorized` both mean this id can never be updated again by us —
+     * the blob expired or was deleted, or the token we hold is not its token — so the
+     * caller should mint a new link. `network` is worth a retry with the same link.
+     */
+    | { ok: false; reason: "gone" | "unauthorized" | "network"; };
+
+export type HopDeleteResult = { ok: true; } | { ok: false; reason: "gone" | "unauthorized" | "network"; };
+
+/**
+ * Upload ciphertext, returning the short id and the `editToken` that later authorizes
+ * `updateHopBlob` / `deleteHopBlob`. `ttlSeconds` overrides hop's default lifetime;
+ * hop clamps it to its own range.
+ */
+export async function createHopBlob(payload: string, ttlSeconds?: number): Promise<HopCreateResult> {
     // Refuse locally rather than letting the server answer 413: the caller can offer
     // the inline link instead, which is a real fallback, not an error message.
     if (!payload || payload.length > MAX_TOKEN_CHARS) return { ok: false };
 
     try {
-        const res = await fetch(`${hopBaseUrl()}/api/v1/blobs`, {
+        const res = await fetch(`${hopBaseUrl()}/api/v1/blobs${ttlQuery(ttlSeconds)}`, {
             method: "POST",
             // text/plain keeps this a CORS-simple request, so there is no preflight
             // OPTIONS between the user tapping share and seeing a link.
@@ -56,15 +74,73 @@ export async function createHopBlob(payload: string): Promise<HopCreateResult> {
         });
         if (!res.ok) return { ok: false };
 
-        const data = await res.json() as { id?: unknown; editToken?: unknown; };
+        const data = await res.json() as { id?: unknown; editToken?: unknown; expiresAt?: unknown; };
         if (typeof data.id !== "string" || !data.id) return { ok: false };
         return {
             ok: true,
             id: data.id,
             editToken: typeof data.editToken === "string" ? data.editToken : "",
+            expiresAt: typeof data.expiresAt === "number" ? data.expiresAt : null,
         };
     } catch {
         return { ok: false };
+    }
+}
+
+function ttlQuery(ttlSeconds: number | undefined): string {
+    return ttlSeconds === undefined ? "" : `?ttl=${Math.floor(ttlSeconds)}`;
+}
+
+// Bearer auth costs a preflight, unlike the create path — acceptable here, since
+// updating or revoking a link never sits between a tap and the first link appearing.
+function ownerHeaders(editToken: string): Record<string, string> {
+    return { Authorization: `Bearer ${editToken}` };
+}
+
+function ownerFailure(status: number): "gone" | "unauthorized" | "network" {
+    if (status === 404 || status === 410) return "gone";
+    if (status === 401) return "unauthorized";
+    return "network";
+}
+
+/**
+ * Replace the ciphertext behind an existing id so the link already in circulation
+ * points at the new version. The payload must have been sealed under that link's
+ * own key (`resealShareToken`) or every holder of the link loses the ability to open
+ * it. Only the ciphertext and the editToken travel; the key is never an argument here.
+ */
+export async function updateHopBlob(id: string, editToken: string, payload: string, ttlSeconds?: number): Promise<HopUpdateResult> {
+    if (!payload || payload.length > MAX_TOKEN_CHARS || !editToken) return { ok: false, reason: "network" };
+
+    try {
+        const res = await fetch(`${hopBaseUrl()}/api/v1/blobs/${encodeURIComponent(id)}${ttlQuery(ttlSeconds)}`, {
+            method: "PUT",
+            headers: { "Content-Type": "text/plain", ...ownerHeaders(editToken) },
+            body: payload,
+            signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+        if (!res.ok) return { ok: false, reason: ownerFailure(res.status) };
+
+        const data = await res.json() as { expiresAt?: unknown; };
+        return { ok: true, expiresAt: typeof data.expiresAt === "number" ? data.expiresAt : null };
+    } catch {
+        return { ok: false, reason: "network" };
+    }
+}
+
+/** Delete the blob so the link stops resolving. `gone` means it already had. */
+export async function deleteHopBlob(id: string, editToken: string): Promise<HopDeleteResult> {
+    if (!editToken) return { ok: false, reason: "unauthorized" };
+    try {
+        const res = await fetch(`${hopBaseUrl()}/api/v1/blobs/${encodeURIComponent(id)}`, {
+            method: "DELETE",
+            headers: ownerHeaders(editToken),
+            signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+        if (!res.ok) return { ok: false, reason: ownerFailure(res.status) };
+        return { ok: true };
+    } catch {
+        return { ok: false, reason: "network" };
     }
 }
 

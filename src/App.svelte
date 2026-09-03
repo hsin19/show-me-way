@@ -192,7 +192,8 @@ let staleWeatherHours = $derived.by(() => {
                         onDeleteProfile={id => tripStore.deleteProfile(id)}
                         onBranchLocalCopy={localYaml => tripStore.branchLocalCopy(localYaml)}
                         onExportYaml={() => tripStore.exportTripYaml()}
-                        onExportUrl={() => tripStore.exportTripUrl()}
+                        onShareTrip={() => tripStore.shareCurrentTrip()}
+                        onRevokeShareLink={() => tripStore.revokeShareLink()}
                         sharing={tripStore.isSharing}
                     />
                 {/snippet}

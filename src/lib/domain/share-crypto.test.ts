@@ -7,6 +7,7 @@ import { base64urlToBytes } from "./share";
 import {
     isEncryptedShareSupported,
     openShareToken,
+    resealShareToken,
     sealShareToken,
 } from "./share-crypto";
 
@@ -96,5 +97,30 @@ describe("sealShareToken / openShareToken", () => {
     it("still rejects a zip bomb after decryption", async () => {
         const sealed = await sealShareToken("a".repeat(6 * 1024 * 1024));
         await expect(openShareToken(sealed.payload, sealed.key)).rejects.toThrow("內容過大");
+    });
+});
+
+describe("resealShareToken", () => {
+    // The key is printed in someone's QR code; updating the link means the old key must
+    // open the new ciphertext.
+    it("produces a payload the original key opens", async () => {
+        const sealed = await sealShareToken(SAMPLE_YAML);
+        const updated = "trip:\n  name: 改版 🗼\n";
+        const payload = await resealShareToken(updated, sealed.key);
+        expect(await openShareToken(payload, sealed.key)).toBe(updated);
+        expect(payload).not.toBe(sealed.payload);
+    });
+
+    it("never repeats an IV under the same key", async () => {
+        const { key } = await sealShareToken(SAMPLE_YAML);
+        const a = await resealShareToken(SAMPLE_YAML, key);
+        const b = await resealShareToken(SAMPLE_YAML, key);
+        // The first 12 bytes are the IV. Same key plus same IV is the one thing that
+        // breaks AES-GCM outright, so this is the invariant, not just tidiness.
+        expect(base64urlToBytes(a).subarray(0, 12)).not.toEqual(base64urlToBytes(b).subarray(0, 12));
+    });
+
+    it("rejects a malformed key with a ShareLinkError", async () => {
+        await expect(resealShareToken(SAMPLE_YAML, "AAAA")).rejects.toThrow("分享連結內容無效");
     });
 });

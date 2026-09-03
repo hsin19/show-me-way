@@ -148,8 +148,13 @@ export function listLocalTrips(): { profileId: string; yaml: string; }[] {
  * itself, because that is what everything else here — switching, parking, the Drive
  * binding — is keyed by.
  */
-export function findProfileByTripId(tripId: string): string | null {
-    return listLocalTrips().find(trip => tripIdFromYaml(trip.yaml) === tripId)?.profileId ?? null;
+function findProfileByTripId(tripId: string): string | null {
+    return findLocalTripByTripId(tripId)?.profileId ?? null;
+}
+
+/** `findProfileByTripId` plus the YAML in that slot, for a caller that has to compare contents. */
+export function findLocalTripByTripId(tripId: string): { profileId: string; yaml: string; } | null {
+    return listLocalTrips().find(trip => tripIdFromYaml(trip.yaml) === tripId) ?? null;
 }
 
 /**

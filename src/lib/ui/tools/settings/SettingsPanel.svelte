@@ -1,5 +1,8 @@
 <script lang="ts">
-import { parseShareLink } from "$lib/domain/share";
+import {
+    buildShortShareUrl,
+    parseShareLink,
+} from "$lib/domain/share";
 import {
     serializeToYaml,
     type TripData,
@@ -25,11 +28,13 @@ import {
 } from "$lib/infra/storage/yaml-storage";
 import { gdriveSync } from "$lib/stores/gdrive.svelte";
 import { settingsDraft } from "$lib/stores/settings-draft.svelte";
+import { shareLinks } from "$lib/stores/share-link.svelte";
 import {
     copyToClipboard,
     showToast,
 } from "$lib/stores/toast.svelte";
 import ConfirmBar from "$lib/ui/shared/ConfirmBar.svelte";
+import Ban from "@lucide/svelte/icons/ban";
 import CloudAlert from "@lucide/svelte/icons/cloud-alert";
 import CloudDownload from "@lucide/svelte/icons/cloud-download";
 import CloudOff from "@lucide/svelte/icons/cloud-off";
@@ -39,7 +44,8 @@ import Copy from "@lucide/svelte/icons/copy";
 import Download from "@lucide/svelte/icons/download";
 import History from "@lucide/svelte/icons/history";
 import Lightbulb from "@lucide/svelte/icons/lightbulb";
-import Link2 from "@lucide/svelte/icons/link-2";
+import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+import Share2 from "@lucide/svelte/icons/share-2";
 import Sliders from "@lucide/svelte/icons/sliders";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import { onMount } from "svelte";
@@ -59,8 +65,10 @@ interface Props {
     /** 兩份都留: park `yaml` as a trip of its own. Called only once the cloud copy has landed. */
     onBranchLocalCopy: (yaml: string) => Promise<void>;
     onExportYaml: () => void;
-    onExportUrl: () => void;
-    /** True while `onExportUrl` is mid-flight — a hop round trip — so its button disables. */
+    /** The overview's 分享行程: mints the trip's persistent link, or updates the one it has. */
+    onShareTrip: () => void;
+    onRevokeShareLink: () => void;
+    /** True while any share action is mid-flight — a hop round trip — so those buttons disable. */
     sharing?: boolean;
 }
 
@@ -74,7 +82,8 @@ let {
     onDeleteProfile,
     onBranchLocalCopy,
     onExportYaml,
-    onExportUrl,
+    onShareTrip,
+    onRevokeShareLink,
     sharing = false,
 }: Props = $props();
 
@@ -157,6 +166,12 @@ async function save() {
 async function landSharedLink(parsed: TripData) {
     const outcome = importSharedTrip(parsed);
     if (outcome.kind === "declined") return;
+    if (outcome.kind === "unchanged") {
+        showToast("這趟行程已經是連結裡的版本");
+        await onReload();
+        onDone();
+        return;
+    }
     yamlInput = outcome.yaml;
     yamlSnapshot = outcome.yaml;
     settingsDraft.yaml = null;
@@ -183,6 +198,15 @@ const activeTripId = ensureActiveProfileId();
 // From the persisted copy, not the live editor value: this is a full js-yaml parse, and
 // binding it to the textarea ran one per keystroke to move a year-month label.
 let activeTripStartDate = $derived(tripStartDateFromYaml(yamlSnapshot) ?? undefined);
+
+let shareLink = $derived(shareLinks.forTrip(activeTripId));
+let shareLinkUrl = $derived(shareLink ? buildShortShareUrl(shareLink.id, shareLink.key) : null);
+let confirmingRevoke = $state(false);
+
+function revokeShareLink() {
+    confirmingRevoke = false;
+    onRevokeShareLink();
+}
 
 /** Login is this tap's whole job — whatever the button turns into next (上傳/同步/下載) is a separate, explicit tap once connected. */
 async function loginToCloud() {
@@ -720,29 +744,78 @@ function discardDraft() {
         {/if}
     </div>
 
-    <!-- Both of these carry expenses: they are for the trip's owner. Sharing with
-         other people is the overview hero's 分享行程, which strips them. -->
+    <!-- The same link the overview hero's 分享行程 button produces — one per trip, updated in
+         place, so a QR code printed from it keeps showing the newest version. -->
+    <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint">
+        <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
+            <Share2 size={12} class="shrink-0 text-accent" aria-hidden="true" />分享連結
+        </p>
+        {#if shareLink && shareLinkUrl}
+            <p class="mt-1.5">
+                建立於 {formatBackupTime(shareLink.createdAt)}，最後更新 {formatBackupTime(shareLink.updatedAt)}{shareLink.expiresAt ? `，有效至 ${shareLink.expiresAt.slice(0, 10)}` : ""}。再按一次「更新」會把目前的行程（不含記帳）加密上傳到同一條連結，已分享出去的連結與 QR code 不用換。
+            </p>
+            <div class="grid grid-cols-2 gap-2 mt-2">
+                <button
+                    onclick={onShareTrip}
+                    disabled={sharing}
+                    aria-busy={sharing}
+                    class="w-full min-h-[44px] flex items-center justify-center gap-1 px-1.5 rounded-lg bg-accent/10 text-[11px] font-bold text-accent hover:bg-accent/15 transition cursor-pointer text-center disabled:opacity-40 disabled:cursor-wait"
+                >
+                    <RefreshCw size={12} class="shrink-0" aria-hidden="true" /> 更新分享連結
+                </button>
+                <button
+                    onclick={() => copyToClipboard(shareLinkUrl, "已複製分享連結")}
+                    class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-2 rounded-lg bg-tint-1 border border-card-border text-[11px] font-bold text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-center"
+                >
+                    <Copy size={12} class="shrink-0" aria-hidden="true" /> 複製分享連結
+                </button>
+            </div>
+            {#if confirmingRevoke}
+                <div class="mt-2">
+                    <ConfirmBar
+                        message="撤銷後會刪除短連結服務上的加密內容，所有拿到這條連結或 QR code 的人都無法再開啟。確定撤銷？"
+                        confirmLabel="確定撤銷"
+                        onconfirm={revokeShareLink}
+                        oncancel={() => (confirmingRevoke = false)}
+                    />
+                </div>
+            {:else}
+                <button
+                    type="button"
+                    onclick={() => (confirmingRevoke = true)}
+                    disabled={sharing}
+                    class="w-full min-h-[44px] mt-2 flex items-center justify-center gap-1 rounded-lg text-[11px] font-bold text-text-muted hover:text-danger hover:bg-danger/10 transition cursor-pointer disabled:opacity-40"
+                >
+                    <Ban size={12} class="shrink-0" aria-hidden="true" /> 撤銷分享連結
+                </button>
+            {/if}
+        {:else}
+            <p class="mt-1.5">這趟行程還沒有分享連結。建立後會得到一條加密短連結，之後每次再分享都會更新同一條連結，做成 QR code 也不會過時。</p>
+            <button
+                onclick={onShareTrip}
+                disabled={sharing}
+                aria-busy={sharing}
+                class="w-full min-h-[44px] mt-2 flex items-center justify-center gap-1 px-1.5 rounded-lg bg-accent/10 text-[11px] font-bold text-accent hover:bg-accent/15 transition cursor-pointer text-center disabled:opacity-40 disabled:cursor-wait"
+            >
+                <Share2 size={12} class="shrink-0" aria-hidden="true" /> 建立分享連結
+            </button>
+        {/if}
+    </div>
+
+    <!-- The export carries expenses: it is for the trip's owner. Sharing with other
+         people is the 分享連結 above, which strips them; moving between one's own
+         devices is Drive sync. -->
     <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint">
         <p class="flex items-center gap-1 font-bold text-text-primary text-xs">
             <Download size={12} class="shrink-0 text-accent" aria-hidden="true" />匯出資料
         </p>
-        <p class="mt-1.5">複製成跨裝置連結快速搬移（含記帳），或下載成檔案保存，避免裝置遺失或清除瀏覽器資料時一併消失。</p>
-        <div class="grid grid-cols-2 gap-2 mt-2">
-            <button
-                onclick={onExportUrl}
-                disabled={sharing}
-                aria-busy={sharing}
-                class="w-full min-h-[44px] flex items-center justify-center gap-1 px-1.5 rounded-lg bg-accent/10 text-[11px] font-bold text-accent hover:bg-accent/15 transition cursor-pointer text-center disabled:opacity-40 disabled:cursor-wait"
-            >
-                <Link2 size={12} class="shrink-0" aria-hidden="true" /> 複製跨裝置連結
-            </button>
-            <button
-                onclick={onExportYaml}
-                class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-2 rounded-lg bg-tint-1 border border-card-border text-[11px] font-bold text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-center"
-            >
-                <Download size={12} class="shrink-0" aria-hidden="true" /> 匯出行程 YAML
-            </button>
-        </div>
+        <p class="mt-1.5">下載成檔案保存（含記帳），避免裝置遺失或清除瀏覽器資料時一併消失；要在多台裝置間同步請連線 Google 雲端硬碟。</p>
+        <button
+            onclick={onExportYaml}
+            class="w-full min-h-[44px] mt-2 flex items-center justify-center gap-1.5 px-2 rounded-lg bg-tint-1 border border-card-border text-[11px] font-bold text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-center"
+        >
+            <Download size={12} class="shrink-0" aria-hidden="true" /> 匯出行程 YAML
+        </button>
     </div>
 
     {#if confirmingReset}
