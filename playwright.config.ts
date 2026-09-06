@@ -31,8 +31,11 @@ export default defineConfig({
         contextOptions: { reducedMotion: "reduce" },
     },
     projects: [
-        // The app is designed for phones; test at a mobile viewport.
+        // The app is designed for phones; test at a mobile viewport. WebKit is the
+        // one that matters in the field — the installed iOS PWA — and the only engine
+        // the Safari-specific code paths can be exercised on.
         { name: "mobile-chromium", use: { ...devices["Pixel 7"] } },
+        { name: "mobile-webkit", use: { ...devices["iPhone 13"] } },
     ],
     webServer: {
         // Builds by default so `pnpm run test:e2e` is self-contained. `check` sets

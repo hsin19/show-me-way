@@ -89,3 +89,33 @@ export async function seedItinerary(page: Page, yaml: string = FIXTURE_YAML): Pr
 export async function stubMissingLocalItinerary(page: Page): Promise<void> {
     await page.route("**/itinerary.local.yaml", route => route.fulfill({ status: 404, body: "not found" }));
 }
+
+/**
+ * Route every copy into a page-local buffer readable with `readCopiedText`. Replaces
+ * `context.grantPermissions(["clipboard-read"])`, which WebKit does not support, and
+ * removes `navigator.share` so both engines take the app's clipboard fallback — headless
+ * Chromium has no share sheet, headless WebKit would otherwise open one nobody can answer.
+ * Register before `page.goto`, like the other init scripts.
+ */
+export async function captureClipboard(page: Page): Promise<void> {
+    await page.addInitScript(() => {
+        const buffer = { text: "" };
+        Object.defineProperty(window, "__copiedText", { get: () => buffer.text });
+        Object.defineProperty(navigator, "clipboard", {
+            configurable: true,
+            value: {
+                writeText: (text: string) => {
+                    buffer.text = String(text);
+                    return Promise.resolve();
+                },
+                readText: () => Promise.resolve(buffer.text),
+            },
+        });
+        Object.defineProperty(navigator, "share", { configurable: true, value: undefined });
+    });
+}
+
+/** The last text the app copied on this page; empty until it copies something. */
+export function readCopiedText(page: Page): Promise<string> {
+    return page.evaluate(() => (window as unknown as { __copiedText: string; }).__copiedText);
+}

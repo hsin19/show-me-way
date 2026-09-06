@@ -12,7 +12,7 @@ dist
 dist-ssr
 .svelte-check
 *.local
-itinerary.local.yaml
+itinerary.local*
 
 # Local build config. `.env.example` is the committed template.
 .env

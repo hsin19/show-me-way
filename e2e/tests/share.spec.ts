@@ -1,11 +1,10 @@
 import { encodeShareToken } from "$lib/domain/share";
-import type {
-    BrowserContext,
-    Page,
-} from "@playwright/test";
+import type { Page } from "@playwright/test";
 import {
+    captureClipboard,
     expect,
     FIXTURE_YAML,
+    readCopiedText,
     seedItinerary,
     test,
 } from "./fixtures";
@@ -125,18 +124,18 @@ async function ageLocalCopy(page: Page): Promise<void> {
  * 分享自己的行程，回傳連結。收件端刻意用同一個 context 的新分頁，所以共用 localStorage ——
  * 那正是「連結帶進來的行程本機已經有」的情境。
  */
-async function shareOwnTrip(page: Page, context: BrowserContext): Promise<string> {
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+async function shareOwnTrip(page: Page): Promise<string> {
+    await captureClipboard(page);
     await seedItinerary(page);
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
 
     // 分享行程按鈕在總覽 hero 卡（與每日的分享今日行程對稱）。
-    // headless Chromium 沒有 navigator.share → 走剪貼簿 fallback 並跳 toast
+    // fixture 拿掉了 navigator.share，兩個引擎都走剪貼簿 fallback 並跳 toast。
     await page.getByRole("button", { name: "分享行程", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("分享連結已複製");
 
-    const sharedUrl = await page.evaluate(() => navigator.clipboard.readText());
+    const sharedUrl = await readCopiedText(page);
     expect(sharedUrl).toContain("#s=");
     return sharedUrl;
 }
@@ -149,7 +148,7 @@ function answerDialogs(page: Page, answers: boolean[]): { asked: () => number; }
 }
 
 test("分享行程按鈕：連結帶回同一趟行程時，第一個選項是覆蓋原本那份", async ({ page, context }) => {
-    const sharedUrl = await shareOwnTrip(page, context);
+    const sharedUrl = await shareOwnTrip(page);
     await ageLocalCopy(page);
     const before = await localTripIds(page);
 
@@ -170,7 +169,7 @@ test("分享行程按鈕：連結帶回同一趟行程時，第一個選項是�
 });
 
 test("分享行程按鈕：拒絕覆蓋後可以改成另存副本，副本會拿到自己的 trip.id", async ({ page, context }) => {
-    const sharedUrl = await shareOwnTrip(page, context);
+    const sharedUrl = await shareOwnTrip(page);
     await ageLocalCopy(page);
     const before = await localTripIds(page);
 
@@ -190,7 +189,7 @@ test("分享行程按鈕：拒絕覆蓋後可以改成另存副本，副本會�
 });
 
 test("分享行程按鈕：兩問都拒絕時什麼都不動，網址 token 仍被清除", async ({ page, context }) => {
-    const sharedUrl = await shareOwnTrip(page, context);
+    const sharedUrl = await shareOwnTrip(page);
     await ageLocalCopy(page);
     const before = await localTripIds(page);
 
@@ -206,7 +205,7 @@ test("分享行程按鈕：兩問都拒絕時什麼都不動，網址 token 仍�
 
 // 持久性連結會被重開來「看看有沒有更新」，沒更新才是常態；這時跳覆蓋確認只會教人按取消。
 test("分享行程按鈕：連結裡的版本和本機一樣時不問也不寫，直接提示已是最新", async ({ page, context }) => {
-    const sharedUrl = await shareOwnTrip(page, context);
+    const sharedUrl = await shareOwnTrip(page);
     const before = await localTripIds(page);
     const backupsBefore = await page.evaluate(() => JSON.parse(localStorage.getItem("showmeway_yaml_backups") ?? "[]").length as number);
 
@@ -270,8 +269,8 @@ async function mockHop(page: Page, store: HopStore, opts: { getFails?: boolean; 
     });
 }
 
-async function shareOwnTripShort(page: Page, context: BrowserContext, store: HopStore): Promise<string> {
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+async function shareOwnTripShort(page: Page, store: HopStore): Promise<string> {
+    await captureClipboard(page);
     await mockHop(page, store);
     await seedItinerary(page);
     await page.goto("/");
@@ -280,14 +279,14 @@ async function shareOwnTripShort(page: Page, context: BrowserContext, store: Hop
     await page.getByRole("button", { name: "分享行程", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("已加密上傳");
 
-    const sharedUrl = await page.evaluate(() => navigator.clipboard.readText());
+    const sharedUrl = await readCopiedText(page);
     expect(sharedUrl).toContain("#h=");
     return sharedUrl;
 }
 
-test("短連結分享：上傳的是密文，連結短到可以做成 QR code", async ({ page, context }) => {
+test("短連結分享：上傳的是密文，連結短到可以做成 QR code", async ({ page }) => {
     const hop: HopStore = { uploaded: "", puts: [] };
-    const sharedUrl = await shareOwnTripShort(page, context, hop);
+    const sharedUrl = await shareOwnTripShort(page, hop);
 
     // 這一行就是整個功能的核心不變條件：離開裝置的是密文，不是行程內容。
     expect(hop.uploaded.length).toBeGreaterThan(0);
@@ -303,7 +302,7 @@ test("短連結分享：上傳的是密文，連結短到可以做成 QR code", 
 // 所以印出去的 QR code 不會過時。金鑰只在網址片段裡，PUT 的網址與 header 都不能帶到。
 test("再次分享同一趟行程：更新同一條連結而不是換一條，收件端拿到新版本", async ({ page, context }) => {
     const hop: HopStore = { uploaded: "", puts: [] };
-    const firstUrl = await shareOwnTripShort(page, context, hop);
+    const firstUrl = await shareOwnTripShort(page, hop);
     const firstUpload = hop.uploaded;
 
     // 改個名字再分享一次。
@@ -319,7 +318,7 @@ test("再次分享同一趟行程：更新同一條連結而不是換一條，�
     await page.getByRole("button", { name: "分享行程", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("分享連結已更新");
 
-    const secondUrl = await page.evaluate(() => navigator.clipboard.readText());
+    const secondUrl = await readCopiedText(page);
     expect(secondUrl).toBe(firstUrl);
     expect(hop.puts).toHaveLength(1);
     expect(hop.puts[0]!.auth).toBe("Bearer edit-token");
@@ -338,7 +337,7 @@ test("再次分享同一趟行程：更新同一條連結而不是換一條，�
 
 test("短連結匯入：收件端解密後正常匯入，網址片段被清除", async ({ page, context }) => {
     const hop: HopStore = { uploaded: "", puts: [] };
-    const sharedUrl = await shareOwnTripShort(page, context, hop);
+    const sharedUrl = await shareOwnTripShort(page, hop);
     await ageLocalCopy(page);
 
     const receiver = await context.newPage();
@@ -353,7 +352,7 @@ test("短連結匯入：收件端解密後正常匯入，網址片段被清除",
 
 test("短連結匯入：取不到密文時保留網址片段 —— 金鑰只存在於那裡", async ({ page, context }) => {
     const hop: HopStore = { uploaded: "", puts: [] };
-    const sharedUrl = await shareOwnTripShort(page, context, hop);
+    const sharedUrl = await shareOwnTripShort(page, hop);
 
     const receiver = await context.newPage();
     await mockHop(receiver, hop, { getFails: true });
@@ -367,7 +366,7 @@ test("短連結匯入：取不到密文時保留網址片段 —— 金鑰只存
 
 test("短連結匯入：密文無法解密時提示內容無效並清除網址片段", async ({ page, context }) => {
     const hop: HopStore = { uploaded: "", puts: [] };
-    const sharedUrl = await shareOwnTripShort(page, context, hop);
+    const sharedUrl = await shareOwnTripShort(page, hop);
 
     const receiver = await context.newPage();
     await mockHop(receiver, hop, { corrupt: true });

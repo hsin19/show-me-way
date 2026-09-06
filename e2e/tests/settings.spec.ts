@@ -1,7 +1,9 @@
 import type { Page } from "@playwright/test";
 import {
+    captureClipboard,
     expect,
     FIXTURE_YAML,
+    readCopiedText,
     seedItinerary,
     test,
 } from "./fixtures";
@@ -96,8 +98,8 @@ test("未儲存草稿：切換分頁後再回來仍保留編輯內容", async ({
 
 // 這幾個 affordance 曾經在一次無關的改寫中被順手刪掉（複製鈕、手機輸入屬性、
 // 預設行程與 Skill 安裝說明），而型別、lint、單元測試全都不會察覺。
-test("編輯器：複製鈕可用，且保留手機輸入必要屬性與說明", async ({ page, context }) => {
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+test("編輯器：複製鈕可用，且保留手機輸入必要屬性與說明", async ({ page }) => {
+    await captureClipboard(page);
     await seedItinerary(page);
     await page.goto("/");
     await openSettings(page);
@@ -110,7 +112,7 @@ test("編輯器：複製鈕可用，且保留手機輸入必要屬性與說明",
     // exact：不加會連「複製分享連結」一起命中。
     await page.getByRole("button", { name: "複製", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("已複製編輯器中的 YAML");
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("name: 測試行程");
+    expect(await readCopiedText(page)).toContain("name: 測試行程");
 
     // 說明卡：回復預設的入口、資料出境、以及產生 YAML 的 Skill 從哪來。
     await expect(page.getByRole("link", { name: "itinerary.yaml" })).toBeVisible();
