@@ -100,7 +100,8 @@ function buildSystemInstruction(itineraryYaml: string, currentDateTime: string):
         "6. 呼叫時 yaml 參數要傳入「完整」的更新後行程（沿用原本所有欄位與結構，只改動需要變動的部分，其餘原封不動保留，不可省略）；summary 參數用與回答相同的語言一兩句話說明這次的變更。",
         "7. 僅在確實要修改行程時才呼叫 update_itinerary；單純回答問題時不要呼叫，直接用文字回覆即可。",
         // Without rule 8 the model writes bare URLs, which markdown.ts renders as
-        // literal text rather than links.
+        // literal text rather than links. The field list is hand-kept: it must name
+        // exactly the fields RichText renders, and nothing checks that it does.
         "8. desc、bullets、alternatives 的 note、todo 與 packing 的 text 支援行內 Markdown：連結一律寫成 [說明文字](https://…)，不要放裸網址；可用 **粗體**、*斜體*、`等寬`。其餘欄位（title、pace、confirmation 的 note 等）不支援，請寫純文字。",
         // Rule 9: `56*36*23` parses as emphasis, here and in CommonMark alike, so
         // a size written that way loses its asterisks and italicizes the middle.

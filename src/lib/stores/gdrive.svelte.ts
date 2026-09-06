@@ -1,3 +1,19 @@
+// Google Drive sync for one trip at a time, on top of the pure decisions in
+// infra/http/gdrive.ts (`decideSyncAction` for direction, `buildRebindRecord` for a file
+// found without a binding). The mental model, in the order things go wrong:
+//
+// - The trip → file binding in `showmeway_gdrive_trips` is a rebuildable cache, not a
+//   record of truth: `reconcileBindings` re-derives a lost one after every listing from
+//   each file's `appProperties.showmewayTripId`, so a sign-out or evicted storage does
+//   not produce a duplicate cloud file.
+// - A conflict changes nothing on either side. It pauses automatic sync for that trip
+//   and leaves the decision to 行程管理's strip; `force` is how the user's answer comes
+//   back in. `diverged` lives on the record so the hold survives a reload.
+// - A `pulled` result is not yet recorded. The caller lands the bytes first and only
+//   then runs `commit`; recording ahead of that claims a version this device never took.
+// - `checkOnly` transfers nothing in either direction — a clean trip whose Drive file is
+//   gone decides `push`, and a button labelled 比對 may not re-create a deleted file.
+
 import {
     serializeToYaml,
     type TripData,

@@ -250,13 +250,19 @@ function normalizeTripData(raw: unknown): TripData {
 }
 
 /**
- * The YAML written to storage, exports and share links. Canonicalization rather
+ * The YAML written to storage, share links and Drive. Canonicalization rather
  * than a round-trip: array order survives, comments and hand-authored key order
- * do not.
+ * do not, and every key the schema does not declare is already gone by the time
+ * data reaches here. Every save path comes through — a checklist toggle included.
  */
 export function serializeToYaml(data: TripData): string {
+    // JSON, not structuredClone: the latter throws on the $state proxy this is handed
+    // in the browser, and the unit tests (plain objects) would never notice the swap.
     const clean = JSON.parse(JSON.stringify(data)) as TripData;
     const trip = clean.trip as Partial<TripInfo>;
+    // The derived fields go; `trip.id` stays. It is the trip's identity, not a restatement
+    // of its contents — Drive's `appProperties.showmewayTripId` is this value, and stripping
+    // it would mint a new one on the next load and orphan that cloud file.
     delete trip.start;
     delete trip.end;
     delete trip.departure;
