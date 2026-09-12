@@ -8,8 +8,11 @@ import {
     vi,
 } from "vitest";
 import {
+    decodeShareLinkProperties,
+    encodeShareLinkProperties,
     loadShareLinkMap,
     saveShareLinkMap,
+    SHARE_LINK_PROPERTY,
     SHARE_LINKS_KEY,
     type ShareLinkRecord,
 } from "./share-links";
@@ -62,5 +65,35 @@ describe("share-links storage", () => {
             },
         });
         expect(loadShareLinkMap()).toEqual({});
+    });
+});
+
+describe("share-link Drive properties", () => {
+    it("round-trips a record through the property pair", () => {
+        const record: ShareLinkRecord = { ...RECORD, expiresAt: "2027-09-04T00:00:00.000Z" };
+        const encoded = encodeShareLinkProperties(record)!;
+
+        expect(encoded.shareLink).toBe(`${record.id}.${record.key}.${record.editToken}`);
+        expect(decodeShareLinkProperties(encoded.shareLink, encoded.shareLinkAt)).toEqual(record);
+    });
+
+    it("keeps each property inside Drive's 124-byte cap, and refuses a record that cannot", () => {
+        const encoded = encodeShareLinkProperties({ ...RECORD, editToken: "t".repeat(64) })!;
+        expect(new TextEncoder().encode(SHARE_LINK_PROPERTY + encoded.shareLink).length).toBeLessThanOrEqual(124);
+
+        expect(encodeShareLinkProperties({ ...RECORD, editToken: "t".repeat(200) })).toBeNull();
+        // A dot is the separator, so a secret carrying one could not be read back.
+        expect(encodeShareLinkProperties({ ...RECORD, editToken: "to.ken" })).toBeNull();
+    });
+
+    it("refuses a half-written pair but still yields a link when only the times are missing", () => {
+        expect(decodeShareLinkProperties(undefined, undefined)).toBeNull();
+        expect(decodeShareLinkProperties("abcd1234.key", "")).toBeNull();
+
+        const decoded = decodeShareLinkProperties("abcd1234.key.tok", undefined)!;
+        expect(decoded.id).toBe("abcd1234");
+        expect(decoded.editToken).toBe("tok");
+        expect(decoded.expiresAt).toBeNull();
+        expect(Date.parse(decoded.createdAt)).not.toBeNaN();
     });
 });

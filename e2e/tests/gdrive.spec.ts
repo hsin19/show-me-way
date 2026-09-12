@@ -33,6 +33,8 @@ interface FakeFile {
     startDate?: string;
     /** 對應 appProperties.showmewayTripId —— 重新綁定就是靠它認出「同一趟行程」 */
     tripId?: string;
+    /** 上傳／PATCH 寫進來的其他 appProperties（分享連結就走這裡），null 代表清掉 */
+    props?: Record<string, string>;
 }
 
 interface FakeDrive {
@@ -42,6 +44,8 @@ interface FakeDrive {
     list: () => FakeFile[];
     /** 每個端點被打了幾次，用來驗 debounce 有沒有真的合併 */
     counts: () => { uploads: number; downloads: number; };
+    /** 檔案上被寫進去的 appProperties —— 分享連結是 metadata，不在內容裡 */
+    props: (id: string) => Record<string, string>;
 }
 
 async function installFakeDrive(page: Page, initial: FakeFile[] = []): Promise<FakeDrive> {
@@ -63,17 +67,28 @@ async function installFakeDrive(page: Page, initial: FakeFile[] = []): Promise<F
             // 真的算，不是寫死：假 Drive 每次被寫入都會重算，行為才跟真的 Drive 一致。
             contentHash: yamlFingerprint(f.content),
             ...(f.startDate ? { startDate: f.startDate } : {}),
+            ...(f.props ?? {}),
         },
     });
+
+    // Drive 的 appProperties 是合併寫入：沒提到的 key 留著，值為 null 的 key 被清掉。
+    const mergeProps = (f: FakeFile, incoming: Record<string, string | null> | undefined) => {
+        if (!incoming) return;
+        f.props ??= {};
+        for (const [key, value] of Object.entries(incoming)) {
+            if (value === null) delete f.props[key];
+            else f.props[key] = value;
+        }
+    };
 
     // multipart/related：part[1] 是 JSON metadata，part[2] 是空行之後的 YAML
     const parseMultipart = (body: string, boundary: string) => {
         const parts = body.split(`--${boundary}`);
         const head = parts[1]!;
-        const metadata = JSON.parse(head.slice(head.indexOf("{"), head.lastIndexOf("}") + 1)) as { name?: string; };
+        const metadata = JSON.parse(head.slice(head.indexOf("{"), head.lastIndexOf("}") + 1)) as { name?: string; appProperties?: Record<string, string | null>; };
         const media = parts[2]!;
         const content = media.slice(media.indexOf("\r\n\r\n") + 4).replace(/\r\n$/, "");
-        return { name: metadata.name ?? "未命名行程.yaml", content };
+        return { name: metadata.name ?? "未命名行程.yaml", content, appProperties: metadata.appProperties };
     };
 
     await page.route("https://www.googleapis.com/**", async route => {
@@ -88,9 +103,10 @@ async function installFakeDrive(page: Page, initial: FakeFile[] = []): Promise<F
         if (url.pathname.startsWith("/upload/drive/v3/files")) {
             uploads++;
             const boundary = (req.headers()["content-type"] ?? "").split("boundary=")[1]!;
-            const { name, content } = parseMultipart(req.postData() ?? "", boundary);
+            const { name, content, appProperties } = parseMultipart(req.postData() ?? "", boundary);
             const id = method === "PATCH" ? url.pathname.split("/").pop()! : `file-new-${nextId++}`;
-            files.set(id, { id, name, content });
+            files.set(id, { ...files.get(id), id, name, content });
+            mergeProps(files.get(id)!, appProperties);
             return route.fulfill({ json: meta(files.get(id)!) });
         }
 
@@ -119,6 +135,10 @@ async function installFakeDrive(page: Page, initial: FakeFile[] = []): Promise<F
             downloads++;
             return route.fulfill({ body: file.content, contentType: "text/yaml" });
         }
+        // metadata-only PATCH：分享連結的寫入不該動到內容，也不該重算 contentHash
+        if (method === "PATCH") {
+            mergeProps(file, (JSON.parse(req.postData() ?? "{}") as { appProperties?: Record<string, string | null>; }).appProperties);
+        }
         return route.fulfill({ json: meta(file) });
     });
 
@@ -130,6 +150,7 @@ async function installFakeDrive(page: Page, initial: FakeFile[] = []): Promise<F
         read: id => files.get(id)?.content,
         list: () => [...files.values()],
         counts: () => ({ uploads, downloads }),
+        props: id => files.get(id)?.props ?? {},
     };
 }
 
@@ -200,6 +221,9 @@ test("連線 Google：走完 GIS 流程並把行程建立成雲端檔", async ({
 
     expect(drive.list()).toHaveLength(1);
     expect(drive.list()[0]?.content).toContain("name: 測試行程");
+
+    // 綁定成立後，切換器把這趟標成「已同步雲端」
+    await expect(page.getByRole("button", { name: /目前行程/ })).toHaveAccessibleName(/已同步雲端/);
 });
 
 test("重新綁定：登出再登入後靠 trip.id 認回雲端檔案，不是當成沒備份過", async ({ page }) => {
@@ -354,6 +378,56 @@ test("雲端行程清單：載入為新行程，原行程仍可切回；刪除�
     await openTripManagement(page);
     await page.getByRole("button", { name: /目前行程/ }).click();
     await expect(page.getByRole("button", { name: /測試行程.*切換/ })).toBeVisible();
+});
+
+// 分享連結是 metadata：上傳時走 appProperties，所以同一個 Google 帳號的另一台裝置能更新
+// 同一條連結，而收件端解出來的 YAML 裡沒有金鑰也沒有 editToken。
+const SHARE_KEY = "KKKKKKKKKKKKKKKKKKKKKK";
+const SHARE_PROPERTY = `sh0rt1d.${SHARE_KEY}.edit-token`;
+
+test("分享連結上傳：進 appProperties 而不是行程內容", async ({ page }) => {
+    const drive = await installFakeDrive(page);
+    await seedItinerary(page);
+    await seedConnected(page);
+    await page.addInitScript(property => {
+        const [id, key, editToken] = property.split(".");
+        window.localStorage.setItem(
+            "showmeway_share_links",
+            JSON.stringify({ "p-e2e": { id, key, editToken, createdAt: "2026-09-04T00:00:00.000Z", updatedAt: "2026-09-04T00:00:00.000Z", expiresAt: null } }),
+        );
+    }, SHARE_PROPERTY);
+    await page.goto("/");
+
+    await openTripManagement(page);
+    await page.getByRole("button", { name: "上傳此行程至 Google Drive (建立新檔案)" }).click();
+    await expect(page.getByText(/已建立雲端備份/)).toBeVisible();
+
+    const fileId = drive.list()[0]!.id;
+    expect(drive.props(fileId).shareLink).toBe(SHARE_PROPERTY);
+    // 檔案內容才是收件端拿得到的東西：金鑰與 editToken 都不能在裡面。
+    expect(drive.read(fileId)).not.toContain(SHARE_KEY);
+    expect(drive.read(fileId)).not.toContain("edit-token");
+});
+
+test("分享連結下載：另一台裝置從雲端認回同一條連結", async ({ page }) => {
+    await installFakeDrive(page, [{
+        id: CLOUD_FILE_ID,
+        name: "測試行程",
+        content: FIXTURE_YAML,
+        props: { shareLink: SHARE_PROPERTY, shareLinkAt: "" },
+    }]);
+    await seedItinerary(page);
+    // 綁好雲端檔、但本機沒有任何分享連結紀錄 —— 這台裝置沒按過分享。
+    await seedConnected(page, { record: { fileId: CLOUD_FILE_ID, remoteMd5: md5Of(FIXTURE_YAML), localHash: yamlFingerprint(FIXTURE_YAML) } });
+    await page.goto("/");
+
+    await openTripManagement(page);
+    // 展開切換器會刷新雲端清單，連結就是在那裡被認回來的。
+    await page.getByRole("button", { name: /目前行程/ }).click();
+
+    await expect(page.getByRole("button", { name: /目前行程/ })).toHaveAccessibleName(/已分享連結/);
+    await expect(page.getByRole("button", { name: "複製分享連結" })).toBeVisible();
+    expect(await page.evaluate(() => window.localStorage.getItem("showmeway_share_links") ?? "")).toContain("edit-token");
 });
 
 test("刪除雲端行程：確認後該列從清單消失", async ({ page }) => {

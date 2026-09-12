@@ -58,8 +58,14 @@ test("分享連結匯入：接受後成為新行程，原行程保留可切回",
     // 原行程被停放為設定檔（非破壞性匯入）：切換器（行程管理頁）裡看得到、可切回
     await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await page.getByRole("button", { name: "行程管理", exact: true }).click();
-    await page.getByRole("button", { name: /目前行程/ }).click();
+    const expander = page.getByRole("button", { name: /目前行程/ });
+    await expander.click();
     await expect(page.getByRole("button", { name: /測試行程.*切換/ })).toBeVisible();
+
+    // 來源徽章：匯入的那趟標成「來自分享」，本機原有的那趟不標，圖示說明同時出現
+    await expect(expander).toHaveAccessibleName(/來自分享/);
+    await expect(page.getByRole("button", { name: /測試行程.*切換/ })).not.toHaveAccessibleName(/來自分享/);
+    await expect(page.getByText("來自分享", { exact: true })).toBeVisible();
 });
 
 test("分享連結匯入：無原行程時直接匯入無彈窗", async ({ page }) => {
@@ -308,8 +314,9 @@ test("再次分享同一趟行程：更新同一條連結而不是換一條，�
     // 改個名字再分享一次。
     await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
     await page.getByRole("button", { name: "行程管理", exact: true }).click();
-    // 行程管理頁看得到這條連結，並提供更新。
+    // 行程管理頁看得到這條連結，並提供更新；切換器也標出這趟已經有分享連結。
     await expect(page.getByText(/最後更新/)).toBeVisible();
+    await expect(page.getByRole("button", { name: /目前行程/ })).toHaveAccessibleName(/已分享連結/);
     const editor = page.locator("#yaml-editor");
     await editor.fill((await editor.inputValue()).replace("name: 測試行程", "name: 測試行程二版"));
     await page.getByRole("button", { name: "儲存並解析" }).click();

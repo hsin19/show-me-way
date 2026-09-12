@@ -63,6 +63,27 @@ class ShareLinkStore {
         return this.links[profileId] ?? null;
     }
 
+    /**
+     * Take the link a trip's Drive file carries as this slot's own, so the link a user
+     * minted on one device is updated from the next instead of forking into a second id.
+     * A no-op while the secrets match: the timestamps ride along for the labels alone and
+     * must not rewrite storage on every listing.
+     *
+     * Never reaches hop, and never clears — a file written by a device that did not know
+     * about the link carries no properties, and that is not a revoke.
+     */
+    adopt(profileId: string, record: ShareLinkRecord) {
+        const existing = this.forTrip(profileId);
+        if (existing?.id === record.id && existing.key === record.key && existing.editToken === record.editToken) return;
+        try {
+            this.remember(profileId, record);
+        } catch (err) {
+            // Adoption rides along with a sync; a refused write costs this device the
+            // shared link, not the trip that was being synced.
+            console.error("Failed to adopt the cloud share link:", err);
+        }
+    }
+
     private remember(profileId: string, record: ShareLinkRecord | null) {
         const next = { ...this.links };
         if (record) next[profileId] = record;

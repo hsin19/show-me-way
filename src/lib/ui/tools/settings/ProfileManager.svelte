@@ -9,6 +9,8 @@ import {
     type ProfileInfo,
 } from "$lib/infra/storage/profiles";
 import { gdriveSync } from "$lib/stores/gdrive.svelte";
+import { shareLinks } from "$lib/stores/share-link.svelte";
+import { tripOrigins } from "$lib/stores/trip-origin.svelte";
 import ConfirmBar from "$lib/ui/shared/ConfirmBar.svelte";
 import ChevronDown from "@lucide/svelte/icons/chevron-down";
 import Cloud from "@lucide/svelte/icons/cloud";
@@ -18,7 +20,9 @@ import Layers from "@lucide/svelte/icons/layers";
 import LogIn from "@lucide/svelte/icons/log-in";
 import Plus from "@lucide/svelte/icons/plus";
 import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+import Share2 from "@lucide/svelte/icons/share-2";
 import Trash2 from "@lucide/svelte/icons/trash-2";
+import UsersRound from "@lucide/svelte/icons/users-round";
 
 // Rendered by two hosts, so an edit here changes both: collapsed at the top of
 // 行程管理, where it owns `expanded`, and forced open in TripOverview's drawer,
@@ -56,7 +60,14 @@ let confirmingDeleteProfileId = $state<string | null>(null);
 let confirmingCloudFileId = $state<string | null>(null);
 let confirmingCloudDeleteFileId = $state<string | null>(null);
 
-let activeProfileId = $derived(getActiveProfileId() ?? "default");
+// Reads `profiles` for the dependency alone: TripStore.load replaces that array on every
+// landing, and the slot id has no rune of its own. Without it a host that stays mounted
+// through an import — pasting a share link into the editor below never remounts this —
+// would go on marking the header against the trip that just moved out of the active slot.
+let activeProfileId = $derived.by(() => {
+    void profiles;
+    return getActiveProfileId() ?? "default";
+});
 let activeTripYearMonth = $derived(formatYearMonth(activeTripStartDate));
 
 let boundFileIds = $derived(
@@ -64,6 +75,17 @@ let boundFileIds = $derived(
         ? gdriveSync.boundFileIdsFor([activeProfileId, ...profiles.map(p => p.id)])
         : new Set<string>(),
 );
+
+// Which marks are actually in play, so the legend explains the icons on screen and not a
+// vocabulary the user has never seen. Read off the same slots the rows render.
+let legend = $derived.by(() => {
+    const ids = [activeProfileId, ...profiles.map(p => p.id)];
+    return {
+        synced: ids.some(id => gdriveSync.cloudFileId(id) !== null),
+        shared: ids.some(id => shareLinks.forTrip(id) !== null),
+        received: ids.some(id => tripOrigins.isShared(id)),
+    };
+});
 
 let sortedProfiles = $derived(
     [...profiles].sort((a, b) => compareTripDates(a.startDate, b.startDate)),
@@ -146,6 +168,31 @@ async function handleDeleteCloud(fileId: string) {
 }
 </script>
 
+<!--
+  Where a trip stands outside this device: a Drive copy, a share link others hold, or an
+  arrival from someone else's link. The Drive mark reads the binding rather than the live
+  cloud listing, so it still answers the question offline; the binding is a rebuildable
+  cache, so a fresh install shows nothing here until the first sync restores it.
+-->
+{#snippet statusBadges(profileId: string)}
+    {@const synced = gdriveSync.cloudFileId(profileId) !== null}
+    {@const shared = shareLinks.forTrip(profileId) !== null}
+    {@const received = tripOrigins.isShared(profileId)}
+    {#if synced || shared || received}
+        <span class="shrink-0 flex items-center gap-1 text-text-muted">
+            {#if synced}
+                <span role="img" aria-label="已同步雲端" title="已同步雲端" class="flex"><Cloud size={13} aria-hidden="true" /></span>
+            {/if}
+            {#if shared}
+                <span role="img" aria-label="已分享連結" title="已分享連結" class="flex"><Share2 size={13} aria-hidden="true" /></span>
+            {/if}
+            {#if received}
+                <span role="img" aria-label="來自分享" title="來自分享" class="flex"><UsersRound size={13} aria-hidden="true" /></span>
+            {/if}
+        </span>
+    {/if}
+{/snippet}
+
 <div class="w-full">
     <button
         type="button"
@@ -161,6 +208,7 @@ async function handleDeleteCloud(fileId: string) {
                 {#if activeTripYearMonth}
                     <span class="text-[11px] text-accent font-semibold shrink-0">({activeTripYearMonth})</span>
                 {/if}
+                {@render statusBadges(activeProfileId)}
             </span>
         </span>
         <ChevronDown
@@ -195,6 +243,7 @@ async function handleDeleteCloud(fileId: string) {
                                 {#if profile.startDate}
                                     <span class="text-[11px] text-text-muted font-normal shrink-0">({formatYearMonth(profile.startDate)})</span>
                                 {/if}
+                                {@render statusBadges(profile.id)}
                             </span>
                             <span class="shrink-0 text-[11px] font-bold">切換</span>
                         </button>
@@ -298,6 +347,21 @@ async function handleDeleteCloud(fileId: string) {
             >
                 <Plus size={14} aria-hidden="true" /> 新增行程
             </button>
+
+            <!-- 4. 圖示說明 -->
+            {#if legend.synced || legend.shared || legend.received}
+                <p class="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 pt-0.5 text-[10px] text-text-muted">
+                    {#if legend.synced}
+                        <span class="flex items-center gap-1"><Cloud size={11} aria-hidden="true" /> 已同步雲端</span>
+                    {/if}
+                    {#if legend.shared}
+                        <span class="flex items-center gap-1"><Share2 size={11} aria-hidden="true" /> 已分享連結</span>
+                    {/if}
+                    {#if legend.received}
+                        <span class="flex items-center gap-1"><UsersRound size={11} aria-hidden="true" /> 來自分享</span>
+                    {/if}
+                </p>
+            {/if}
         </div>
     {/if}
 </div>

@@ -43,6 +43,7 @@ import {
     saveTripSyncMap,
     type TripSyncMap,
     type TripSyncRecord,
+    updateCloudShareLink,
     uploadOrUpdateCloudTrip,
     yamlFingerprint,
 } from "$lib/infra/http/gdrive";
@@ -53,7 +54,9 @@ import {
     tripIdFromYaml,
     tripNameFromYaml,
 } from "$lib/infra/storage/profiles";
+import type { ShareLinkRecord } from "$lib/infra/storage/share-links";
 import { SvelteSet } from "svelte/reactivity";
+import { shareLinks } from "./share-link.svelte";
 import { showToast } from "./toast.svelte";
 
 /** Something the user has to decide before this trip can sync again. */
@@ -241,6 +244,41 @@ class GDriveSyncState {
     }
 
     /**
+     * Takes the share link a trip's Drive file carries, so every device of the owner's
+     * updates one link rather than minting its own. Called wherever a file's metadata
+     * reaches a slot it is bound to; `adopt` itself is idempotent and never clears.
+     */
+    private absorbShareLink(tripId: string, file: CloudTripFile) {
+        if (file.shareLink) shareLinks.adopt(tripId, file.shareLink);
+    }
+
+    /** The listing is the one place every bound trip's metadata arrives at once. */
+    private absorbListedShareLinks(files: CloudTripFile[]) {
+        const byFileId = new Map(files.map(file => [file.id, file]));
+        for (const [tripId, record] of Object.entries(this.trips)) {
+            const file = byFileId.get(record.fileId);
+            if (file) this.absorbShareLink(tripId, file);
+        }
+    }
+
+    /**
+     * Writes this trip's share link — or its absence, after a revoke — onto the bound Drive
+     * file, without touching the trip's content. Best effort and silent: minting a link
+     * must not fail because Drive is unreachable, and the next push carries the same
+     * properties anyway. Skipped while a sync holds the lock, for that same reason.
+     */
+    async pushShareLink(tripId: string): Promise<void> {
+        const fileId = this.cloudFileId(tripId);
+        if (!this.isConnected || !fileId || this.busy) return;
+        try {
+            const token = await this.getValidToken("cache-only");
+            await updateCloudShareLink(token, fileId, shareLinks.forTrip(tripId));
+        } catch (err) {
+            console.warn("Failed to publish the share link to Drive:", err);
+        }
+    }
+
+    /**
      * Whether `tripId` has ever been bound, and if so whether `localYaml` still matches
      * what was last agreed with Drive. Purely local — no network — which is what lets
      * `cloudActionFor` re-run on every keystroke.
@@ -401,6 +439,7 @@ class GDriveSyncState {
                 this.cloudFiles = files;
                 this.lastRefreshAt = Date.now();
                 this.cloudListState = "ready";
+                this.absorbListedShareLinks(files);
                 this.reconcileBindings(files);
                 return files;
             } catch (err) {
@@ -466,6 +505,7 @@ class GDriveSyncState {
             // `record.diverged` when they differ is the conflict — no separate in-memory
             // entry, which is what used to vanish on reload and let the next edit push.
             this.writeRecord(profileId, buildRebindRecord(file, yamlFingerprint(yaml)));
+            this.absorbShareLink(profileId, file);
         }
     }
 
@@ -548,6 +588,10 @@ class GDriveSyncState {
             // profile slot and means nothing on another device, which is what made the
             // appProperty useless for recognising a trip after the local state was lost.
             tripId: tripIdFromYaml(yaml) ?? undefined,
+            // Undefined, not null, when this device holds no link: absence means "leave
+            // whatever the file carries" — only a revoke clears it. The properties are
+            // metadata, so nothing here reaches the YAML a recipient decrypts.
+            shareLink: shareLinks.forTrip(tripId) ?? undefined,
         });
         // Fingerprinted from the bytes actually sent, not from whatever the editor holds
         // now: a save that landed mid-upload is not in `yaml`, and recording the current
@@ -621,6 +665,7 @@ class GDriveSyncState {
                     const token = await this.getValidToken(interactive ? "interactive" : "cache-only");
                     const record = this.trips[tripId] ?? null;
                     const remoteFile = record ? await fetchCloudTripMeta(token, record.fileId) : null;
+                    if (remoteFile) this.absorbShareLink(tripId, remoteFile);
 
                     const decision = options.force === "local"
                         ? "push"
@@ -735,7 +780,7 @@ class GDriveSyncState {
      * version it applied rather than trusting the cached listing. This is for opening a
      * cloud trip nothing local is bound to yet; reconciling a bound one is `sync`.
      */
-    async loadTripYaml(fileId: string): Promise<{ yaml: string; md5?: string; } | null> {
+    async loadTripYaml(fileId: string): Promise<{ yaml: string; md5?: string; shareLink?: ShareLinkRecord; } | null> {
         if (!this.isConnected) return null;
         return this.withBusyLock(
             () => {
@@ -748,7 +793,7 @@ class GDriveSyncState {
                     fetchCloudTripMeta(token, fileId),
                     downloadCloudTripYaml(token, fileId),
                 ]);
-                return { yaml, md5: remote?.md5Checksum };
+                return { yaml, md5: remote?.md5Checksum, shareLink: remote?.shareLink };
             },
             msg => {
                 showToast(`下載雲端行程失敗: ${msg}`);
@@ -795,6 +840,10 @@ class GDriveSyncState {
         // re-identified one would hand it the very cloud file it was split away from; left
         // unbound it gets a file of its own on the next push.
         if (!reIdentified) {
+            // Only the copy that kept the file's identity may claim its share link too:
+            // updating that link from a copy split away from it would replace what the
+            // original trip's recipients see.
+            if (pulled.shareLink) shareLinks.adopt(profileId, pulled.shareLink);
             // The bytes just downloaded, not the cached listing's checksum: a stale entry
             // would record an agreement matching no version and report a conflict nobody
             // caused.

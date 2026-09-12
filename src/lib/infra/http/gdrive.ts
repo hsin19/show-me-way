@@ -6,6 +6,13 @@ export const GDRIVE_TRIPS_STORAGE = "showmeway_gdrive_trips";
 
 import { tripStartDateFromYaml } from "$lib/infra/storage/profiles";
 import {
+    decodeShareLinkProperties,
+    encodeShareLinkProperties,
+    SHARE_LINK_PROPERTY,
+    SHARE_LINK_TIMES_PROPERTY,
+    type ShareLinkRecord,
+} from "$lib/infra/storage/share-links";
+import {
     readCachedJson,
     removeCachedKeys,
     writeCachedJson,
@@ -44,6 +51,13 @@ export interface CloudTripFile {
      * remote copy is byte-identical to the local one, without downloading it.
      */
     contentHash?: string;
+    /**
+     * The share link this trip's sender-side record holds, carried in `appProperties` so
+     * every device of the owner's updates one link instead of minting its own. Absent for
+     * a trip that has never been shared, and for one shared from a device that has not
+     * uploaded since.
+     */
+    shareLink?: ShareLinkRecord;
 }
 
 /**
@@ -622,7 +636,7 @@ interface RawDriveFile {
     size?: string;
     md5Checksum?: string;
     trashed?: boolean;
-    appProperties?: { showmewayTripId?: string; startDate?: string; contentHash?: string; };
+    appProperties?: { showmewayTripId?: string; startDate?: string; contentHash?: string; shareLink?: string; shareLinkAt?: string; };
 }
 
 /** Fetch metadata of a single Google Drive file */
@@ -649,6 +663,7 @@ export async function fetchCloudTripMeta(token: string, fileId: string): Promise
         startDate: f.appProperties?.startDate,
         md5Checksum: f.md5Checksum,
         contentHash: f.appProperties?.contentHash,
+        shareLink: decodeShareLinkProperties(f.appProperties?.shareLink, f.appProperties?.shareLinkAt) ?? undefined,
     };
 }
 
@@ -678,7 +693,17 @@ export async function listCloudTrips(token: string, folderId?: string): Promise<
             startDate: f.appProperties?.startDate,
             md5Checksum: f.md5Checksum,
             contentHash: f.appProperties?.contentHash,
+            shareLink: decodeShareLinkProperties(f.appProperties?.shareLink, f.appProperties?.shareLinkAt) ?? undefined,
         }));
+}
+
+/** The two properties as Drive wants them: the pair, or a pair of nulls that clears it. */
+function shareLinkProperties(record: ShareLinkRecord | null): Record<string, string | null> {
+    const encoded = record && encodeShareLinkProperties(record);
+    return {
+        [SHARE_LINK_PROPERTY]: encoded?.shareLink ?? null,
+        [SHARE_LINK_TIMES_PROPERTY]: encoded?.shareLinkAt ?? null,
+    };
 }
 
 function buildMultipartBody(boundary: string, metadata: Record<string, unknown>, content: string): string {
@@ -706,14 +731,14 @@ export async function uploadOrUpdateCloudTrip(
     token: string,
     tripName: string,
     yamlContent: string,
-    options: { fileId?: string; tripId?: string; folderId?: string; } = {},
+    options: { fileId?: string; tripId?: string; folderId?: string; shareLink?: ShareLinkRecord | null; } = {},
 ): Promise<CloudTripFile> {
     const boundary = `-------ShowMeWayBoundary${Date.now()}`;
     const fileName = `${tripName.trim() || "未命名行程"}.yaml`;
     const startDate = tripStartDateFromYaml(yamlContent);
 
     const contentHash = yamlFingerprint(yamlContent);
-    const appProperties: Record<string, string> = {
+    const appProperties: Record<string, string | null> = {
         updatedAt: new Date().toISOString(),
         // Rides in the same multipart request as the bytes it describes, so this app can
         // never publish a hash that disagrees with the content it just wrote. Anything
@@ -726,6 +751,12 @@ export async function uploadOrUpdateCloudTrip(
     }
     if (startDate) {
         appProperties.startDate = startDate;
+    }
+    // `undefined` leaves whatever the file already carries — Drive merges appProperties,
+    // and a device that has not learned this trip's link yet must not erase it for the one
+    // that minted it. Only an explicit null (a revoke) clears it.
+    if (options.shareLink !== undefined) {
+        Object.assign(appProperties, shareLinkProperties(options.shareLink));
     }
 
     let method: string;
@@ -768,6 +799,23 @@ export async function uploadOrUpdateCloudTrip(
         md5Checksum: data.md5Checksum,
         contentHash,
     };
+}
+
+/**
+ * Writes just this trip's share-link properties onto its Drive file — minting or revoking
+ * a link changes nothing in the YAML, so it must not cost an upload of the whole trip (or
+ * disturb the content hash the sync decision is read from).
+ */
+export async function updateCloudShareLink(token: string, fileId: string, record: ShareLinkRecord | null): Promise<void> {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+        method: "PATCH",
+        headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ appProperties: shareLinkProperties(record) }),
+    });
+    assertDriveOk(res, "無法更新雲端的分享連結");
 }
 
 /** Download YAML content from a Google Drive file */

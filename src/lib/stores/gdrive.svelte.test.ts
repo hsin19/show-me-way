@@ -1139,3 +1139,76 @@ describe("connect", () => {
         expect(prompts).toEqual(["consent"]);
     });
 });
+
+// The share link is metadata, never content: it has to reach the user's own other devices
+// through the Drive file, while the YAML a recipient decrypts stays free of it.
+describe("sync: the share link rides in appProperties", () => {
+    const LINK = { id: "sh0rt1d", key: "K".repeat(22), editToken: "edit-token", createdAt: "2026-09-04T00:00:00.000Z", updatedAt: "2026-09-04T00:00:00.000Z", expiresAt: null };
+
+    function seedShareLink(profileId = TRIP) {
+        localStorage.setItem("showmeway_share_links", JSON.stringify({ [profileId]: LINK }));
+    }
+
+    it("publishes the link this device holds alongside the content", async () => {
+        seedShareLink();
+        await loadSync();
+        const calls = createDriveStub({ upload: { id: "file-1", name: "東京.yaml" } });
+
+        await sync.sync(YAML_A, TRIP);
+
+        const upload = calls.find(c => c.url.includes("/upload/"));
+        expect(upload?.body).toContain(`"shareLink":"${LINK.id}.${LINK.key}.${LINK.editToken}"`);
+        // Metadata only — the part carrying the trip must not name the key or the token.
+        expect(upload?.body?.slice(upload.body.indexOf("trip:"))).not.toContain(LINK.key);
+    });
+
+    it("leaves the property alone when this device holds no link, rather than clearing another device's", async () => {
+        await loadSync();
+        const calls = createDriveStub({ upload: { id: "file-1", name: "東京.yaml" } });
+
+        await sync.sync(YAML_A, TRIP);
+
+        expect(calls.find(c => c.url.includes("/upload/"))?.body).not.toContain("shareLink");
+    });
+
+    it("adopts the link a bound file carries, so the other device updates the same one", async () => {
+        gdrive.saveTripSyncMap({
+            [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: gdrive.yamlFingerprint(YAML_A), remoteHash: gdrive.yamlFingerprint(YAML_A) },
+        });
+        await loadSync();
+        createDriveStub({
+            meta: {
+                body: {
+                    id: "file-1",
+                    name: "東京.yaml",
+                    md5Checksum: "md5-1",
+                    appProperties: { contentHash: gdrive.yamlFingerprint(YAML_A), shareLink: `${LINK.id}.${LINK.key}.${LINK.editToken}`, shareLinkAt: "..." },
+                },
+            },
+        });
+
+        await sync.sync(YAML_A, TRIP);
+
+        const { shareLinks } = await import("./share-link.svelte");
+        expect(shareLinks.forTrip(TRIP)).toMatchObject({ id: LINK.id, key: LINK.key, editToken: LINK.editToken });
+    });
+
+    it("pushShareLink patches metadata only, and clears the pair once the link is revoked", async () => {
+        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", localHash: "h" } });
+        seedShareLink();
+        await loadSync();
+        const calls = createDriveStub({});
+
+        await sync.pushShareLink(TRIP);
+        expect(calls.some(c => c.url.includes("/upload/"))).toBe(false);
+        expect(calls.at(-1)?.method).toBe("PATCH");
+        expect(calls.at(-1)?.url).toContain("/drive/v3/files/file-1");
+        expect(calls.at(-1)?.body).toContain(LINK.editToken);
+
+        const { shareLinks } = await import("./share-link.svelte");
+        shareLinks.forget(TRIP);
+        await sync.pushShareLink(TRIP);
+
+        expect(calls.at(-1)?.body).toBe('{"appProperties":{"shareLink":null,"shareLinkAt":null}}');
+    });
+});

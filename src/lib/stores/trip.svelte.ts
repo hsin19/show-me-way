@@ -57,6 +57,7 @@ import {
     shareOrCopyToClipboard,
     showToast,
 } from "./toast.svelte";
+import { tripOrigins } from "./trip-origin.svelte";
 import { weatherStore } from "./weather.svelte";
 
 /** Say the upload happened, on both the clipboard and the share-sheet path — the privacy policy promises the user is told when data leaves the device. */
@@ -314,11 +315,17 @@ export class TripStore {
             const yaml = serializeToYaml(this.data);
             // Keyed by profile slot, like the Drive binding: a second tap must update the
             // link this trip already has rather than mint one the printed QR does not know.
-            const outcome = await shareLinks.publish(ensureActiveProfileId(), yaml);
+            const profileId = ensureActiveProfileId();
+            const outcome = await shareLinks.publish(profileId, yaml);
             if (outcome.kind === "unreachable") {
                 showToast("目前無法更新分享連結，請檢查網路後再試一次（原本的連結仍然有效）");
                 return;
             }
+            // Onto the Drive file's metadata, so this trip's other devices update the same
+            // link instead of minting a second one. Never for the inline fallback, which
+            // mints no record and would therefore clear a link another device does hold.
+            // Metadata only: the key and editToken must never ride along to a recipient.
+            if (outcome.kind !== "inline") void gdriveSync.pushShareLink(profileId);
             const copyMsg = outcome.kind === "inline"
                 ? "分享連結已複製！網址較長，可用短網址服務縮短"
                 : outcome.kind === "updated"
@@ -340,7 +347,11 @@ export class TripStore {
         if (this.isSharing) return;
         this.isSharing = true;
         try {
-            const outcome = await shareLinks.revoke(ensureActiveProfileId());
+            const profileId = ensureActiveProfileId();
+            const outcome = await shareLinks.revoke(profileId);
+            // Clears the Drive properties too, so the other devices stop offering a link
+            // hop has already dropped.
+            if (outcome === "revoked") void gdriveSync.pushShareLink(profileId);
             showToast(outcome === "revoked" ? "已撤銷分享連結，原本的連結與 QR code 不再有效" : "目前無法連上短連結服務，請檢查網路後再試一次");
         } finally {
             this.isSharing = false;
@@ -399,6 +410,7 @@ export class TripStore {
         // Forgotten, not revoked: whoever holds the link keeps the last version until it
         // expires. Deleting a trip from one phone is not a decision about their copy.
         shareLinks.forget(id);
+        tripOrigins.forget(id);
         this.profiles = listProfiles();
         showToast("已刪除行程");
     }
@@ -507,8 +519,10 @@ export class TripStore {
     private landSharedTrip(parsed: TripData): ShareImportOutcome {
         const outcome = importSharedTrip(parsed);
         if (outcome.kind === "overwritten") showToast("已用分享連結更新行程，可在行程管理還原前一版");
-        else if (outcome.kind === "imported") showToast("已匯入分享的行程");
-        else if (outcome.kind === "unchanged") showToast("這趟行程已經是連結裡的版本");
+        else if (outcome.kind === "imported") {
+            tripOrigins.markShared(outcome.profileId);
+            showToast("已匯入分享的行程");
+        } else if (outcome.kind === "unchanged") showToast("這趟行程已經是連結裡的版本");
         return outcome;
     }
 
