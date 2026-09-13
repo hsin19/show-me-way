@@ -127,6 +127,16 @@ export function showToast(input: ToastInput): void {
     if (expiring.length > MAX_VISIBLE) dismissToast(expiring[0]!.id);
 }
 
+/**
+ * Close the toast holding `dedupeKey`, if one is up. For a notice whose reason has gone
+ * away — the sync it offered happened some other way — which is not the user declining
+ * it, so `onDismiss` deliberately does not fire.
+ */
+export function clearToastByKey(dedupeKey: string): void {
+    const found = items.find(item => item.dedupeKey === dedupeKey);
+    if (found) removeToast(found.id);
+}
+
 /** Run a toast's action and close it. Not a dismissal — the user engaged, so `onDismiss` does not fire. */
 export function runToastAction(id: number): void {
     const onAction = items.find(item => item.id === id)?.action?.onAction;

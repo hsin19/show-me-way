@@ -4,7 +4,6 @@ import {
     checkForSwUpdate,
     initServiceWorkerUpdates,
 } from "$lib/infra/pwa/sw-update";
-import { gdriveSync } from "$lib/stores/gdrive.svelte";
 import { initPwaInstallPrompt } from "$lib/stores/pwa-install.svelte";
 import { tripStore } from "$lib/stores/trip.svelte";
 import { weatherStore } from "$lib/stores/weather.svelte";
@@ -76,7 +75,10 @@ function handleVisibilityChange() {
     if (document.visibilityState !== "visible") return;
     clockNow = new Date();
     checkForSwUpdate();
-    void gdriveSync.refreshFiles();
+    // Coming back is the boundary that lets the publish prompt speak again after a dismissal,
+    // and the moment a trip changed on another device is worth hearing about.
+    tripStore.resumePublishPrompts();
+    void tripStore.checkForUpdates(() => openTools("settings"));
     if (tripStore.data) {
         weatherStore.refresh(tripStore.data.days, tripStore.data.trip.city);
         if (getTodayIsoString() !== lastSyncedDate) syncToToday();
@@ -90,7 +92,7 @@ onMount(async () => {
     await tripStore.maybeImportSharedItinerary();
     await tripStore.load();
     if (tripStore.data) syncToToday();
-    void gdriveSync.refreshFiles();
+    void tripStore.checkForUpdates(() => openTools("settings"));
 });
 
 let showWeatherAttribution = $derived(

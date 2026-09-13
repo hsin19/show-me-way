@@ -1,9 +1,9 @@
 export const GDRIVE_USER_STORAGE = "showmeway_gdrive_user";
 const GDRIVE_TOKEN_STORAGE = "showmeway_gdrive_token";
-const GDRIVE_AUTO_SYNC_STORAGE = "showmeway_gdrive_auto_sync";
 const GDRIVE_FOLDER_ID_STORAGE = "showmeway_gdrive_folder_id";
 export const GDRIVE_TRIPS_STORAGE = "showmeway_gdrive_trips";
 
+import { yamlFingerprint } from "$lib/domain/utils";
 import { tripStartDateFromYaml } from "$lib/infra/storage/profiles";
 import {
     decodeShareLinkProperties,
@@ -115,18 +115,6 @@ export function clearGdriveUser(): void {
     removeCachedKeys([GDRIVE_USER_STORAGE]);
 }
 
-function isBoolean(value: unknown): value is boolean {
-    return typeof value === "boolean";
-}
-
-export function loadGdriveAutoSync(): boolean {
-    return readCachedJson(GDRIVE_AUTO_SYNC_STORAGE, isBoolean) ?? false;
-}
-
-export function saveGdriveAutoSync(enabled: boolean): void {
-    writeCachedJson(GDRIVE_AUTO_SYNC_STORAGE, enabled);
-}
-
 function loadGdriveFolderId(): string | null {
     try {
         return localStorage.getItem(GDRIVE_FOLDER_ID_STORAGE);
@@ -171,42 +159,18 @@ export function saveTripSyncMap(map: TripSyncMap): void {
     }
 }
 
-/**
- * A short fingerprint of a trip's YAML, for answering "has this changed since the last
- * sync" by comparing content instead of by remembering an event.
- *
- * Deliberately not a cryptographic digest: it is only ever compared against another
- * fingerprint this app produced, never against Drive's md5, so FNV-1a over two seeds plus
- * the length is enough. `crypto.subtle` has no MD5 and is async, which would make the
- * sync decision async for no gain.
- *
- * It is compared across sides as well as across time — the remote's copy rides along in
- * `appProperties.contentHash` — so a collision no longer only costs a skipped upload: two
- * genuinely different trips would be declared identical and the divergence would never be
- * raised. 64 bits plus the length over hand-authored YAML makes that vanishingly unlikely,
- * but widen the use again and this is the sentence to re-check.
- */
-export function yamlFingerprint(yaml: string): string {
-    let a = 0x811c9dc5;
-    let b = 0x01000193;
-    for (let i = 0; i < yaml.length; i++) {
-        const code = yaml.charCodeAt(i);
-        a = Math.imul(a ^ code, 0x01000193);
-        b = Math.imul(b ^ (code + i), 0x85ebca6b);
-    }
-    const hex = (n: number) => (n >>> 0).toString(16).padStart(8, "0");
-    return `${yaml.length.toString(36)}-${hex(a)}${hex(b)}`;
-}
-
 /** Keys the earlier sync schemes wrote, before the one record per trip. */
 const LEGACY_KEY_PREFIXES = ["showmeway_gdrive_mod_"];
 const LEGACY_FILE_MAP_KEY = "showmeway_gdrive_file_map";
 const LEGACY_MD5_MAP_KEY = "showmeway_gdrive_md5_map";
 const LEGACY_DIRTY_MAP_KEY = "showmeway_gdrive_dirty_map";
+/** The opt-in that background pushes needed. Every transfer is a tap now, so the flag decides nothing. */
+const RETIRED_AUTO_SYNC_KEY = "showmeway_gdrive_auto_sync";
 
 /**
- * Folds the earlier per-concern maps into the single record map and removes them.
- * Idempotent, so it is safe to call on every load.
+ * Folds the earlier per-concern maps into the single record map and removes them, and
+ * drops the keys of schemes that no longer exist. Idempotent, so it is safe to call on
+ * every load.
  *
  * The dirty flags are dropped rather than carried: a record with no `localHash` already
  * means "assume local changed", which is the same conclusion and one fewer thing to keep
@@ -228,7 +192,7 @@ export function migrateGdriveSyncState(): void {
                 saveTripSyncMap(map);
             }
         }
-        [LEGACY_FILE_MAP_KEY, LEGACY_MD5_MAP_KEY, LEGACY_DIRTY_MAP_KEY].forEach(key => localStorage.removeItem(key));
+        [LEGACY_FILE_MAP_KEY, LEGACY_MD5_MAP_KEY, LEGACY_DIRTY_MAP_KEY, RETIRED_AUTO_SYNC_KEY].forEach(key => localStorage.removeItem(key));
 
         const stale: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {

@@ -342,6 +342,44 @@ test("再次分享同一趟行程：更新同一條連結而不是換一條，�
     await expect(receiver.getByRole("heading", { level: 2, name: "測試行程二版" })).toBeVisible();
 });
 
+// 收件端的背景檢查：對方之後更新了同一條連結，這台裝置重開時要主動問，而不是等使用者
+// 自己再開一次網址。金鑰是留在本機的那半條，所以整件事不需要網址列還帶著它。
+test("收件端背景檢查：對方更新連結後，重開就問要不要更新", async ({ page, context }) => {
+    const hop: HopStore = { uploaded: "", puts: [] };
+    const sharedUrl = await shareOwnTripShort(page, hop);
+    const firstUpload = hop.uploaded;
+
+    // 寄件端改名再分享一次：同一條連結、同一把金鑰，密文換成新版。
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    await page.getByRole("button", { name: "行程管理", exact: true }).click();
+    const editor = page.locator("#yaml-editor");
+    await editor.fill((await editor.inputValue()).replace("name: 測試行程", "name: 測試行程二版"));
+    await page.getByRole("button", { name: "儲存並解析" }).click();
+    await page.getByRole("button", { name: "分享行程", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("分享連結已更新");
+    const secondUpload = hop.uploaded;
+
+    // 收件端是一台還沒有這趟行程的裝置：清掉這個 origin 的資料，且不套用行程種子。
+    await page.evaluate(() => localStorage.clear());
+    hop.uploaded = firstUpload;
+    const receiver = await context.newPage();
+    await mockHop(receiver, hop);
+    await receiver.goto(sharedUrl);
+    await expect(receiver.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
+
+    // 對方發佈了新版之後，收件端重開。
+    hop.uploaded = secondUpload;
+    await receiver.goto("/");
+
+    await expect(receiver.getByText("「測試行程二版」的分享連結有新版本")).toBeVisible();
+    // 只是提示：按下去之前，這台裝置上還是舊的那份。
+    await expect(receiver.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
+
+    await receiver.getByRole("button", { name: "更新" }).click();
+
+    await expect(receiver.getByRole("heading", { level: 2, name: "測試行程二版" })).toBeVisible();
+});
+
 test("短連結匯入：收件端解密後正常匯入，網址片段被清除", async ({ page, context }) => {
     const hop: HopStore = { uploaded: "", puts: [] };
     const sharedUrl = await shareOwnTripShort(page, hop);

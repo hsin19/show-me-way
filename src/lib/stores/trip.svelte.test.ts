@@ -1,6 +1,10 @@
 import { encodeShareToken } from "$lib/domain/share";
 import { sealShareToken } from "$lib/domain/share-crypto";
-import { validateYaml } from "$lib/domain/trip";
+import {
+    serializeToYaml,
+    validateYaml,
+} from "$lib/domain/trip";
+import { yamlFingerprint } from "$lib/domain/utils";
 import {
     ensureActiveProfileId,
     listProfiles,
@@ -24,6 +28,7 @@ import {
 } from "vitest";
 import { gdriveSync } from "./gdrive.svelte";
 import { settingsDraft } from "./settings-draft.svelte";
+import { tripOrigins } from "./trip-origin.svelte";
 import { TripStore } from "./trip.svelte";
 
 const TEST_YAML = `trip:
@@ -559,5 +564,155 @@ todo:
             expect(await store.resetToDefault("a-profile-switched-away-from")).toBe(false);
             expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
         });
+    });
+});
+
+describe("TripStore shared-link updates", () => {
+    const originalLocalStorage = globalThis.localStorage;
+    // No `city`, so `load()` starts no weather fetch these tests have no answer for.
+    const RECEIVED_YAML = `trip:
+  name: 朋友的行程
+  id: t-shared
+  hotels: []
+days:
+  - date: '2025-05-01'
+    title: 抵達
+    timeline:
+      - time: '10:00'
+        title: 抵達機場
+        type: standard
+`;
+    const LINK = { id: "abcd1234", key: "" };
+    let store: TripStore;
+    let profileId: string;
+    /** Canonical form, which is what lands in storage and what the taken hash is measured in. */
+    let received: string;
+
+    /** hop answering with `yaml` sealed under this link's key. */
+    async function stubLinkPayload(yaml: string) {
+        const sealed = await sealShareToken(yaml);
+        LINK.key = sealed.key;
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(() =>
+                Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    text: () => Promise.resolve(JSON.stringify({ payload: sealed.payload })),
+                    json: () => Promise.resolve({ payload: sealed.payload }),
+                })
+            ),
+        );
+    }
+
+    beforeEach(() => {
+        globalThis.localStorage = createLocalStorageStub();
+        stubWindowTimers();
+        settingsDraft.yaml = null;
+        received = serializeToYaml(validateYaml(RECEIVED_YAML));
+        localStorage.setItem(USER_YAML_KEY, received);
+        profileId = ensureActiveProfileId();
+        store = new TripStore();
+        store.data = validateYaml(received);
+        tripOrigins.forget(profileId);
+    });
+
+    afterEach(() => {
+        tripOrigins.forget(profileId);
+        globalThis.localStorage = originalLocalStorage;
+        vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+    });
+
+    it("says nothing when the sender has published nothing new", async () => {
+        await stubLinkPayload(received);
+        tripOrigins.markShared(profileId, LINK, received);
+
+        await store.checkSharedTripForUpdates(() => {});
+
+        expect(store.sharedUpdate).toBeNull();
+    });
+
+    it("offers the sender's new version when this device has not touched its copy", async () => {
+        const sendersEdit = received.replace("抵達機場", "抵達車站");
+        await stubLinkPayload(sendersEdit);
+        tripOrigins.markShared(profileId, LINK, received);
+
+        await store.checkSharedTripForUpdates(() => {});
+
+        expect(store.sharedUpdate?.localChanged).toBe(false);
+        expect(store.sharedUpdate?.yaml).toContain("抵達車站");
+        // Offered, not applied: nothing is written until the user answers.
+        expect(localStorage.getItem(USER_YAML_KEY)).toBe(received);
+    });
+
+    it("reports a divergence when both the sender and this device moved", async () => {
+        const sendersEdit = received.replace("抵達機場", "抵達車站");
+        await stubLinkPayload(sendersEdit);
+        tripOrigins.markShared(profileId, LINK, received);
+        localStorage.setItem(USER_YAML_KEY, received.replace("抵達機場", "先去吃飯"));
+
+        await store.checkSharedTripForUpdates(() => {});
+
+        expect(store.sharedUpdate?.localChanged).toBe(true);
+    });
+
+    it("asks nothing for a trip that came from an inline link, which no server holds", async () => {
+        const fetchMock = vi.fn();
+        vi.stubGlobal("fetch", fetchMock);
+        tripOrigins.markShared(profileId, null, received);
+
+        await store.checkSharedTripForUpdates(() => {});
+
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(store.sharedUpdate).toBeNull();
+    });
+
+    it("takes the update, records it as taken, and keeps a backup of what it replaced", async () => {
+        const sendersEdit = received.replace("抵達機場", "抵達車站");
+        await stubLinkPayload(sendersEdit);
+        tripOrigins.markShared(profileId, LINK, received);
+        await store.checkSharedTripForUpdates(() => {});
+
+        const outcome = await store.takeSharedUpdate();
+
+        expect(outcome?.kind).toBe("landed");
+        expect(localStorage.getItem(USER_YAML_KEY)).toContain("抵達車站");
+        expect(tripOrigins.takenHash(profileId)).toBe(yamlFingerprint(serializeToYaml(validateYaml(sendersEdit))));
+        expect(store.sharedUpdate).toBeNull();
+        expect(listYamlBackups().length).toBe(1);
+    });
+
+    it("reopening the link and overwriting records what landed as taken, so the next check finds nothing", async () => {
+        const sendersEdit = received.replace("抵達機場", "抵達車站");
+        tripOrigins.markShared(profileId, { ...LINK }, received);
+        // The sender recreated the link, so the reopened one carries a different id.
+        await stubLinkPayload(sendersEdit);
+        vi.stubGlobal("confirm", () => true);
+
+        const outcome = await store.saveFromEditor(profileId, `#h=wxyz9876.${LINK.key}`);
+
+        expect(outcome.kind).toBe("imported");
+        expect(localStorage.getItem(USER_YAML_KEY)).toContain("抵達車站");
+        expect(tripOrigins.takenHash(profileId)).toBe(yamlFingerprint(serializeToYaml(validateYaml(sendersEdit))));
+        expect(tripOrigins.linkFor(profileId)).toEqual({ id: "wxyz9876", key: LINK.key });
+
+        await store.checkSharedTripForUpdates(() => {});
+        expect(store.sharedUpdate).toBeNull();
+    });
+
+    it("keeping the local version records the sender's copy as seen without applying it", async () => {
+        const sendersEdit = received.replace("抵達機場", "抵達車站");
+        await stubLinkPayload(sendersEdit);
+        tripOrigins.markShared(profileId, LINK, received);
+        await store.checkSharedTripForUpdates(() => {});
+
+        store.keepLocalOverSharedUpdate();
+
+        expect(localStorage.getItem(USER_YAML_KEY)).toBe(received);
+        expect(store.sharedUpdate).toBeNull();
+        // Settled rather than suppressed: the sender's copy counts as taken, so a later
+        // check of that same version finds nothing and only their next change asks again.
+        expect(tripOrigins.takenHash(profileId)).toBe(yamlFingerprint(serializeToYaml(validateYaml(sendersEdit))));
     });
 });

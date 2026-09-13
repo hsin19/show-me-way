@@ -40,6 +40,7 @@ import Sliders from "@lucide/svelte/icons/sliders";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import { onMount } from "svelte";
 import ProfileManager from "./ProfileManager.svelte";
+import VersionChoiceStrip from "./VersionChoiceStrip.svelte";
 
 // Data flows go straight to `tripStore`; only navigation comes in as props, because the
 // host owns the active tab.
@@ -245,7 +246,6 @@ async function handleCloudAction() {
 }
 
 async function keepLocalVersion() {
-    confirmingConflictSide = null;
     // Through landDraft, so what overwrites the cloud copy is the trip the app is
     // actually running rather than an unvalidated editor buffer.
     if (!await landDraft()) return;
@@ -253,12 +253,10 @@ async function keepLocalVersion() {
 }
 
 async function takeCloudVersion() {
-    confirmingConflictSide = null;
     applyLanding(await tripStore.syncWithCloud(activeTripId, yamlInput, { force: "remote" }));
 }
 
 async function keepBothVersions() {
-    confirmingConflictSide = null;
     // Through landDraft, so the copy being preserved is the trip the app is running.
     if (!await landDraft()) return;
     // The editor would otherwise keep showing the copy that just became the parked one.
@@ -269,8 +267,19 @@ async function handleLoadFromCloud(fileId: string, cloudName: string) {
     if (applyLanding(await tripStore.loadCloudTrip(fileId, cloudName))) onDone();
 }
 
-let confirmingConflictSide = $state<"local" | "remote" | "both" | null>(null);
 let activeConflict = $derived(gdriveSync.conflictFor(activeTripId));
+// A cloud conflict outranks it in the markup: that one holds the trip's sync, this one only
+// offers someone else's newer copy.
+let sharedUpdate = $derived(tripStore.sharedUpdate);
+
+/** Both land YAML, so both close the panel the same way an editor save does. */
+async function handleTakeSharedUpdate() {
+    if (applyLanding(await tripStore.takeSharedUpdate())) onDone();
+}
+
+async function handleKeepBothShared() {
+    if (applyLanding(await tripStore.keepBothOverSharedUpdate())) onDone();
+}
 
 let confirmingBackupSavedAt = $state<string | null>(null);
 
@@ -331,74 +340,68 @@ function discardDraft() {
 
 {#if activeConflict}
     <div class="mb-2.5">
-        {#if confirmingConflictSide === "local"}
-            <ConfirmBar
-                message={`確定以本機版本覆蓋雲端的「${activeConflict.fileName}」嗎？其他裝置寫入雲端的修改會被取代。`}
-                confirmLabel="覆蓋雲端"
-                onconfirm={() => void keepLocalVersion()}
-                oncancel={() => (confirmingConflictSide = null)}
-            />
-        {:else if confirmingConflictSide === "both"}
-            <ConfirmBar
-                message={`確定兩份都留嗎？這台裝置的版本會另存成一個新行程，雲端的「${activeConflict.fileName}」則成為這趟行程的內容。`}
-                confirmLabel="兩份都留"
-                onconfirm={() => void keepBothVersions()}
-                oncancel={() => (confirmingConflictSide = null)}
-            />
-        {:else if confirmingConflictSide === "remote"}
-            <ConfirmBar
-                message={activeConflict.kind === "both-changed"
-                ? `確定改用雲端的「${activeConflict.fileName}」嗎？本機尚未同步的修改會被取代，還原前會先存一份備份。`
-                : `確定載入雲端的「${activeConflict.fileName}」嗎？載入前會先存一份備份。`}
-                confirmLabel="採用雲端"
-                onconfirm={() => void takeCloudVersion()}
-                oncancel={() => (confirmingConflictSide = null)}
-            />
-        {:else}
-            <!-- Both sides diverged from the last synced copy. Nothing was changed on
-                 either side; automatic sync stays paused for this trip until the user
-                 picks, so a background save cannot decide it for them. -->
-            {@const conflictMessage = activeConflict.kind === "both-changed"
-            ? `「${activeConflict.fileName}」在雲端和這台裝置上都改過，自動同步已暫停。請選擇要保留哪一份。`
-            : `「${activeConflict.fileName}」的雲端版本比這台裝置新，自動同步已暫停。請選擇要載入雲端版本，或保留這台裝置的內容。`}
-            <div role="alertdialog" aria-label={conflictMessage} class="rounded-xl border border-danger/40 bg-danger/10 p-2.5">
-                <p class="flex items-start gap-1.5 text-[11px] font-medium text-danger leading-normal">
-                    <TriangleAlert size={14} class="shrink-0 mt-px" aria-hidden="true" />
-                    {conflictMessage}
-                </p>
-                <div class="mt-2 flex gap-2">
-                    <button
-                        type="button"
-                        disabled={gdriveSync.isSyncing}
-                        onclick={() => (confirmingConflictSide = "remote")}
-                        class="flex-1 min-h-[44px] rounded-lg bg-accent text-accent-contrast text-xs font-bold cursor-pointer hover:opacity-90 transition duration-200 disabled:opacity-40"
-                    >
-                        採用雲端版本
-                    </button>
-                    <button
-                        type="button"
-                        disabled={gdriveSync.isSyncing}
-                        onclick={() => (confirmingConflictSide = "local")}
-                        class="flex-1 min-h-[44px] rounded-lg bg-tint-2 text-text-secondary text-xs font-bold border border-card-border hover:bg-tint-3 transition duration-200 cursor-pointer disabled:opacity-40"
-                    >
-                        保留本機版本
-                    </button>
-                </div>
-                {#if activeConflict.kind === "both-changed"}
-                    <!-- Only for a real divergence: `remote-newer` means this device changed
-                         nothing, so there is no second version to keep. Full width below the
-                         pair rather than a third column, which would not fit a phone. -->
-                    <button
-                        type="button"
-                        disabled={gdriveSync.isSyncing}
-                        onclick={() => (confirmingConflictSide = "both")}
-                        class="mt-2 w-full min-h-[44px] rounded-lg bg-tint-1 text-text-secondary text-xs font-bold border border-card-border hover:bg-tint-2 transition duration-200 cursor-pointer disabled:opacity-40"
-                    >
-                        兩份都留（本機版另存為新行程）
-                    </button>
-                {/if}
-            </div>
-        {/if}
+        <!-- Both sides diverged from the last synced copy. Nothing was changed on either
+             side, and every path that could transfer checks `conflictFor` first — including
+             the publish prompt — so nothing decides this but a tap here. -->
+        <VersionChoiceStrip
+            message={activeConflict.kind === "both-changed"
+            ? `「${activeConflict.fileName}」在雲端和這台裝置上都改過，請選擇要保留哪一份。`
+            : `「${activeConflict.fileName}」的雲端版本比這台裝置新，請選擇要載入雲端版本，或保留這台裝置的內容。`}
+            takeRemote={{
+                label: "採用雲端版本",
+                confirmLabel: "採用雲端",
+                confirmMessage: activeConflict.kind === "both-changed"
+                    ? `確定改用雲端的「${activeConflict.fileName}」嗎？本機尚未同步的修改會被取代，還原前會先存一份備份。`
+                    : `確定載入雲端的「${activeConflict.fileName}」嗎？載入前會先存一份備份。`,
+                run: () => void takeCloudVersion(),
+            }}
+            keepLocal={{
+                label: "保留本機版本",
+                confirmLabel: "覆蓋雲端",
+                confirmMessage: `確定以本機版本覆蓋雲端的「${activeConflict.fileName}」嗎？其他裝置寫入雲端的修改會被取代。`,
+                run: () => void keepLocalVersion(),
+            }}
+            keepBoth={activeConflict.kind === "both-changed"
+            ? {
+                label: "兩份都留（本機版另存為新行程）",
+                confirmLabel: "兩份都留",
+                confirmMessage: `確定兩份都留嗎？這台裝置的版本會另存成一個新行程，雲端的「${activeConflict.fileName}」則成為這趟行程的內容。`,
+                run: () => void keepBothVersions(),
+            }
+            : undefined}
+            disabled={gdriveSync.isSyncing}
+        />
+    </div>
+{:else if sharedUpdate}
+    <div class="mb-2.5">
+        <!-- A received link has no second side to write back to, so 保留本機 settles the
+             offer by recording what the sender published as seen: only their next change
+             asks again. -->
+        <VersionChoiceStrip
+            message={sharedUpdate.localChanged
+            ? `「${sharedUpdate.tripName}」的分享連結有新版本，這台裝置也改過，請選擇要保留哪一份。`
+            : `「${sharedUpdate.tripName}」的分享連結有新版本，要更新成對方的版本嗎？`}
+            takeRemote={{
+                label: "採用對方版本",
+                confirmLabel: "採用對方",
+                confirmMessage: `確定改用分享連結的「${sharedUpdate.tripName}」嗎？這台裝置的修改會被取代，覆蓋前會先存一份備份。`,
+                run: () => void handleTakeSharedUpdate(),
+            }}
+            keepLocal={{
+                label: "保留本機版本",
+                confirmLabel: "保留本機",
+                confirmMessage: "確定保留這台裝置的版本嗎？對方這次的修改不會套用，等他們下次再更新時會再問一次。",
+                run: () => tripStore.keepLocalOverSharedUpdate(),
+            }}
+            keepBoth={sharedUpdate.localChanged
+            ? {
+                label: "兩份都留（本機版另存為新行程）",
+                confirmLabel: "兩份都留",
+                confirmMessage: `確定兩份都留嗎？這台裝置的版本會另存成一個新行程，分享連結的「${sharedUpdate.tripName}」則成為這趟行程的內容。`,
+                run: () => void handleKeepBothShared(),
+            }
+            : undefined}
+        />
     </div>
 {/if}
 

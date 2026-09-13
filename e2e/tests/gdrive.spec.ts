@@ -1,4 +1,4 @@
-import { yamlFingerprint } from "$lib/infra/http/gdrive";
+import { yamlFingerprint } from "$lib/domain/utils";
 import type { Page } from "@playwright/test";
 import { createHash } from "node:crypto";
 import {
@@ -158,19 +158,18 @@ async function installFakeDrive(page: Page, initial: FakeFile[] = []): Promise<F
  * 以「已連線」狀態開場。塞的是 token 快取而不是假的 window.google，所以 GIS 完全不介入；
  * `trips` 有 record 時代表這個行程已經綁好雲端檔（`localHash` 用真的指紋，才算「本機沒變」）。
  */
-async function seedConnected(page: Page, options: { autoSync?: boolean; expiredToken?: boolean; record?: { fileId: string; remoteMd5: string; localHash: string; }; } = {}) {
+async function seedConnected(page: Page, options: { expiredToken?: boolean; record?: { fileId: string; remoteMd5: string; localHash: string; }; } = {}) {
     await page.addInitScript(seed => {
         window.localStorage.setItem("showmeway_gdrive_user", JSON.stringify({ email: "tester@example.com", name: "測試者" }));
         window.localStorage.setItem(
             "showmeway_gdrive_token",
             JSON.stringify({ token: "e2e-token", expiresAt: Date.now() + (seed.expiredToken ? -3600_000 : 3600_000) }),
         );
-        window.localStorage.setItem("showmeway_gdrive_auto_sync", seed.autoSync ? "true" : "false");
         if (seed.record) {
             window.localStorage.setItem("showmeway_gdrive_trips", JSON.stringify({ [seed.tripId]: seed.record }));
         }
         window.localStorage.setItem("showmeway_active_profile", seed.tripId);
-    }, { autoSync: !!options.autoSync, expiredToken: !!options.expiredToken, record: options.record, tripId: "p-e2e" });
+    }, { expiredToken: !!options.expiredToken, record: options.record, tripId: "p-e2e" });
 }
 
 function md5Of(content: string): string {
@@ -449,10 +448,11 @@ test("刪除雲端行程：確認後該列從清單消失", async ({ page }) => 
     expect(drive.list()).toHaveLength(0);
 });
 
-test("儲存完同步：連續操作在 debounce 窗口內只上傳一次", async ({ page }) => {
-    const drive = await installFakeDrive(page);
+test("儲存完提示：連續操作只問一次，而且要按下去才上傳", async ({ page }) => {
+    const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML }]);
     await seedItinerary(page);
-    await seedConnected(page, { autoSync: true });
+    // 綁好雲端檔且兩邊一致，所以接下來的改動就是「還沒上傳的異動」。
+    await seedConnected(page, { record: { fileId: CLOUD_FILE_ID, remoteMd5: md5Of(FIXTURE_YAML), localHash: yamlFingerprint(FIXTURE_YAML) } });
     await page.goto("/");
 
     // 三次 persistTripData：勾一個待辦、取消、再勾回來。
@@ -462,9 +462,30 @@ test("儲存完同步：連續操作在 debounce 窗口內只上傳一次", asyn
     await todo.uncheck();
     await todo.check();
 
-    // debounce 是 4s，等它收斂後才數。
-    await expect.poll(() => drive.counts().uploads, { timeout: 15_000 }).toBe(1);
-    expect(drive.list()[0]?.content).toContain("checked: true");
+    // 安靜下來才問，整串操作只問一次，而且問之前什麼都沒送出去。
+    await expect(page.getByText("行程有改動還沒上傳到 Google Drive")).toBeVisible({ timeout: 20_000 });
+    expect(drive.counts().uploads).toBe(0);
+
+    await page.getByRole("button", { name: "上傳" }).click();
+
+    await expect.poll(() => drive.counts().uploads).toBe(1);
+    expect(drive.read(CLOUD_FILE_ID)).toContain("checked: true");
+});
+
+test("背景檢查：一開啟就發現雲端有新版，按下載才換掉行程", async ({ page }) => {
+    // 雲端檔在上次同步之後被另一台裝置改過。
+    const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: yamlNamed("雲端版行程") }]);
+    await seedItinerary(page);
+    await seedConnected(page, { record: { fileId: CLOUD_FILE_ID, remoteMd5: md5Of(FIXTURE_YAML), localHash: yamlFingerprint(FIXTURE_YAML) } });
+    await page.goto("/");
+
+    // 清單本來就帶著兩邊的 checksum，所以這個提示沒有多打一次 Drive，也沒有先下載。
+    await expect(page.getByText("雲端有這趟行程的新版本")).toBeVisible();
+    expect(drive.counts().downloads).toBe(0);
+
+    await page.getByRole("button", { name: "下載" }).click();
+
+    await expect(page.getByRole("heading", { name: "雲端版行程" })).toBeVisible();
 });
 
 // 主畫面的「切換行程」抽屜：本機行程下方恆為單一雲端列 —— 清單、重新連線、或登入。

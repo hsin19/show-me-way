@@ -207,3 +207,31 @@ export function prefersReducedMotion(): boolean {
     if (typeof window === "undefined") return false;
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
+
+/**
+ * A short fingerprint of a trip's YAML, for answering "has this changed since the last
+ * sync" by comparing content instead of by remembering an event.
+ *
+ * Deliberately not a cryptographic digest: it is only ever compared against another
+ * fingerprint this app produced, never against Drive's md5, so FNV-1a over two seeds plus
+ * the length is enough. `crypto.subtle` has no MD5 and is async, which would make every
+ * decision that reads one async for no gain.
+ *
+ * It is compared across sides as well as across time — the Drive file carries the remote's
+ * copy in `appProperties.contentHash`, and a received share link is judged against the
+ * version last taken from it — so a collision no longer only costs a skipped upload: two
+ * genuinely different trips would be declared identical and the divergence would never be
+ * raised. 64 bits plus the length over hand-authored YAML makes that vanishingly unlikely,
+ * but widen the use again and this is the sentence to re-check.
+ */
+export function yamlFingerprint(yaml: string): string {
+    let a = 0x811c9dc5;
+    let b = 0x01000193;
+    for (let i = 0; i < yaml.length; i++) {
+        const code = yaml.charCodeAt(i);
+        a = Math.imul(a ^ code, 0x01000193);
+        b = Math.imul(b ^ (code + i), 0x85ebca6b);
+    }
+    const hex = (n: number) => (n >>> 0).toString(16).padStart(8, "0");
+    return `${yaml.length.toString(36)}-${hex(a)}${hex(b)}`;
+}

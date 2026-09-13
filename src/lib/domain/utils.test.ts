@@ -21,6 +21,7 @@ import {
     splitDayDate,
     toLocalIsoDate,
     toUtcIsoDate,
+    yamlFingerprint,
 } from "./utils";
 
 describe("parseLocalDate", () => {
@@ -291,5 +292,14 @@ describe("isTripLongPast", () => {
     it("reads only the date half of a timestamp, and trims before slicing", () => {
         expect(isTripLongPast("2026-07-27T23:59:00Z", TODAY)).toBe(true);
         expect(isTripLongPast(" 2026-11-05 ", TODAY)).toBe(false);
+    });
+});
+
+describe("yamlFingerprint", () => {
+    it("is stable for identical content and differs for a one-character edit", () => {
+        const a = "trip:\n  name: 東京\n";
+        expect(yamlFingerprint(a)).toBe(yamlFingerprint(a));
+        expect(yamlFingerprint(a)).not.toBe(yamlFingerprint("trip:\n  name: 東京 \n"));
+        expect(yamlFingerprint("")).toBe(yamlFingerprint(""));
     });
 });

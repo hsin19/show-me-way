@@ -6,9 +6,13 @@
 //   record of truth: `reconcileBindings` re-derives a lost one after every listing from
 //   each file's `appProperties.showmewayTripId`, so a sign-out or evicted storage does
 //   not produce a duplicate cloud file.
-// - A conflict changes nothing on either side. It pauses automatic sync for that trip
-//   and leaves the decision to 行程管理's strip; `force` is how the user's answer comes
-//   back in. `diverged` lives on the record so the hold survives a reload.
+// - Nothing here transfers on its own. Every push and pull is a tap — the decision
+//   strip's, the cloud button's, or the one on the toast TripStore raises once an edit
+//   settles — so this module answers questions (`cloudActionFor`, `hasUnpushedEdits`)
+//   and acts only when called.
+// - A conflict changes nothing on either side. It leaves the decision to 行程管理's
+//   strip; `force` is how the user's answer comes back in. `diverged` lives on the
+//   record so the hold survives a reload.
 // - A `pulled` result is not yet recorded. The caller lands the bytes first and only
 //   then runs `commit`; recording ahead of that claims a version this device never took.
 // - `checkOnly` transfers nothing in either direction — a clean trip whose Drive file is
@@ -19,6 +23,7 @@ import {
     type TripData,
     validateYaml,
 } from "$lib/domain/trip";
+import { yamlFingerprint } from "$lib/domain/utils";
 import {
     buildRebindRecord,
     clearCachedAccessToken,
@@ -34,18 +39,15 @@ import {
     type GoogleAuthPrompt,
     type GoogleUser,
     listCloudTrips,
-    loadGdriveAutoSync,
     loadGdriveUser,
     loadTripSyncMap,
     requestGoogleAccessToken,
-    saveGdriveAutoSync,
     saveGdriveUser,
     saveTripSyncMap,
     type TripSyncMap,
     type TripSyncRecord,
     updateCloudShareLink,
     uploadOrUpdateCloudTrip,
-    yamlFingerprint,
 } from "$lib/infra/http/gdrive";
 import {
     createProfile,
@@ -136,17 +138,8 @@ export interface SyncOptions {
     checkOnly?: boolean;
 }
 
-// Long enough that a burst of checklist toggles becomes one round-trip, short enough that
-// closing the app right after an edit still catches it.
-const SYNC_DEBOUNCE_MS = 4000;
-
-// Bounded so a write that never settles, or a network that stays down, cannot leave a
-// timer re-arming for the rest of the session.
-const MAX_SYNC_RETRIES = 3;
-
 class GDriveSyncState {
     user = $state<GoogleUser | null>(loadGdriveUser());
-    autoSync = $state<boolean>(loadGdriveAutoSync());
     isSyncing = $state<boolean>(false);
     /** Only meaningful while `isSyncing`. Set exclusively by `sync()`, so any other busy-locked operation (delete, load) leaves it `null`. */
     private syncPhase = $state<"checking" | "pushing" | "pulling" | null>(null);
@@ -180,20 +173,10 @@ class GDriveSyncState {
     // Write operations only, so a background list refresh cannot clear it out from under a
     // sync that is still running.
     private busy = false;
-    private timer: ReturnType<typeof setTimeout> | null = null;
-    private pending: { yaml: string; tripId: string; } | null = null;
-    private retries = 0;
     private lastRefreshAt = 0;
     private refreshInFlight: Promise<CloudTripFile[]> | null = null;
     /** A listing landed mid-sync and skipped its rebind pass; `withBusyLock` re-runs it on the way out. */
     private reconcileMissed = false;
-
-    setAutoSync(enabled: boolean) {
-        this.autoSync = enabled;
-        saveGdriveAutoSync(enabled);
-        // An armed timer would otherwise fire one more upload after the user opted out.
-        if (!enabled) this.cancelPending();
-    }
 
     /** The Drive file a trip is bound to, if any. */
     cloudFileId(tripId: string): string | null {
@@ -239,7 +222,6 @@ class GDriveSyncState {
         delete this.trips[tripId];
         saveTripSyncMap({ ...this.trips });
         delete this.conflicts[tripId];
-        if (this.pending?.tripId === tripId) this.pending = null;
         if (this.pendingTransfer?.tripId === tripId) this.pendingTransfer = null;
     }
 
@@ -288,6 +270,48 @@ class GDriveSyncState {
         if (!record) return "unbound";
         const dirty = record.localHash === undefined || record.localHash !== yamlFingerprint(localYaml);
         return dirty ? "dirty" : "clean";
+    }
+
+    /**
+     * Whether this trip has edits its Drive file has not been told about — the question the
+     * publish prompt is raised from. False for a trip with no binding at all: an edit to a
+     * trip that has never been uploaded is not an unsynced change, it is a trip that does
+     * not sync. False while a conflict holds it, too; that decision belongs to 行程管理's
+     * strip and a second prompt for the same trip would only compete with it.
+     */
+    hasUnpushedEdits(tripId: string, localYaml: string): boolean {
+        if (!this.isConnected || !this.cloudFileId(tripId)) return false;
+        if (this.conflictFor(tripId)) return false;
+        return this.tripSyncState(tripId, localYaml) === "dirty";
+    }
+
+    /**
+     * What the last listing implies for `tripId`, without asking Drive again: a download
+     * waiting (`pull`), or a divergence only the user can settle (`conflict`). Null when
+     * there is nothing to offer — no binding, the file missing from the listing, or the
+     * only movement being local, which is the publish prompt's business rather than this
+     * one's.
+     *
+     * Reads `cloudFiles`, so it costs no request and can run on every foreground: the
+     * listing already carries both checksums, which is the whole reason `contentHash` is
+     * published. The answer is therefore only as fresh as the listing — whoever acts on it
+     * goes through `sync`, which re-decides against a live `files.get` and turns a stale
+     * `pull` into `up_to_date` rather than transferring on this snapshot.
+     */
+    remoteStatusFor(tripId: string, localYaml: string): "pull" | "conflict" | null {
+        if (!this.isConnected) return null;
+        const record = this.trips[tripId] ?? null;
+        if (!record) return null;
+        const file = this.cloudFiles.find(candidate => candidate.id === record.fileId);
+        if (!file) return null;
+        const decision = decideSyncAction({
+            record,
+            remoteExists: true,
+            remoteMd5: file.md5Checksum ?? null,
+            remoteHash: file.contentHash ?? null,
+            localHash: yamlFingerprint(localYaml),
+        });
+        return decision === "pull" || decision === "conflict" ? decision : null;
     }
 
     /**
@@ -381,9 +405,6 @@ class GDriveSyncState {
             this.user = userInfo;
             showToast(`Google 雲端硬碟已連線 (${userInfo.email})`);
             void this.refreshFiles({ force: true });
-            // An edit made while the token was dead is still queued; without this it would
-            // wait for the user to touch the trip again before it reached Drive.
-            void this.flush();
             return true;
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
@@ -398,7 +419,6 @@ class GDriveSyncState {
     disconnect() {
         clearGdriveUser();
         clearCachedAccessToken();
-        this.cancelPending();
         this.user = null;
         this.cloudFiles = [];
         this.cloudListState = "idle";
@@ -507,71 +527,6 @@ class GDriveSyncState {
             this.writeRecord(profileId, buildRebindRecord(file, yamlFingerprint(yaml)));
             this.absorbShareLink(profileId, file);
         }
-    }
-
-    /**
-     * 儲存完同步. Debounced, because every trip edit goes through `persistTripData` — a
-     * handful of checklist taps would otherwise be a handful of round-trips, and it is
-     * that request rate which provokes the Drive rate limits that can split the app folder
-     * in two. Safe to call unconditionally: it returns early unless the user opted in.
-     */
-    scheduleSync(yaml: string, tripId: string) {
-        if (!this.autoSync || !this.isConnected) return;
-        // An unresolved conflict is waiting on the user to pick a side; asking Drive again
-        // on every keystroke cannot produce an answer we do not already have.
-        if (this.conflictFor(tripId)) return;
-        // The queue holds one trip. Switching trips inside the window must flush the
-        // previous one rather than drop its push.
-        if (this.pending && this.pending.tripId !== tripId) void this.flush();
-        this.pending = { yaml, tripId };
-        this.retries = 0;
-        this.arm();
-    }
-
-    private arm() {
-        if (this.timer !== null) clearTimeout(this.timer);
-        this.timer = setTimeout(() => void this.flush(), SYNC_DEBOUNCE_MS);
-    }
-
-    private cancelPending() {
-        if (this.timer !== null) clearTimeout(this.timer);
-        this.timer = null;
-        this.pending = null;
-        this.retries = 0;
-    }
-
-    private async flush() {
-        this.timer = null;
-        const pending = this.pending;
-        if (!pending) return;
-        // Re-checked here, not only when the timer was armed: the user may have turned
-        // automatic sync off, or signed out, while it was waiting.
-        if (!this.autoSync || !this.isConnected) {
-            this.cancelPending();
-            return;
-        }
-        // Re-checked here for the same reason: a timer armed before a refresh found the
-        // trip diverged would otherwise still fire, and `sync` would resolve the conflict
-        // by overwriting one side of it. The edit is already in storage; the decision
-        // strip is what sends it on.
-        if (this.conflictFor(pending.tripId)) {
-            this.cancelPending();
-            return;
-        }
-        if (this.busy) {
-            if (this.retries++ < MAX_SYNC_RETRIES) this.arm();
-            return;
-        }
-        const result = await this.sync(pending.yaml, pending.tripId, { interactive: false });
-        if (!result) {
-            // The edit is still only local — keep it queued so a dropped connection
-            // retries instead of discarding the push.
-            if (this.retries++ < MAX_SYNC_RETRIES) this.arm();
-            return;
-        }
-        // A newer edit may have replaced it while the upload was in flight.
-        if (this.pending === pending) this.pending = null;
-        this.retries = 0;
     }
 
     /** Uploads `yaml` and records it as what both sides now agree on. */

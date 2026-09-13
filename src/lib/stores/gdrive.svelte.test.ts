@@ -1,3 +1,4 @@
+import { yamlFingerprint } from "$lib/domain/utils";
 import { createLocalStorageStub } from "$lib/testing/stubs";
 // The sync executor: `decideSyncAction` decides, this layer carries the decision out
 // against Drive and the record store. `gdrive.test.ts` covers the decision truth table;
@@ -115,8 +116,8 @@ describe("sync: pushing", () => {
         expect(gdrive.loadTripSyncMap()[TRIP]).toEqual({
             fileId: "file-1",
             remoteMd5: "md5-1",
-            localHash: gdrive.yamlFingerprint(YAML_A),
-            remoteHash: gdrive.yamlFingerprint(YAML_A),
+            localHash: yamlFingerprint(YAML_A),
+            remoteHash: yamlFingerprint(YAML_A),
         });
     });
 
@@ -134,7 +135,7 @@ describe("sync: pushing", () => {
     });
 
     it("updates the bound file when only the local copy moved", async () => {
-        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: gdrive.yamlFingerprint(YAML_A) } });
+        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A) } });
         await loadSync();
         const calls = createDriveStub({
             meta: { body: { id: "file-1", name: "東京.yaml", md5Checksum: "md5-1" } },
@@ -148,7 +149,7 @@ describe("sync: pushing", () => {
         expect(upload?.method).toBe("PATCH");
         expect(upload?.url).toContain("/files/file-1");
         expect(upload?.body).not.toContain('"parents"');
-        expect(gdrive.loadTripSyncMap()[TRIP]?.localHash).toBe(gdrive.yamlFingerprint(YAML_B));
+        expect(gdrive.loadTripSyncMap()[TRIP]?.localHash).toBe(yamlFingerprint(YAML_B));
     });
 
     it("fingerprints the bytes it sent, not a later edit, so a mid-upload save still syncs", async () => {
@@ -159,14 +160,14 @@ describe("sync: pushing", () => {
 
         // The user edited while that upload was in flight: the record must still describe
         // YAML_A, or the next sync would call the newer content already sent.
-        expect(gdrive.loadTripSyncMap()[TRIP]?.localHash).not.toBe(gdrive.yamlFingerprint(YAML_B));
+        expect(gdrive.loadTripSyncMap()[TRIP]?.localHash).not.toBe(yamlFingerprint(YAML_B));
         expect(gdrive.decideSyncAction({
             record: gdrive.loadTripSyncMap()[TRIP]!,
             remoteExists: true,
             remoteMd5: "md5-1",
             // What that upload published, so the remote still describes YAML_A.
-            remoteHash: gdrive.yamlFingerprint(YAML_A),
-            localHash: gdrive.yamlFingerprint(YAML_B),
+            remoteHash: yamlFingerprint(YAML_A),
+            localHash: yamlFingerprint(YAML_B),
         })).toBe("push");
     });
 
@@ -200,7 +201,7 @@ describe("sync: pushing", () => {
 describe("sync: pulling", () => {
     // A function, not a const: `gdrive` is re-imported per test, so a describe-scope value
     // would be built at collection time against a module that does not exist yet.
-    const behindRemote = () => ({ fileId: "file-1", remoteMd5: "md5-1", localHash: gdrive.yamlFingerprint(YAML_A) });
+    const behindRemote = () => ({ fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A) });
 
     it("hands the remote YAML back and records it once the caller commits", async () => {
         gdrive.saveTripSyncMap({ [TRIP]: behindRemote() });
@@ -218,8 +219,8 @@ describe("sync: pulling", () => {
         expect(gdrive.loadTripSyncMap()[TRIP]).toEqual({
             fileId: "file-1",
             remoteMd5: "md5-2",
-            localHash: gdrive.yamlFingerprint(YAML_B),
-            remoteHash: gdrive.yamlFingerprint(YAML_B),
+            localHash: yamlFingerprint(YAML_B),
+            remoteHash: yamlFingerprint(YAML_B),
         });
     });
 
@@ -242,13 +243,13 @@ describe("sync: pulling", () => {
             record: gdrive.loadTripSyncMap()[TRIP]!,
             remoteExists: true,
             remoteMd5: "md5-2",
-            remoteHash: gdrive.yamlFingerprint(YAML_B),
-            localHash: gdrive.yamlFingerprint(YAML_A),
+            remoteHash: yamlFingerprint(YAML_B),
+            localHash: yamlFingerprint(YAML_A),
         })).toBe("pull");
     });
 
     it("asks instead of downloading on the background path", async () => {
-        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: gdrive.yamlFingerprint(YAML_A) } });
+        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A) } });
         await loadSync();
         const calls = createDriveStub({
             meta: { body: { id: "file-1", name: "東京.yaml", md5Checksum: "md5-2" } },
@@ -268,7 +269,7 @@ describe("sync: pulling", () => {
         // Someone edited the YAML in Drive itself: the bytes moved, but contentHash still
         // names the copy this app last wrote — which is exactly what is on this device.
         // Trusting the hash here would report 已是最新 and overwrite them on the next push.
-        const agreedHash = gdrive.yamlFingerprint(YAML_A);
+        const agreedHash = yamlFingerprint(YAML_A);
         gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: agreedHash, remoteHash: agreedHash } });
         await loadSync();
         createDriveStub({
@@ -288,12 +289,12 @@ describe("sync: content equality", () => {
         // Would be a conflict on checksums alone, and there is nothing for the user to
         // decide: the two copies are byte-identical.
         gdrive.saveTripSyncMap({
-            [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: gdrive.yamlFingerprint(YAML_A), remoteHash: gdrive.yamlFingerprint(YAML_A) },
+            [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A), remoteHash: yamlFingerprint(YAML_A) },
         });
         await loadSync();
         const calls = createDriveStub({
             meta: {
-                body: { id: "file-1", name: "東京.yaml", md5Checksum: "md5-2", appProperties: { contentHash: gdrive.yamlFingerprint(YAML_B) } },
+                body: { id: "file-1", name: "東京.yaml", md5Checksum: "md5-2", appProperties: { contentHash: yamlFingerprint(YAML_B) } },
             },
         });
 
@@ -307,15 +308,15 @@ describe("sync: content equality", () => {
         expect(gdrive.loadTripSyncMap()[TRIP]).toEqual({
             fileId: "file-1",
             remoteMd5: "md5-2",
-            localHash: gdrive.yamlFingerprint(YAML_B),
-            remoteHash: gdrive.yamlFingerprint(YAML_B),
+            localHash: yamlFingerprint(YAML_B),
+            remoteHash: yamlFingerprint(YAML_B),
         });
     });
 
     it("leaves the base alone when up_to_date rests on no evidence at all", async () => {
         // Drive reported no checksum and the file carries no contentHash: nothing moved as
         // far as we can tell, which is not the same as having verified the two copies.
-        const record = { fileId: "file-1", remoteMd5: "md5-1", localHash: gdrive.yamlFingerprint(YAML_A), remoteHash: gdrive.yamlFingerprint(YAML_A) };
+        const record = { fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A), remoteHash: yamlFingerprint(YAML_A) };
         gdrive.saveTripSyncMap({ [TRIP]: record });
         await loadSync();
         createDriveStub({ meta: { body: { id: "file-1", name: "東京.yaml" } } });
@@ -327,7 +328,7 @@ describe("sync: content equality", () => {
 
 describe("sync: checkOnly", () => {
     it("offers the download as its own tap instead of downloading, and never PATCHes or GETs the bytes", async () => {
-        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: gdrive.yamlFingerprint(YAML_A) } });
+        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A) } });
         await loadSync();
         const calls = createDriveStub({
             meta: { body: { id: "file-1", name: "東京.yaml", md5Checksum: "md5-2" } },
@@ -344,7 +345,7 @@ describe("sync: checkOnly", () => {
     });
 
     it("a real sync afterwards re-decides from scratch instead of trusting the armed flag", async () => {
-        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: gdrive.yamlFingerprint(YAML_A) } });
+        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A) } });
         await loadSync();
         createDriveStub({
             meta: { body: { id: "file-1", name: "東京.yaml", md5Checksum: "md5-2" } },
@@ -365,7 +366,7 @@ describe("sync: checkOnly", () => {
         // A clean trip decides `push` exactly when its Drive copy vanished — the user
         // tidied their Drive, or another device deleted it. A button that only promised
         // to compare must not resurrect a file someone deliberately removed.
-        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: gdrive.yamlFingerprint(YAML_A) } });
+        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A) } });
         await loadSync();
         const calls = createDriveStub({ meta: { status: 404 } });
 
@@ -377,7 +378,7 @@ describe("sync: checkOnly", () => {
     });
 
     it("uploads on the follow-up tap that is no longer checkOnly", async () => {
-        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: gdrive.yamlFingerprint(YAML_A) } });
+        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A) } });
         await loadSync();
         const calls = createDriveStub({ meta: { status: 404 }, upload: { id: "file-2", name: "東京.yaml", md5Checksum: "md5-2" } });
         await sync.sync(YAML_A, TRIP, { checkOnly: true });
@@ -390,7 +391,7 @@ describe("sync: checkOnly", () => {
     });
 
     it("still up to date: toasts and keeps the button on check", async () => {
-        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: gdrive.yamlFingerprint(YAML_A) } });
+        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A) } });
         await loadSync();
         createDriveStub({ meta: { body: { id: "file-1", name: "東京.yaml", md5Checksum: "md5-1" } } });
 
@@ -403,7 +404,7 @@ describe("sync: checkOnly", () => {
 
 describe("cloudActionFor", () => {
     it("offers upload for an unbound or dirty trip, check when clean", async () => {
-        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: gdrive.yamlFingerprint(YAML_A) } });
+        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A) } });
         await loadSync();
 
         expect(sync.cloudActionFor("p-unbound", YAML_A)).toEqual({ kind: "upload", overwrite: false });
@@ -485,24 +486,15 @@ describe("sync: conflict", () => {
         expect(sync.conflictFor(TRIP)).toBeNull();
     });
 
-    it("pauses the debounced path for a trip whose conflict is unresolved", async () => {
+    it("offers no push for a trip whose conflict is unresolved", async () => {
         gdrive.saveTripSyncMap({ [TRIP]: diverged });
         await loadSync();
         createDriveStub({ meta: { body: { id: "file-1", name: "東京.yaml", md5Checksum: "md5-2" } } });
-        sync.setAutoSync(true);
         await sync.sync(YAML_A, TRIP);
         expect(sync.conflictFor(TRIP)).not.toBeNull();
 
-        vi.useFakeTimers();
-        try {
-            sync.scheduleSync(YAML_B, TRIP);
-            await vi.runAllTimersAsync();
-        } finally {
-            vi.useRealTimers();
-        }
-
-        // Still diverged: asking Drive again cannot answer what the user has not decided.
-        expect(gdrive.loadTripSyncMap()[TRIP]).toEqual(diverged);
+        // A prompt to upload would compete with the decision strip for the same answer.
+        expect(sync.hasUnpushedEdits(TRIP, YAML_B)).toBe(false);
     });
 });
 
@@ -516,7 +508,7 @@ describe("sync: guards", () => {
     });
 
     it("reports up to date without writing when neither side moved", async () => {
-        const record = { fileId: "file-1", remoteMd5: "md5-1", localHash: gdrive.yamlFingerprint(YAML_A) };
+        const record = { fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A) };
         gdrive.saveTripSyncMap({ [TRIP]: record });
         await loadSync();
         const calls = createDriveStub({ meta: { body: { id: "file-1", name: "東京.yaml", md5Checksum: "md5-1" } } });
@@ -573,7 +565,7 @@ describe("rebinding after the local state is lost", () => {
     it("re-binds silently when the cloud copy is the same content", async () => {
         seedUnboundTrip();
         await loadSync();
-        stubList([{ id: "file-1", name: "東京.yaml", tripId: "t-tokyo", contentHash: gdrive.yamlFingerprint(YAML_ID) }]);
+        stubList([{ id: "file-1", name: "東京.yaml", tripId: "t-tokyo", contentHash: yamlFingerprint(YAML_ID) }]);
 
         await sync.refreshFiles({ force: true });
 
@@ -582,8 +574,8 @@ describe("rebinding after the local state is lost", () => {
         expect(gdrive.loadTripSyncMap()[profileId]).toEqual({
             fileId: "file-1",
             remoteMd5: "md5-1",
-            remoteHash: gdrive.yamlFingerprint(YAML_ID),
-            localHash: gdrive.yamlFingerprint(YAML_ID),
+            remoteHash: yamlFingerprint(YAML_ID),
+            localHash: yamlFingerprint(YAML_ID),
         });
         expect(sync.conflictFor(profileId)).toBeNull();
     });
@@ -591,7 +583,7 @@ describe("rebinding after the local state is lost", () => {
     it("binds but asks when the two copies have drifted apart", async () => {
         seedUnboundTrip(YAML_ID_EDITED);
         await loadSync();
-        stubList([{ id: "file-1", name: "東京", tripId: "t-tokyo", contentHash: gdrive.yamlFingerprint(YAML_ID) }]);
+        stubList([{ id: "file-1", name: "東京", tripId: "t-tokyo", contentHash: yamlFingerprint(YAML_ID) }]);
 
         await sync.refreshFiles({ force: true });
 
@@ -605,20 +597,11 @@ describe("rebinding after the local state is lost", () => {
     it("holds the drifted trip on that conflict, since the record alone would push", async () => {
         seedUnboundTrip(YAML_ID_EDITED);
         await loadSync();
-        const calls = stubList([{ id: "file-1", name: "東京", tripId: "t-tokyo", contentHash: gdrive.yamlFingerprint(YAML_ID) }]);
+        stubList([{ id: "file-1", name: "東京", tripId: "t-tokyo", contentHash: yamlFingerprint(YAML_ID) }]);
         await sync.refreshFiles({ force: true });
         const profileId = getActiveProfileId()!;
-        sync.setAutoSync(true);
 
-        vi.useFakeTimers();
-        try {
-            sync.scheduleSync(YAML_ID_EDITED, profileId);
-            await vi.runAllTimersAsync();
-        } finally {
-            vi.useRealTimers();
-        }
-
-        expect(calls.some(c => c.url.includes("/upload/"))).toBe(false);
+        expect(sync.hasUnpushedEdits(profileId, YAML_ID_EDITED)).toBe(false);
     });
 
     it("keeps holding the drifted trip after a reload drops the in-memory conflict", async () => {
@@ -627,7 +610,7 @@ describe("rebinding after the local state is lost", () => {
         // the next checklist tap overwrote the cloud copy nobody had looked at yet.
         seedUnboundTrip(YAML_ID_EDITED);
         await loadSync();
-        stubList([{ id: "file-1", name: "東京", tripId: "t-tokyo", contentHash: gdrive.yamlFingerprint(YAML_ID) }]);
+        stubList([{ id: "file-1", name: "東京", tripId: "t-tokyo", contentHash: yamlFingerprint(YAML_ID) }]);
         await sync.refreshFiles({ force: true });
         const profileId = getActiveProfileId()!;
 
@@ -643,7 +626,7 @@ describe("rebinding after the local state is lost", () => {
     it("resolves the recorded divergence once the user picks a side", async () => {
         seedUnboundTrip(YAML_ID_EDITED);
         await loadSync();
-        stubList([{ id: "file-1", name: "東京", tripId: "t-tokyo", contentHash: gdrive.yamlFingerprint(YAML_ID) }]);
+        stubList([{ id: "file-1", name: "東京", tripId: "t-tokyo", contentHash: yamlFingerprint(YAML_ID) }]);
         await sync.refreshFiles({ force: true });
         const profileId = getActiveProfileId()!;
         createDriveStub({
@@ -661,7 +644,7 @@ describe("rebinding after the local state is lost", () => {
         seedUnboundTrip();
         localStorage.setItem(gdrive.GDRIVE_TRIPS_STORAGE, JSON.stringify({ [TRIP]: { fileId: "file-old", remoteMd5: "md5-old" } }));
         await loadSync();
-        stubList([{ id: "file-1", name: "東京.yaml", tripId: "t-tokyo", contentHash: gdrive.yamlFingerprint(YAML_ID) }]);
+        stubList([{ id: "file-1", name: "東京.yaml", tripId: "t-tokyo", contentHash: yamlFingerprint(YAML_ID) }]);
 
         await sync.refreshFiles({ force: true });
 
@@ -687,8 +670,8 @@ describe("rebinding after the local state is lost", () => {
         seedUnboundTrip();
         await loadSync();
         stubList([
-            { id: "file-new", name: "東京.yaml", tripId: "t-tokyo", contentHash: gdrive.yamlFingerprint(YAML_ID) },
-            { id: "file-old", name: "東京.yaml", tripId: "t-tokyo", contentHash: gdrive.yamlFingerprint(YAML_ID) },
+            { id: "file-new", name: "東京.yaml", tripId: "t-tokyo", contentHash: yamlFingerprint(YAML_ID) },
+            { id: "file-old", name: "東京.yaml", tripId: "t-tokyo", contentHash: yamlFingerprint(YAML_ID) },
         ]);
 
         await sync.refreshFiles({ force: true });
@@ -706,7 +689,7 @@ describe("rebinding after the local state is lost", () => {
             "showmeway_profiles",
             JSON.stringify([{ id: "p-parked", yaml: parkedYaml, savedAt: "2026-08-01T00:00:00Z" }]),
         );
-        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: gdrive.yamlFingerprint(YAML_A) } });
+        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A) } });
         await loadSync();
 
         let releaseMeta: (() => void) | null = null;
@@ -716,7 +699,7 @@ describe("rebinding after the local state is lost", () => {
                 name: "京都.yaml",
                 modifiedTime: "2026-08-24T00:00:00Z",
                 md5Checksum: "md5-2",
-                appProperties: { showmewayTripId: "t-kyoto", contentHash: gdrive.yamlFingerprint(parkedYaml) },
+                appProperties: { showmewayTripId: "t-kyoto", contentHash: yamlFingerprint(parkedYaml) },
             }],
         };
         vi.stubGlobal(
@@ -755,7 +738,7 @@ describe("rebinding after the local state is lost", () => {
             JSON.stringify([{ id: "p-parked", yaml: parkedYaml, savedAt: "2026-08-01T00:00:00Z" }]),
         );
         await loadSync();
-        stubList([{ id: "file-2", name: "京都.yaml", tripId: "t-kyoto", contentHash: gdrive.yamlFingerprint(parkedYaml) }]);
+        stubList([{ id: "file-2", name: "京都.yaml", tripId: "t-kyoto", contentHash: yamlFingerprint(parkedYaml) }]);
 
         await sync.refreshFiles({ force: true });
 
@@ -772,8 +755,8 @@ describe("record bookkeeping", () => {
         expect(gdrive.loadTripSyncMap()[TRIP]).toEqual({
             fileId: "file-9",
             remoteMd5: "md5-9",
-            localHash: gdrive.yamlFingerprint(YAML_A),
-            remoteHash: gdrive.yamlFingerprint(YAML_A),
+            localHash: yamlFingerprint(YAML_A),
+            remoteHash: yamlFingerprint(YAML_A),
         });
     });
 
@@ -955,58 +938,87 @@ describe("importCloudTripAsProfile", () => {
     });
 });
 
-describe("scheduleSync", () => {
-    it("collapses a burst of saves into one upload", async () => {
+describe("hasUnpushedEdits", () => {
+    it("is true only for a bound trip whose YAML has moved since the last agreement", async () => {
+        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A) } });
         await loadSync();
-        const calls = createDriveStub({ upload: { id: "file-1", name: "東京.yaml", md5Checksum: "md5-1" } });
-        sync.setAutoSync(true);
 
-        vi.useFakeTimers();
-        try {
-            sync.scheduleSync(YAML_A, TRIP);
-            sync.scheduleSync(YAML_A, TRIP);
-            sync.scheduleSync(YAML_B, TRIP);
-            await vi.runAllTimersAsync();
-        } finally {
-            vi.useRealTimers();
-        }
-
-        expect(calls.filter(c => c.url.includes("/upload/")).length).toBe(1);
-        // The last payload wins, not the first.
-        expect(gdrive.loadTripSyncMap()[TRIP]?.localHash).toBe(gdrive.yamlFingerprint(YAML_B));
+        expect(sync.hasUnpushedEdits(TRIP, YAML_A)).toBe(false);
+        expect(sync.hasUnpushedEdits(TRIP, YAML_B)).toBe(true);
     });
 
-    it("does nothing while automatic sync is off", async () => {
+    it("is false for a trip Drive has never held", async () => {
         await loadSync();
-        const calls = createDriveStub({ upload: { id: "file-1", name: "東京.yaml" } });
-        sync.setAutoSync(false);
 
-        vi.useFakeTimers();
-        try {
-            sync.scheduleSync(YAML_A, TRIP);
-            await vi.runAllTimersAsync();
-        } finally {
-            vi.useRealTimers();
-        }
-
-        expect(calls.length).toBe(0);
+        // An edit to a trip that has never been uploaded is not an unsynced change; it is a
+        // trip that does not sync, and prompting would offer to create a file nobody asked for.
+        expect(sync.hasUnpushedEdits(TRIP, YAML_A)).toBe(false);
     });
 
-    it("cancels an armed upload when the user opts out inside the window", async () => {
+    it("is false while signed out, whatever the record says", async () => {
+        gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A) } });
+        gdrive.clearGdriveUser();
         await loadSync();
-        const calls = createDriveStub({ upload: { id: "file-1", name: "東京.yaml" } });
-        sync.setAutoSync(true);
 
-        vi.useFakeTimers();
-        try {
-            sync.scheduleSync(YAML_A, TRIP);
-            sync.setAutoSync(false);
-            await vi.runAllTimersAsync();
-        } finally {
-            vi.useRealTimers();
-        }
+        expect(sync.hasUnpushedEdits(TRIP, YAML_B)).toBe(false);
+    });
+});
 
-        expect(calls.length).toBe(0);
+describe("remoteStatusFor", () => {
+    const AGREED = { fileId: "file-1", remoteMd5: "md5-1", remoteHash: "", localHash: "" };
+
+    /** The listing as the background refresh leaves it, with both checksums on the file. */
+    async function listWith(file: { md5Checksum?: string; contentHash?: string; }) {
+        createDriveStub({
+            list: [{
+                id: "file-1",
+                name: "東京.yaml",
+                modifiedTime: "2026-08-24T00:00:00Z",
+                md5Checksum: file.md5Checksum ?? "md5-1",
+                appProperties: { contentHash: file.contentHash },
+            }],
+        });
+        await sync.refreshFiles({ force: true });
+    }
+
+    function agreedOn(yaml: string) {
+        return { ...AGREED, remoteHash: yamlFingerprint(yaml), localHash: yamlFingerprint(yaml) };
+    }
+
+    it("offers the download when only Drive moved", async () => {
+        gdrive.saveTripSyncMap({ [TRIP]: agreedOn(YAML_A) });
+        await loadSync();
+        await listWith({ md5Checksum: "md5-2", contentHash: yamlFingerprint(YAML_B) });
+
+        expect(sync.remoteStatusFor(TRIP, YAML_A)).toBe("pull");
+    });
+
+    it("reports the divergence when both sides moved", async () => {
+        gdrive.saveTripSyncMap({ [TRIP]: agreedOn(YAML_A) });
+        await loadSync();
+        await listWith({ md5Checksum: "md5-2", contentHash: "remote-edit" });
+
+        expect(sync.remoteStatusFor(TRIP, YAML_B)).toBe("conflict");
+    });
+
+    it("stays silent when nothing moved, and when only the local copy did", async () => {
+        gdrive.saveTripSyncMap({ [TRIP]: agreedOn(YAML_A) });
+        await loadSync();
+        await listWith({ contentHash: yamlFingerprint(YAML_A) });
+
+        expect(sync.remoteStatusFor(TRIP, YAML_A)).toBeNull();
+        // A local-only edit is the publish prompt's business, not this one's.
+        expect(sync.remoteStatusFor(TRIP, YAML_B)).toBeNull();
+    });
+
+    it("stays silent when the bound file is not in the listing", async () => {
+        gdrive.saveTripSyncMap({ [TRIP]: agreedOn(YAML_A) });
+        await loadSync();
+        createDriveStub({ list: [] });
+        await sync.refreshFiles({ force: true });
+
+        // A vanished cloud copy is a decision for the 同步 button, not a background notice.
+        expect(sync.remoteStatusFor(TRIP, YAML_A)).toBeNull();
     });
 });
 
@@ -1173,7 +1185,7 @@ describe("sync: the share link rides in appProperties", () => {
 
     it("adopts the link a bound file carries, so the other device updates the same one", async () => {
         gdrive.saveTripSyncMap({
-            [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: gdrive.yamlFingerprint(YAML_A), remoteHash: gdrive.yamlFingerprint(YAML_A) },
+            [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A), remoteHash: yamlFingerprint(YAML_A) },
         });
         await loadSync();
         createDriveStub({
@@ -1182,7 +1194,7 @@ describe("sync: the share link rides in appProperties", () => {
                     id: "file-1",
                     name: "東京.yaml",
                     md5Checksum: "md5-1",
-                    appProperties: { contentHash: gdrive.yamlFingerprint(YAML_A), shareLink: `${LINK.id}.${LINK.key}.${LINK.editToken}`, shareLinkAt: "..." },
+                    appProperties: { contentHash: yamlFingerprint(YAML_A), shareLink: `${LINK.id}.${LINK.key}.${LINK.editToken}`, shareLinkAt: "..." },
                 },
             },
         });

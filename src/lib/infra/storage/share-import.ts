@@ -33,6 +33,19 @@ export type ShareImportOutcome =
     | { kind: "declined"; };
 
 /**
+ * The form a trip is compared in: re-serialized, so a hand-written or hand-edited copy is
+ * judged on content rather than on spacing and key order. Null when it no longer validates,
+ * which is by definition not equal to any version.
+ */
+export function canonicalYaml(yaml: string): string | null {
+    try {
+        return serializeToYaml(validateYaml(yaml));
+    } catch {
+        return null;
+    }
+}
+
+/**
  * Land a decoded share link, asking before anything is replaced. Mutates `incoming` (it
  * may be re-identified) and writes storage, so the caller only has to reload and report.
  *
@@ -40,15 +53,6 @@ export type ShareImportOutcome =
  * captured earlier, to anything keyed by trip: an import moves the active slot, so a
  * stale id would bind the new trip to the old one's cloud file.
  */
-function canonical(yaml: string): string | null {
-    try {
-        return serializeToYaml(validateYaml(yaml));
-    } catch {
-        // A stored copy that no longer validates is by definition not this version.
-        return null;
-    }
-}
-
 export function importSharedTrip(incoming: TripData): ShareImportOutcome {
     // Same id means the same trip, not a similar one, so replacing this device's copy is a
     // real option — and usually the wanted one. A copy stays available behind it for the
@@ -59,7 +63,7 @@ export function importSharedTrip(incoming: TripData): ShareImportOutcome {
         // nothing changed since last time — asking to "overwrite" with identical bytes
         // would only teach the user to dismiss the prompt. Compared canonically: the
         // stored copy went through serializeToYaml too, so any difference is real.
-        if (canonical(existing.yaml) === serializeToYaml(incoming)) {
+        if (canonicalYaml(existing.yaml) === serializeToYaml(incoming)) {
             if (existing.profileId !== getActiveProfileId()) switchToProfile(existing.profileId);
             return { kind: "unchanged", profileId: existing.profileId };
         }

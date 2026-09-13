@@ -1,3 +1,4 @@
+import { yamlFingerprint } from "$lib/domain/utils";
 import { createLocalStorageStub } from "$lib/testing/stubs";
 import {
     afterEach,
@@ -23,16 +24,13 @@ import {
     getCachedAccessToken,
     getGdriveClientId,
     listCloudTrips,
-    loadGdriveAutoSync,
     loadGdriveUser,
     loadTripSyncMap,
     migrateGdriveSyncState,
-    saveGdriveAutoSync,
     saveGdriveUser,
     saveTripSyncMap,
     setCachedAccessToken,
     uploadOrUpdateCloudTrip,
-    yamlFingerprint,
 } from "./gdrive";
 
 /** One recorded fetch, typed, so the request-shape assertions below stay type-checked. */
@@ -46,15 +44,6 @@ function fetchCall(index: number): { url: string; method: string; headers: Recor
         body: typeof init.body === "string" ? init.body : "",
     };
 }
-
-describe("yamlFingerprint", () => {
-    it("is stable for identical content and differs for a one-character edit", () => {
-        const a = "trip:\n  name: 東京\n";
-        expect(yamlFingerprint(a)).toBe(yamlFingerprint(a));
-        expect(yamlFingerprint(a)).not.toBe(yamlFingerprint("trip:\n  name: 東京 \n"));
-        expect(yamlFingerprint("")).toBe(yamlFingerprint(""));
-    });
-});
 
 describe("decideSyncAction", () => {
     // Both sides agreed on md5-a / hash-a at the last sync.
@@ -248,14 +237,6 @@ describe("gdrive module", () => {
             expect(loadGdriveUser()).toBeNull();
         });
 
-        it("handles auto sync setting", () => {
-            expect(loadGdriveAutoSync()).toBe(false);
-            saveGdriveAutoSync(true);
-            expect(loadGdriveAutoSync()).toBe(true);
-            saveGdriveAutoSync(false);
-            expect(loadGdriveAutoSync()).toBe(false);
-        });
-
         it("folds the earlier per-concern maps into one record and removes them", () => {
             storage.setItem("showmeway_gdrive_file_map", JSON.stringify({ "p-1": "file-1", "p-2": "file-2" }));
             storage.setItem("showmeway_gdrive_md5_map", JSON.stringify({ "p-1": "md5-1" }));
@@ -274,6 +255,14 @@ describe("gdrive module", () => {
             expect(storage.getItem("showmeway_gdrive_md5_map")).toBeNull();
             expect(storage.getItem("showmeway_gdrive_dirty_map")).toBeNull();
             expect(storage.getItem("showmeway_gdrive_mod_p-1")).toBeNull();
+        });
+
+        it("drops the retired automatic-sync flag", () => {
+            storage.setItem("showmeway_gdrive_auto_sync", "true");
+
+            migrateGdriveSyncState();
+
+            expect(storage.getItem("showmeway_gdrive_auto_sync")).toBeNull();
         });
 
         it("is safe to run on every load and never overwrites a newer record", () => {

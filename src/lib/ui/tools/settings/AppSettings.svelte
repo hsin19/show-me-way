@@ -230,18 +230,9 @@ function handleFullReset() {
             </div>
 
             {#if gdriveSync.isConnected}
-                <div class="pt-2 border-t border-line-faint flex items-center justify-between">
-                    <label for="gdrive-auto-sync-checkbox" class="text-xs font-semibold text-text-secondary cursor-pointer select-none">
-                        儲存行程時自動同步至 Google Drive
-                    </label>
-                    <input
-                        id="gdrive-auto-sync-checkbox"
-                        type="checkbox"
-                        checked={gdriveSync.autoSync}
-                        onchange={(e => gdriveSync.setAutoSync(e.currentTarget.checked))}
-                        class="w-4 h-4 rounded accent-accent cursor-pointer"
-                    />
-                </div>
+                <p class="pt-2 border-t border-line-faint text-xs text-text-muted leading-relaxed">
+                    行程改動後會提醒你同步，上傳與下載都由你按下才會進行。
+                </p>
             {/if}
         </div>
     </div>

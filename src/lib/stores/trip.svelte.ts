@@ -9,6 +9,7 @@ import {
     isShareSupported,
     parseShareLink,
     readShareLinkFromHash,
+    type ShareLink,
     ShareLinkError,
 } from "$lib/domain/share";
 import { buildDayReport } from "$lib/domain/timeline";
@@ -20,7 +21,10 @@ import {
     type TripData,
     validateYaml,
 } from "$lib/domain/trip";
-import { insertAtClamped } from "$lib/domain/utils";
+import {
+    insertAtClamped,
+    yamlFingerprint,
+} from "$lib/domain/utils";
 import { migrateGdriveSyncState } from "$lib/infra/http/gdrive";
 import {
     fetchDefaultYamlText,
@@ -38,6 +42,7 @@ import {
     tripIdFromYaml,
 } from "$lib/infra/storage/profiles";
 import {
+    canonicalYaml,
     importSharedTrip,
     type ShareImportOutcome,
 } from "$lib/infra/storage/share-import";
@@ -47,6 +52,7 @@ import {
     saveTripData,
     USER_YAML_KEY,
 } from "$lib/infra/storage/yaml-storage";
+import { SvelteSet } from "svelte/reactivity";
 import {
     gdriveSync,
     type SyncOptions,
@@ -54,6 +60,8 @@ import {
 import { settingsDraft } from "./settings-draft.svelte";
 import { shareLinks } from "./share-link.svelte";
 import {
+    clearToastByKey,
+    copyToClipboard,
     shareOrCopyToClipboard,
     showToast,
 } from "./toast.svelte";
@@ -63,6 +71,20 @@ import { weatherStore } from "./weather.svelte";
 /** Say the upload happened, on both the clipboard and the share-sheet path — the privacy policy promises the user is told when data leaves the device. */
 const UPLOADED_NOTE = "行程已加密上傳，連結一年內有效";
 
+// How long editing has to stay quiet before the publish prompt goes up. A trip page is a
+// burst of checklist taps, so asking per edit would only teach the user to dismiss it;
+// long enough to collapse the burst, short enough that the answer still feels like it
+// belongs to what was just typed.
+const PUBLISH_PROMPT_QUIET_MS = 12_000;
+// One prompt at a time: a later edit restates the same offer rather than stacking.
+const PUBLISH_PROMPT_KEY = "publish-pending";
+// The inbound half, kept separate so the two notices replace themselves and not each other.
+const CLOUD_UPDATE_PROMPT_KEY = "cloud-update";
+const SHARED_UPDATE_PROMPT_KEY = "shared-update";
+// Re-reading a received link means downloading and decrypting the whole trip — hop exposes
+// no cheap "has this changed" — so it is worth one check per visit, not one per tab switch.
+const SHARED_CHECK_TTL_MS = 10 * 60_000;
+
 /** What became of YAML handed to the active slot. */
 export type LandOutcome =
     /** Written and reloaded; `yaml` is exactly what storage now holds. */
@@ -71,6 +93,16 @@ export type LandOutcome =
     | { kind: "invalid"; yaml: string; error: string; }
     /** Nothing was written — the user declined, the trip switched underneath, or storage refused — and whatever needed saying was toasted. */
     | { kind: "aborted"; };
+
+/** A newer version of a received trip, waiting on the user. What 行程管理's strip renders. */
+export interface SharedUpdate {
+    profileId: string;
+    /** The canonical YAML the link now carries — already validated, ready to land. */
+    yaml: string;
+    tripName: string;
+    /** Whether this device edited its copy since the version it last took from the link. */
+    localChanged: boolean;
+}
 
 /** What 儲存並解析 did with the editor's text. */
 export type EditorSaveOutcome =
@@ -89,6 +121,23 @@ export class TripStore {
     sharedLinkLoading = $state(false);
     /** True while a share link is being built — a hop round trip, so the buttons disable on it. */
     isSharing = $state(false);
+
+    private publishTimer: ReturnType<typeof setTimeout> | null = null;
+    /**
+     * Slots whose share link is older than the trip in them. In memory on purpose: unlike
+     * the Drive side, which compares fingerprints the sync record persists, nothing records
+     * what was last sent to hop — so a reload forgets, and the prompt under-offers rather
+     * than claiming a staleness it cannot prove.
+     */
+    private staleShareLinks = new SvelteSet<string>();
+    /**
+     * The update a received share link is offering, once a background check has fetched and
+     * decrypted it. Null whenever there is nothing to decide.
+     */
+    sharedUpdate = $state<SharedUpdate | null>(null);
+    private lastSharedCheckAt = 0;
+    /** Set by dismissing the prompt, cleared by the next foreground or explicit save. */
+    private publishPromptDeclined = false;
 
     prepDone = $derived(this.data ? [...this.data.todo, ...this.data.packing].filter(i => i.checked).length : 0);
     prepTotal = $derived(this.data ? this.data.todo.length + this.data.packing.length : 0);
@@ -160,8 +209,7 @@ export class TripStore {
         try {
             const yaml = serializeToYaml(this.data);
             saveTripData(this.data, yaml);
-            const activeId = ensureActiveProfileId();
-            gdriveSync.scheduleSync(yaml, activeId);
+            this.notePendingPublish(ensureActiveProfileId());
             return true;
         } catch (err) {
             console.error("Failed to persist trip data:", err);
@@ -195,7 +243,7 @@ export class TripStore {
         }
 
         try {
-            this.landSharedTrip(validateYaml(yaml));
+            this.landSharedTrip(validateYaml(yaml), link);
         } catch (err) {
             console.error("Failed to import shared itinerary:", err);
             showToast("分享連結內容無效，已略過");
@@ -326,6 +374,7 @@ export class TripStore {
             // mints no record and would therefore clear a link another device does hold.
             // Metadata only: the key and editToken must never ride along to a recipient.
             if (outcome.kind !== "inline") void gdriveSync.pushShareLink(profileId);
+            this.staleShareLinks.delete(profileId);
             const copyMsg = outcome.kind === "inline"
                 ? "分享連結已複製！網址較長，可用短網址服務縮短"
                 : outcome.kind === "updated"
@@ -353,6 +402,317 @@ export class TripStore {
             // hop has already dropped.
             if (outcome === "revoked") void gdriveSync.pushShareLink(profileId);
             showToast(outcome === "revoked" ? "已撤銷分享連結，原本的連結與 QR code 不再有效" : "目前無法連上短連結服務，請檢查網路後再試一次");
+        } finally {
+            this.isSharing = false;
+        }
+    }
+
+    /**
+     * Note that the active trip changed and, once editing has been quiet for
+     * PUBLISH_PROMPT_QUIET_MS, ask whether to send it where it is already published. Cheap
+     * to call from every write path — the prompt decides for itself whether this trip is
+     * published anywhere at all.
+     *
+     * This is what replaced the automatic-upload setting: the same debounced round trip,
+     * with the decision handed back to the user instead of taken on their behalf.
+     */
+    private notePendingPublish(profileId: string, { explicit = false } = {}) {
+        // A deliberate save is fresh intent, so it outranks a dismissal that was about the
+        // edits before it.
+        if (explicit) this.publishPromptDeclined = false;
+        if (shareLinks.forTrip(profileId)) this.staleShareLinks.add(profileId);
+        if (this.publishTimer !== null) clearTimeout(this.publishTimer);
+        this.publishTimer = setTimeout(() => {
+            this.publishTimer = null;
+            this.promptToPublish();
+        }, PUBLISH_PROMPT_QUIET_MS);
+    }
+
+    /**
+     * The bytes this device actually holds for the active trip, which is what every sync
+     * record's `localHash` was taken from and therefore the only string these comparisons
+     * may use. Not interchangeable with `serializeToYaml(this.data)`: a cloud pull stores
+     * the downloaded bytes verbatim, and re-serializing those strips the derived fields, so
+     * a freshly pulled trip would read as edited the moment it landed.
+     */
+    private storedYaml(): string | null {
+        try {
+            return localStorage.getItem(USER_YAML_KEY);
+        } catch {
+            return null;
+        }
+    }
+
+    private cancelPublishPrompt() {
+        if (this.publishTimer !== null) clearTimeout(this.publishTimer);
+        this.publishTimer = null;
+        clearToastByKey(PUBLISH_PROMPT_KEY);
+    }
+
+    /** Both standing offers at once, for a sync that answers whichever one was up. */
+    private clearSyncPrompts() {
+        this.cancelPublishPrompt();
+        clearToastByKey(CLOUD_UPDATE_PROMPT_KEY);
+    }
+
+    /**
+     * 背景檢查. Ask both places the active trip can have moved — its Drive file and, for a
+     * trip received from someone else, the share link it came from — and say what each
+     * found. Nothing is transferred and nothing is decided: the tap on the notice is what
+     * acts, and the Drive half re-decides against a live read rather than this snapshot.
+     *
+     * `openTripManagement` is how a divergence reaches the only screen that can settle it;
+     * this store has no navigation of its own, the way the install prompt does not either.
+     */
+    async checkForUpdates(openTripManagement: () => void): Promise<void> {
+        await gdriveSync.refreshFiles();
+        this.promptCloudUpdate(openTripManagement);
+        await this.checkSharedTripForUpdates(openTripManagement);
+    }
+
+    /**
+     * Offer what the last listing already knows: a newer cloud copy to take, or a
+     * divergence to settle. Costs no request, which is what makes it safe on every
+     * foreground.
+     */
+    private promptCloudUpdate(openTripManagement: () => void) {
+        const yaml = this.storedYaml();
+        if (!this.data || !yaml) return;
+        const profileId = ensureActiveProfileId();
+        const status = gdriveSync.remoteStatusFor(profileId, yaml);
+        if (!status) return;
+        // What the cloud holds outranks a standing offer to upload: answering this may
+        // replace the very edits that offer was about.
+        this.cancelPublishPrompt();
+        showToast(
+            status === "pull"
+                ? {
+                    message: "雲端有這趟行程的新版本",
+                    actionLabel: "下載",
+                    onAction: () => void this.downloadCloudUpdate(profileId),
+                    kind: "download",
+                    persist: true,
+                    dedupeKey: CLOUD_UPDATE_PROMPT_KEY,
+                }
+                : {
+                    message: "雲端與本機都有修改，請選擇要保留哪一份",
+                    actionLabel: "處理",
+                    onAction: openTripManagement,
+                    persist: true,
+                    dedupeKey: CLOUD_UPDATE_PROMPT_KEY,
+                },
+        );
+    }
+
+    /**
+     * Ask this trip's share link whether the sender has published a newer version, and put
+     * the answer in front of the user. Only for a trip that arrived from someone else's
+     * link and kept that link's identity; a trip of the user's own is Drive's business.
+     *
+     * Costs a full download and decrypt — hop has no cheap "has this changed" — which is
+     * why it is rate-limited rather than run on every foreground. Silent on failure: a
+     * check that cannot reach hop, or whose link the sender has revoked, changes nothing
+     * on this device and leaves the user nothing to act on.
+     */
+    async checkSharedTripForUpdates(openTripManagement: () => void): Promise<void> {
+        const stored = this.storedYaml();
+        if (!stored || this.sharedUpdate) return;
+        const profileId = ensureActiveProfileId();
+        const link = tripOrigins.linkFor(profileId);
+        const taken = tripOrigins.takenHash(profileId);
+        if (!link || taken === null) return;
+        if (Date.now() - this.lastSharedCheckAt < SHARED_CHECK_TTL_MS) return;
+        this.lastSharedCheckAt = Date.now();
+
+        let yaml: string;
+        let tripName: string;
+        try {
+            const parsed = validateYaml(await resolveShareLink({ kind: "short", ...link }));
+            yaml = serializeToYaml(parsed);
+            tripName = parsed.trip.name;
+        } catch (err) {
+            console.warn("Failed to re-read the shared trip link:", err);
+            return;
+        }
+        // The user may have switched trips across the round trip.
+        if (!isActiveProfile(profileId) || this.sharedUpdate) return;
+        if (yamlFingerprint(yaml) === taken) return;
+
+        this.sharedUpdate = {
+            profileId,
+            yaml,
+            tripName,
+            // Compared canonically, because the taken fingerprint was: a copy that came back
+            // through a Drive pull holds the same trip in different bytes.
+            localChanged: yamlFingerprint(canonicalYaml(stored) ?? stored) !== taken,
+        };
+        showToast(
+            this.sharedUpdate.localChanged
+                ? {
+                    message: `「${tripName}」的分享連結有新版本，這台裝置也改過`,
+                    actionLabel: "處理",
+                    onAction: openTripManagement,
+                    persist: true,
+                    dedupeKey: SHARED_UPDATE_PROMPT_KEY,
+                }
+                : {
+                    message: `「${tripName}」的分享連結有新版本`,
+                    actionLabel: "更新",
+                    onAction: () => void this.takeSharedUpdate(),
+                    kind: "download",
+                    persist: true,
+                    dedupeKey: SHARED_UPDATE_PROMPT_KEY,
+                },
+        );
+    }
+
+    /** 採用對方版本 — land what the link now carries, over this device's copy. */
+    async takeSharedUpdate(): Promise<LandOutcome | null> {
+        const update = this.sharedUpdate;
+        if (!update || !this.guardActive(update.profileId)) return null;
+        const outcome = await this.landYaml(update.profileId, update.yaml);
+        if (outcome.kind !== "landed") return outcome;
+        tripOrigins.recordTaken(update.profileId, outcome.yaml);
+        this.clearSharedUpdate();
+        return outcome;
+    }
+
+    /**
+     * 保留本機版本. Records the sender's version as taken without applying it, which settles
+     * this offer rather than suppressing it: the local copy has knowingly diverged, so only
+     * the sender moving *again* is worth asking about.
+     */
+    keepLocalOverSharedUpdate(): void {
+        const update = this.sharedUpdate;
+        if (!update) return;
+        tripOrigins.recordTaken(update.profileId, update.yaml);
+        this.clearSharedUpdate();
+        showToast("已保留這台裝置的版本");
+    }
+
+    /**
+     * 兩份都留 — the sender's version takes this slot, keeping its identity and its link, and
+     * what was here is parked as a trip of its own. The local copy is read out before the
+     * update overwrites it, and the branch happens only once the new version has landed.
+     */
+    async keepBothOverSharedUpdate(): Promise<LandOutcome | null> {
+        const localYaml = this.storedYaml();
+        if (localYaml === null) return null;
+        const outcome = await this.takeSharedUpdate();
+        if (outcome?.kind === "landed") await this.branchLocalCopy(localYaml);
+        return outcome;
+    }
+
+    private clearSharedUpdate() {
+        this.sharedUpdate = null;
+        clearToastByKey(SHARED_UPDATE_PROMPT_KEY);
+    }
+
+    private async downloadCloudUpdate(profileId: string) {
+        const yaml = this.storedYaml();
+        if (!yaml || !this.guardActive(profileId)) return;
+        // Through the full sync, not a bare download: the listing this offer came from may
+        // be a minute old, and anything that moved since turns into a conflict here instead
+        // of overwriting the newer side.
+        await this.syncWithCloud(profileId, yaml);
+    }
+
+    /**
+     * Let the prompt speak again after it was turned down. Coming back to the foreground is
+     * the boundary that resets it — declining is about the edit in front of you, not about
+     * this trip for the rest of the session.
+     */
+    resumePublishPrompts() {
+        this.publishPromptDeclined = false;
+        this.promptToPublish();
+    }
+
+    /**
+     * Offer to send the active trip's changes wherever it is already published. Silent when
+     * the trip is published nowhere, when neither side is behind, or when this prompt has
+     * already been turned down since the app last came to the foreground.
+     *
+     * Always the active trip, never one captured when the timer was armed: a trip switched
+     * inside the window leaves its own dirtiness on its sync record, which is what raises
+     * this again the next time that trip is on screen.
+     */
+    private promptToPublish() {
+        const yaml = this.storedYaml();
+        if (!this.data || !yaml || this.publishPromptDeclined) return;
+        const profileId = ensureActiveProfileId();
+        // A cloud copy that has moved owns this trip's notice; offering an upload beside it
+        // would put two persistent toasts on screen asking opposite things.
+        if (gdriveSync.remoteStatusFor(profileId, yaml)) return;
+        const drive = gdriveSync.hasUnpushedEdits(profileId, yaml);
+        const share = this.staleShareLinks.has(profileId) && !!shareLinks.forTrip(profileId);
+        if (!drive && !share) return;
+        showToast({
+            message: drive && share
+                ? "行程有改動還沒同步到雲端與分享連結"
+                : drive
+                ? "行程有改動還沒上傳到 Google Drive"
+                : "行程有改動，分享連結還是舊版本",
+            actionLabel: drive && share ? "同步" : drive ? "上傳" : "更新連結",
+            onAction: () => void this.publishPendingChanges(profileId),
+            // The offer is the whole feature now that nothing uploads on its own, so it must
+            // not expire unseen; the ✕ is how it gets turned down.
+            persist: true,
+            dedupeKey: PUBLISH_PROMPT_KEY,
+            onDismiss: () => {
+                this.publishPromptDeclined = true;
+            },
+        });
+    }
+
+    /**
+     * The prompt's tap. Both halves read the slot as it stands at that moment rather than
+     * what was on screen when the prompt went up, and Drive goes first because it can
+     * replace the local copy — a pull that lands is what the link should then carry.
+     */
+    async publishPendingChanges(profileId: string): Promise<void> {
+        this.cancelPublishPrompt();
+        const yaml = this.storedYaml();
+        if (!this.data || !yaml || !this.guardActive(profileId)) return;
+        if (gdriveSync.hasUnpushedEdits(profileId, yaml)) {
+            await this.syncWithCloud(profileId, yaml);
+            // The pull may have landed a different trip, or the user may have switched away
+            // across the round trip.
+            if (!this.data || !isActiveProfile(profileId)) return;
+        }
+        if (this.staleShareLinks.has(profileId)) await this.republishShareLink(profileId);
+    }
+
+    /**
+     * Replace the ciphertext behind this trip's existing link so the holders of that URL see
+     * the current version — the quiet half of 分享行程, with no share sheet and no clipboard,
+     * because nobody asked for the URL again.
+     */
+    private async republishShareLink(profileId: string) {
+        if (!this.data || this.isSharing || !shareLinks.forTrip(profileId)) return;
+        this.isSharing = true;
+        try {
+            const outcome = await shareLinks.publish(profileId, serializeToYaml(this.data));
+            if (outcome.kind === "unreachable") {
+                showToast("目前無法更新分享連結，請稍後再試一次（原本的連結仍然有效）");
+                return;
+            }
+            this.staleShareLinks.delete(profileId);
+            if (outcome.kind !== "inline") void gdriveSync.pushShareLink(profileId);
+            if (outcome.kind === "recreated") {
+                // A recreated link is a different URL and the one already handed out is dead,
+                // so the new one has to be reachable from the notice that says so.
+                showToast({
+                    message: "原本的分享連結已失效，已建立新的連結",
+                    actionLabel: "複製",
+                    onAction: () => copyToClipboard(outcome.url),
+                    persist: true,
+                });
+            } else {
+                showToast("分享連結已更新為最新版本");
+            }
+        } catch (err) {
+            console.error("Failed to republish the share link:", err);
+            showToast("無法更新分享連結，請稍後再試");
         } finally {
             this.isSharing = false;
         }
@@ -399,6 +759,7 @@ export class TripStore {
             this.profiles = listProfiles();
             return;
         }
+        this.clearSharedUpdate();
         showToast("已切換行程");
         await this.load();
         onSuccess?.();
@@ -411,6 +772,7 @@ export class TripStore {
         // expires. Deleting a trip from one phone is not a decision about their copy.
         shareLinks.forget(id);
         tripOrigins.forget(id);
+        if (this.sharedUpdate?.profileId === id) this.clearSharedUpdate();
         this.profiles = listProfiles();
         showToast("已刪除行程");
     }
@@ -493,7 +855,7 @@ export class TripStore {
         if (!link) {
             const outcome = await this.landYaml(profileId, text, { canonical: true });
             if (outcome.kind === "landed") {
-                gdriveSync.scheduleSync(outcome.yaml, profileId);
+                this.notePendingPublish(profileId, { explicit: true });
                 showToast("自訂 YAML 行程儲存成功！");
             }
             return outcome;
@@ -506,21 +868,38 @@ export class TripStore {
             return { kind: "invalid", yaml: text, error: err instanceof Error ? err.message : "分享連結內容無效" };
         }
         if (!this.guardActive(profileId)) return { kind: "aborted" };
-        const outcome = this.landSharedTrip(parsed);
+        const outcome = this.landSharedTrip(parsed, link);
         if (outcome.kind === "declined") return { kind: "aborted" };
         await this.load();
         if (outcome.kind === "unchanged") return outcome;
         // `outcome.profileId`, never `profileId`: an import moves the active slot.
-        gdriveSync.scheduleSync(outcome.yaml, outcome.profileId);
+        this.notePendingPublish(outcome.profileId, { explicit: true });
         return { kind: "imported", yaml: outcome.yaml };
     }
 
-    /** Runs `importSharedTrip` and says what it did. The launch hash and a pasted link both come through here, so they cannot drift on the wording. */
-    private landSharedTrip(parsed: TripData): ShareImportOutcome {
+    /**
+     * Runs `importSharedTrip` and says what it did. The launch hash and a pasted link both
+     * come through here, so they cannot drift on the wording — or on which imports get
+     * marked as someone else's and watched for updates.
+     *
+     * Only a copy that kept the link's own `trip.id` is that link's trip. One the import
+     * had to re-identify was split away from it deliberately, and watching the link from
+     * there would offer to overwrite the fork with the original.
+     */
+    private landSharedTrip(parsed: TripData, link: ShareLink): ShareImportOutcome {
+        const incomingId = parsed.trip.id;
+        const credentials = link.kind === "short" ? { id: link.id, key: link.key } : null;
         const outcome = importSharedTrip(parsed);
-        if (outcome.kind === "overwritten") showToast("已用分享連結更新行程，可在行程管理還原前一版");
-        else if (outcome.kind === "imported") {
-            tripOrigins.markShared(outcome.profileId);
+        if (outcome.kind === "overwritten") {
+            // The reopened link is now the version this slot has taken. Without this the
+            // next background check would find the very bytes just landed "newer" than what
+            // was recorded, and raise a divergence nobody caused.
+            tripOrigins.recordTaken(outcome.profileId, outcome.yaml, credentials ?? undefined);
+            showToast("已用分享連結更新行程，可在行程管理還原前一版");
+        } else if (outcome.kind === "imported") {
+            if (tripIdFromYaml(outcome.yaml) === incomingId) {
+                tripOrigins.markShared(outcome.profileId, credentials, outcome.yaml);
+            }
             showToast("已匯入分享的行程");
         } else if (outcome.kind === "unchanged") showToast("這趟行程已經是連結裡的版本");
         return outcome;
@@ -533,6 +912,8 @@ export class TripStore {
      * record would claim a version this device never took.
      */
     async syncWithCloud(profileId: string, yaml: string, options?: SyncOptions): Promise<LandOutcome | null> {
+        // Whatever route got here answers the standing offer, so it stops standing.
+        this.clearSyncPrompts();
         const res = await gdriveSync.sync(yaml, profileId, options);
         if (res?.action !== "pulled" || !res.yaml) return null;
         const outcome = await this.landYaml(profileId, res.yaml);
