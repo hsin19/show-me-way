@@ -21,6 +21,7 @@ updates:
           - 'vite'
           - 'vite-*'
           - 'vitest'
+          - '@vitest/*'
           - '@vite-pwa/*'
           - 'workbox-*'
       tailwind:
