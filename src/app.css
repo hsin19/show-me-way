@@ -17,6 +17,7 @@
     --color-option: #a78bfa; /* violet-400 — 備選 events */
     --color-positive: #34d399; /* emerald-400 — done / deposits / diff added */
     --color-danger: #fb7185; /* destructive hovers, errors, diff removed */
+    --color-warning: #fbbf24; /* amber-400 — a confirm that loses less than `danger` implies */
     --color-bg-main: #0f172a; /* slate-900 — page & nav/header material */
     --color-card-bg: #1c2740; /* raised card / dialog surface */
     --color-card-border: rgba(148, 163, 184, 0.16); /* input & quiet borders */
@@ -91,6 +92,8 @@
     --color-option: #6d28d9;
     --color-positive: #047857;
     --color-danger: #be123c;
+    /* Same yellow-800 as `booked`, for the same AA reason. */
+    --color-warning: #854d0e;
     /* No pure white anywhere: #ffffff is the brightest value a screen can emit,
        and cards cover most of the viewport, so a white card is what makes a
        light theme feel harsh indoors. Both surfaces sit a step down (card

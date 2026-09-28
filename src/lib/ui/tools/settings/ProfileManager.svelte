@@ -6,6 +6,7 @@ import {
 } from "$lib/domain/utils";
 import {
     getActiveProfileId,
+    parkedProfileYaml,
     type ProfileInfo,
 } from "$lib/infra/storage/profiles";
 import { gdriveSync } from "$lib/stores/gdrive.svelte";
@@ -222,9 +223,15 @@ async function handleDeleteCloud(fileId: string) {
             <!-- 1. 本機其他行程 (日期近者優先) -->
             {#each sortedProfiles as profile (profile.id)}
                 {#if confirmingDeleteProfileId === profile.id}
+                    {@const cloudCopy = gdriveSync.cloudCopyFor(profile.id, parkedProfileYaml(profile.id) ?? "")}
                     <ConfirmBar
-                        message="要刪除行程「{profile.name}」嗎？此動作無法復原。"
+                        message={cloudCopy === "kept"
+                        ? `要從本機刪除「${profile.name}」嗎？Google Drive 仍保留一份，之後可從雲端再載入。`
+                        : cloudCopy === "behind"
+                        ? `要刪除行程「${profile.name}」嗎？本機有尚未上傳雲端的修改，刪除後將遺失且無法復原。`
+                        : `要刪除行程「${profile.name}」嗎？此動作無法復原。`}
                         confirmLabel="確定刪除"
+                        variant={cloudCopy === "kept" ? "warning" : "danger"}
                         onconfirm={() => {
                             confirmingDeleteProfileId = null;
                             onDeleteProfile(profile.id, profile.name);

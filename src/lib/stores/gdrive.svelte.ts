@@ -289,6 +289,25 @@ class GDriveSyncState {
     }
 
     /**
+     * What deleting this device's copy of `tripId` would leave in Drive — the question a
+     * local delete's confirm is worded from. `none` is no copy at all; `behind` a copy
+     * missing edits made here (or caught in a divergence), which the delete would lose;
+     * `kept` a copy holding at least everything local does, reloadable from the cloud list
+     * once the delete unbinds it.
+     *
+     * Not gated on being signed in: signing out leaves the file in Drive. The listing is
+     * consulted only to spot a bound file that has since gone, and only once it has
+     * actually loaded — a stale or missing listing falls back to trusting the binding.
+     */
+    cloudCopyFor(tripId: string, localYaml: string): "none" | "behind" | "kept" {
+        const fileId = this.cloudFileId(tripId);
+        if (!fileId) return "none";
+        if (this.cloudListState === "ready" && !this.cloudFiles.some(file => file.id === fileId)) return "none";
+        if (this.conflictFor(tripId)?.kind === "both-changed") return "behind";
+        return this.tripSyncState(tripId, localYaml) === "dirty" ? "behind" : "kept";
+    }
+
+    /**
      * What the last listing implies for `tripId`, without asking Drive again: a download
      * waiting (`pull`), or a divergence only the user can settle (`conflict`). Null when
      * there is nothing to offer — no binding, the file missing from the listing, or the

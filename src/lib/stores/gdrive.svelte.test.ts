@@ -964,6 +964,41 @@ describe("hasUnpushedEdits", () => {
     });
 });
 
+describe("cloudCopyFor", () => {
+    const RECORD = { fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A) };
+
+    it("reports no copy for a trip Drive has never held", async () => {
+        await loadSync();
+
+        expect(sync.cloudCopyFor(TRIP, YAML_A)).toBe("none");
+    });
+
+    it("tells a copy that has everything apart from one missing local edits", async () => {
+        gdrive.saveTripSyncMap({ [TRIP]: RECORD });
+        await loadSync();
+
+        expect(sync.cloudCopyFor(TRIP, YAML_A)).toBe("kept");
+        expect(sync.cloudCopyFor(TRIP, YAML_B)).toBe("behind");
+    });
+
+    it("still counts the copy while signed out, since signing out leaves the file in Drive", async () => {
+        gdrive.saveTripSyncMap({ [TRIP]: RECORD });
+        gdrive.clearGdriveUser();
+        await loadSync();
+
+        expect(sync.cloudCopyFor(TRIP, YAML_A)).toBe("kept");
+    });
+
+    it("reports no copy once a loaded listing no longer has the bound file", async () => {
+        gdrive.saveTripSyncMap({ [TRIP]: RECORD });
+        await loadSync();
+        createDriveStub({ list: [] });
+        await sync.refreshFiles({ force: true });
+
+        expect(sync.cloudCopyFor(TRIP, YAML_A)).toBe("none");
+    });
+});
+
 describe("remoteStatusFor", () => {
     const AGREED = { fileId: "file-1", remoteMd5: "md5-1", remoteHash: "", localHash: "" };
 

@@ -6,7 +6,7 @@ interface Props {
     message: string;
     confirmLabel?: string;
     cancelLabel?: string;
-    variant?: "danger" | "accent";
+    variant?: "danger" | "warning" | "accent";
     onconfirm: () => void;
     oncancel: () => void;
 }
@@ -19,6 +19,14 @@ let {
     onconfirm,
     oncancel,
 }: Props = $props();
+
+// Literal class strings rather than interpolated token names, so Tailwind's scanner sees them.
+const TONES = {
+    danger: { box: "border-danger/40 bg-danger/10", text: "text-danger", button: "bg-danger" },
+    warning: { box: "border-warning/40 bg-warning/10", text: "text-warning", button: "bg-warning" },
+    accent: { box: "border-accent/40 bg-accent/10", text: "text-accent", button: "bg-accent" },
+};
+let tone = $derived(TONES[variant]);
 
 let cancelEl = $state<HTMLButtonElement>();
 
@@ -42,9 +50,9 @@ $effect(() => {
 <div
     role="alertdialog"
     aria-label={message}
-    class="rounded-xl border p-2.5 {variant === 'accent' ? 'border-accent/40 bg-accent/10' : 'border-danger/40 bg-danger/10'}"
+    class="rounded-xl border p-2.5 {tone.box}"
 >
-    <p class="flex items-start gap-1.5 text-[11px] font-medium leading-normal {variant === 'accent' ? 'text-accent' : 'text-danger'}">
+    <p class="flex items-start gap-1.5 text-[11px] font-medium leading-normal {tone.text}">
         {#if variant === "accent"}
             <Info size={14} class="shrink-0 mt-px" aria-hidden="true" />
         {:else}
@@ -59,7 +67,7 @@ $effect(() => {
             class="
                 flex-1 min-h-[44px] rounded-lg text-accent-contrast text-xs font-bold
                 cursor-pointer hover:opacity-90 transition duration-200
-                {variant === 'accent' ? 'bg-accent' : 'bg-danger'}
+                {tone.button}
             "
         >
             {confirmLabel}

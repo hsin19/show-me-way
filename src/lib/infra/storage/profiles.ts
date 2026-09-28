@@ -229,6 +229,11 @@ export function createProfile(yaml: string): string {
     return id;
 }
 
+/** The YAML parked under `id`, or null when no parked profile has that id. */
+export function parkedProfileYaml(id: string): string | null {
+    return readStoredProfiles().find(p => p.id === id)?.yaml ?? null;
+}
+
 /** Parked profiles only; the active trip is not in this list and cannot be deleted here. */
 export function deleteProfile(id: string): void {
     writeStoredProfiles(readStoredProfiles().filter(p => p.id !== id));
