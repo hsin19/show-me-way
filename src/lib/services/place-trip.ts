@@ -6,7 +6,6 @@
 // questions and whatever follows the landing, never where it lands.
 
 import {
-    canonicalYaml,
     genTripId,
     serializeToYaml,
     type TripData,
@@ -14,16 +13,15 @@ import {
 } from "$lib/domain/trip";
 import { appStorage } from "$lib/infra/storage/app-storage";
 import {
-    createProfile,
     findLocalTripByTripId,
     getActiveProfileId,
     switchToProfile,
 } from "$lib/infra/storage/profiles";
+import { USER_YAML_KEY } from "$lib/infra/storage/yaml-storage";
 import {
-    backupCurrentYaml,
-    saveTripData,
-    USER_YAML_KEY,
-} from "$lib/infra/storage/yaml-storage";
+    addTrip,
+    writeActiveTrip,
+} from "./save-trip";
 
 /** What `placeTrip` needs the user to decide; the caller puts it into words for its own source. */
 export type PlaceQuestion =
@@ -54,15 +52,11 @@ export type Placement =
  * Land `yaml`, asking before anything is replaced or added. Writes storage, so the caller
  * only has to reload and report; a storage failure throws, with no trip lost.
  *
- * Stored canonical unless `verbatim`, which keeps bytes this app already wrote — a backup,
- * a cloud file whose sync record hashes exactly them — as they are. A copy is always
- * canonical: it carries an identity the bytes do not.
- *
  * `profileId` names the slot the trip now occupies — pass it, not whatever id the caller
  * captured earlier, to anything keyed by trip: a placement can move the active slot, so a
  * stale id would bind the new trip to the old one's cloud file.
  */
-export function placeTrip(yaml: string, ask: (question: PlaceQuestion) => boolean, { verbatim = false } = {}): Placement {
+export function placeTrip(yaml: string, ask: (question: PlaceQuestion) => boolean): Placement {
     let incoming: TripData;
     try {
         incoming = validateYaml(yaml);
@@ -77,9 +71,9 @@ export function placeTrip(yaml: string, ask: (question: PlaceQuestion) => boolea
     if (existing !== null) {
         // A persistent link is reopened to pick up updates, so the common case is that
         // nothing changed since last time — asking to replace it with identical content
-        // would only teach the user to dismiss the prompt. Compared canonically: the stored
-        // copy went through serializeToYaml too, so any difference is real.
-        if (canonicalYaml(existing.yaml) === serializeToYaml(incoming)) {
+        // would only teach the user to dismiss the prompt. Storage holds only canonical
+        // bytes, so comparing against the arrival's canonical form judges content alone.
+        if (existing.yaml === serializeToYaml(incoming)) {
             if (existing.profileId !== getActiveProfileId()) switchToProfile(existing.profileId);
             return { kind: "unchanged", profileId: existing.profileId };
         }
@@ -88,10 +82,7 @@ export function placeTrip(yaml: string, ask: (question: PlaceQuestion) => boolea
             // Switching first is both what the user asked for and what puts the copy being
             // replaced in the backup ring, rather than whichever trip happened to be active.
             if (!active) switchToProfile(existing.profileId);
-            backupCurrentYaml();
-            const stored = verbatim ? yaml : serializeToYaml(incoming);
-            saveTripData(incoming, stored);
-            return { kind: "replaced", profileId: existing.profileId, yaml: stored };
+            return { kind: "replaced", ...writeActiveTrip(incoming, { backup: true }) };
         }
         if (!ask({ kind: "copy" })) return { kind: "declined" };
         // Two trips sharing an id would fight over one Drive file.
@@ -100,8 +91,5 @@ export function placeTrip(yaml: string, ask: (question: PlaceQuestion) => boolea
     } else if (appStorage.get(USER_YAML_KEY) && !ask({ kind: "add" })) {
         return { kind: "declined" };
     }
-    // Re-serialized rather than stored raw, so a hand-edited arrival is canonicalized
-    // (runtime ids out, schema modeline back in).
-    const stored = verbatim && !copy ? yaml : serializeToYaml(incoming);
-    return { kind: "added", profileId: createProfile(stored), yaml: stored, copy };
+    return { kind: "added", ...addTrip(incoming), copy };
 }

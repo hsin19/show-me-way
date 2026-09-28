@@ -14,9 +14,12 @@ import {
 const MODELS_URL_PREFIX = "https://generativelanguage.googleapis.com/v1beta/models";
 const INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
 
-// FIXTURE_YAML 以 todo 清單結尾，直接附加一個項目仍是合法的行程 YAML
-// （會通過 ChatPanel 與 App.svelte 兩層 validateYaml）。
-const EDITED_YAML = `${FIXTURE_YAML}  - text: 換日幣\n`;
+/** FIXTURE_YAML 多一個待辦：接在 todo 清單最後一項後面，仍是合法的行程 YAML。 */
+function withTodo(text: string): string {
+    return FIXTURE_YAML.replace("packing: []", `  - text: ${text}\npacking: []`);
+}
+
+const EDITED_YAML = withTodo("換日幣");
 
 test("AI 聊天：儲存金鑰、AI 建議修改行程、套用後保留至重新載入", async ({ page }) => {
     await page.route(url => url.href.startsWith(MODELS_URL_PREFIX), route =>
@@ -57,9 +60,7 @@ test("AI 聊天：儲存金鑰、AI 建議修改行程、套用後保留至重�
     await expect(page.getByText("已幫你加入待辦。")).toBeVisible();
     await expect(page.getByText("AI 建議修改行程")).toBeVisible();
 
-    // 展開 DiffView。diff base 是送出當下的 canonical 序列化（modeline 與
-    // derived 欄位都被剝掉），proposed 是 fixture 原文，所以 hunk 不只一個——
-    // 斷言用正則、不釘確切數量。hunk 導覽只斷言計數文字，不斷言捲動位置：
+    // 展開 DiffView。斷言用正則、不釘 hunk 的確切數量。hunk 導覽只斷言計數文字，不斷言捲動位置：
     // jump() 用顯式 smooth scroll，reducedMotion 設定壓不住它，位置斷言會 flaky。
     await page.getByText("查看變更").click();
     await expect(page.getByText(/共 \d+ 處變更/)).toBeVisible();
@@ -82,8 +83,8 @@ test("AI 聊天：儲存金鑰、AI 建議修改行程、套用後保留至重�
 });
 
 test("AI 聊天：行程變動後套用過期建議需要二次確認，且確認後以 AI 版本覆蓋", async ({ page }) => {
-    const EDIT_1 = `${FIXTURE_YAML}  - text: 換日幣\n`;
-    const EDIT_2 = `${FIXTURE_YAML}  - text: 買轉接頭\n`;
+    const EDIT_1 = withTodo("換日幣");
+    const EDIT_2 = withTodo("買轉接頭");
     await page.addInitScript(() => {
         window.localStorage.setItem("showmeway_gemini_api_key", "test-key");
     });

@@ -203,7 +203,8 @@ class GDriveSyncState {
     /**
      * Adopts a Drive file as this trip's cloud copy, recording the downloaded bytes as
      * what both sides now agree on, and the share link the file carries as this trip's.
-     * The caller must have persisted `yaml` first.
+     * The caller must have stored the trip first; a file this app did not write is stored
+     * canonical, so it then reads as a local edit, and the upload prompt is the repair.
      */
     adoptCloudTrip(tripId: string, fileId: string, yaml: string, remoteMd5?: string, shareLink?: ShareLinkRecord) {
         this.adopt(tripId, agreedRecord(fileId, yaml, remoteMd5));
@@ -693,6 +694,10 @@ class GDriveSyncState {
                             commit: () => {
                                 this.adopt(tripId, pulled.record);
                                 showToast(`已載入雲端版本「${remoteFile.name}」`);
+                                // The listing still has the file from before the pull. A file this
+                                // app did not write lands canonical and reads as a local edit, and
+                                // measured against that stale checksum it would look like a conflict.
+                                void this.refreshFiles({ force: true });
                             },
                         };
                     }

@@ -1,9 +1,10 @@
 // The active trip and everything that replaces it wholesale. Despite the name this is
 // mostly orchestration: profile switching, share-link landing, cloud pulls, backup
-// restore, AI edits. Every whole-document write of `showmeway_user_yaml` outside
-// `persist()` is either an arriving trip handed to `placeTrip`, which picks its slot by
-// `trip.id`, or the slot's own trip updated through `landYaml` — backup, confirm the slot
-// is still active, write, reload — and UI only mirrors the returned outcome.
+// restore, AI edits. Trip bytes reach storage only through `services/save-trip.ts`, so
+// storage holds nothing but the canonical form; a whole document is either an arriving
+// trip handed to `placeTrip`, which picks its slot by `trip.id`, or the slot's own trip
+// replaced in place through `replaceActiveTrip` — backed up, kept on the slot's id — and UI
+// only mirrors the returned outcome.
 
 import {
     clearShareHash,
@@ -15,7 +16,6 @@ import {
 } from "$lib/domain/share";
 import { buildDayReport } from "$lib/domain/timeline";
 import {
-    canonicalYaml,
     createChecklistItemId,
     type DayItinerary,
     genTripId,
@@ -35,7 +35,6 @@ import {
 import { resolveShareLink } from "$lib/infra/http/share-link";
 import { appStorage } from "$lib/infra/storage/app-storage";
 import {
-    createProfile,
     deleteProfile,
     ensureActiveProfileId,
     getActiveProfileId,
@@ -43,13 +42,11 @@ import {
     listProfiles,
     type ProfileInfo,
     switchToProfile,
-    tripIdFromYaml,
     tripNameFromYaml,
 } from "$lib/infra/storage/profiles";
 import {
     backupCurrentYaml,
     getYamlBackup,
-    saveTripData,
     USER_YAML_KEY,
 } from "$lib/infra/storage/yaml-storage";
 import {
@@ -57,6 +54,11 @@ import {
     type PlaceQuestion,
     placeTrip,
 } from "$lib/services/place-trip";
+import {
+    addTrip,
+    writeActiveTrip,
+    type Written,
+} from "$lib/services/save-trip";
 import { SvelteSet } from "svelte/reactivity";
 import {
     gdriveSync,
@@ -237,10 +239,6 @@ export class TripStore {
             weatherStore.loadTrip(data.days, data.trip.city);
 
             migrateGdriveSyncState();
-            // A trip stored before ids existed gets its minted id persisted once;
-            // an identity that changes every launch is worse than none.
-            const storedYaml = appStorage.get(USER_YAML_KEY);
-            if (storedYaml !== null && tripIdFromYaml(storedYaml) !== data.trip.id) this.persist();
         } catch (err) {
             console.error("Failed to load trip data:", err);
             // Drop the previous trip too: with it still here, the tools tab keeps rendering it and the
@@ -255,9 +253,7 @@ export class TripStore {
     persist(): boolean {
         if (!this.data) return false;
         try {
-            const yaml = serializeToYaml(this.data);
-            saveTripData(this.data, yaml);
-            this.notePendingPublish(ensureActiveProfileId());
+            this.notePendingPublish(writeActiveTrip(this.data, { backup: false }).profileId);
             return true;
         } catch (err) {
             console.error("Failed to persist trip data:", err);
@@ -360,12 +356,12 @@ export class TripStore {
             showToast("AI 的修改內容無效，已略過");
             return false;
         }
-        if (this.data) parsed.trip.id = this.data.trip.id;
-        const previousYaml = appStorage.get(USER_YAML_KEY);
-        const profileIdAtEdit = ensureActiveProfileId();
-        backupCurrentYaml();
+        const previousYaml = this.storedYaml();
+        const written = this.replaceActiveTrip(parsed);
+        if (!written) return false;
+        const profileIdAtEdit = written.profileId;
         this.data = parsed;
-        this.persist();
+        this.notePendingPublish(profileIdAtEdit);
         weatherStore.loadTrip(parsed.days, parsed.trip.city);
         if (previousYaml) {
             showToast({
@@ -384,9 +380,9 @@ export class TripStore {
                         showToast("復原失敗，可到行程管理還原備份");
                         return;
                     }
-                    backupCurrentYaml();
+                    if (!this.replaceActiveTrip(restored)) return;
                     this.data = restored;
-                    this.persist();
+                    this.notePendingPublish(profileIdAtEdit);
                     weatherStore.loadTrip(restored.days, restored.trip.city);
                     showToast("已復原為套用前的行程");
                 },
@@ -476,11 +472,10 @@ export class TripStore {
     }
 
     /**
-     * The bytes this device actually holds for the active trip, which is what every sync
-     * record's `localHash` was taken from and therefore the only string these comparisons
-     * may use. Not interchangeable with `serializeToYaml(this.data)`: a cloud pull stores
-     * the downloaded bytes verbatim, and re-serializing those strips the derived fields, so
-     * a freshly pulled trip would read as edited the moment it landed.
+     * The bytes this device holds for the active trip — what a push uploads, and therefore
+     * the only string a comparison against a sync record may use. Usually equal to
+     * `serializeToYaml(this.data)`, since storage holds nothing else, but not after a write
+     * storage refused: the trip on screen is then ahead of what any record describes.
      */
     private storedYaml(): string | null {
         try {
@@ -627,9 +622,8 @@ export class TripStore {
             profileId,
             yaml,
             tripName,
-            // Compared canonically, because the taken fingerprint was: a copy that came back
-            // through a Drive pull holds the same trip in different bytes.
-            localChanged: yamlFingerprint(canonicalYaml(stored) ?? stored) !== taken,
+            // Storage holds the canonical form, which is what the taken fingerprint measures.
+            localChanged: yamlFingerprint(stored) !== taken,
         };
         showToast(
             this.sharedUpdate.localChanged
@@ -816,17 +810,20 @@ export class TripStore {
 
     async createProfile(onSuccess?: () => void) {
         if (!this.data) return;
-        let yaml: string;
+        let template: TripData;
         try {
-            yaml = await fetchDefaultYamlText();
+            template = validateYaml(await fetchDefaultYamlText());
         } catch (err) {
             console.error("Failed to prepare new profile:", err);
             showToast("無法建立新行程，請稍後再試");
             return;
         }
+        // A trip of its own whatever id the template carries: the bundled one has none, but
+        // itinerary.local.yaml can be a trip:sync working copy of a trip already here.
+        template.trip.id = genTripId();
         if (!this.flushUnsaved()) return;
         try {
-            createProfile(yaml);
+            addTrip(template);
         } catch (err) {
             console.error("Failed to create profile:", err);
             showToast("建立新行程失敗，請稍後再試");
@@ -886,7 +883,7 @@ export class TripStore {
     async loadCloudTrip(fileId: string, fileName: string): Promise<LandOutcome | null> {
         const pulled = await gdriveSync.loadTripYaml(fileId);
         if (!pulled) return null;
-        const outcome = this.place(pulled.yaml, askAboutCloudFile, { verbatim: true });
+        const outcome = this.place(pulled.yaml, askAboutCloudFile);
         if (outcome.kind === "invalid") {
             console.error("Cloud YAML validation failed:", outcome.error);
             settingsDraft.yaml = pulled.yaml;
@@ -895,7 +892,8 @@ export class TripStore {
         }
         if (outcome.kind === "declined") return { kind: "aborted" };
         // The bytes just downloaded, not the cached listing's checksum: a stale entry would
-        // record an agreement matching no version and report a conflict nobody caused.
+        // record an agreement matching no version and report a conflict nobody caused. Not
+        // what was stored — a file this app did not write should read as a local edit.
         if (outcome.kind === "added" && !outcome.copy) gdriveSync.adoptCloudTrip(outcome.profileId, fileId, pulled.yaml, pulled.md5, pulled.shareLink);
         await this.load();
         if (outcome.kind === "failed") return { kind: "aborted" };
@@ -919,16 +917,20 @@ export class TripStore {
         return false;
     }
 
-    /** Every whole-document overwrite of the active slot outside `persist()` comes through here, so the backup is never skipped and a quota failure is always reported. */
-    private writeUserYaml(yaml: string): boolean {
+    /**
+     * The whole-document replacement of the active slot's own trip: backed up first, and kept
+     * on the slot's `trip.id` whatever the document says, since in place means the same trip —
+     * an id dropped or changed in a Drive file or by the model must not cut it loose from its
+     * binding and link. Null when storage refused, which has been toasted.
+     */
+    private replaceActiveTrip(data: TripData): Written | null {
+        if (this.data) data.trip.id = this.data.trip.id;
         try {
-            backupCurrentYaml();
-            appStorage.set(USER_YAML_KEY, yaml);
-            return true;
+            return writeActiveTrip(data, { backup: true });
         } catch (err) {
             console.error("Failed to persist YAML:", err);
             showToast("儲存失敗，請稍後再試");
-            return false;
+            return null;
         }
     }
 
@@ -937,19 +939,22 @@ export class TripStore {
      * in place, as a cloud pull or a taken update is; an arriving trip goes to `placeTrip`
      * instead. Re-checks that the slot is still the active one right before writing: callers
      * reach here across awaits, and a profile switch in that gap must not land bytes meant for
-     * the previous trip. Stores the bytes as given, so what is stored is what a sync record
-     * hashes.
+     * the previous trip. `landed.yaml` is what storage now holds, canonical, which is not
+     * `yaml` for a document this app did not write.
      */
     async landYaml(profileId: string, yaml: string): Promise<LandOutcome> {
+        let parsed: TripData;
         try {
-            validateYaml(yaml);
+            parsed = validateYaml(yaml);
         } catch (err) {
             console.error("YAML validation failed:", err);
             return { kind: "invalid", yaml, error: err instanceof Error ? err.message : "YAML 格式錯誤，請檢查縮排！" };
         }
-        if (!this.guardActive(profileId) || !this.writeUserYaml(yaml)) return { kind: "aborted" };
+        if (!this.guardActive(profileId)) return { kind: "aborted" };
+        const written = this.replaceActiveTrip(parsed);
+        if (!written) return { kind: "aborted" };
         await this.load();
-        return { kind: "landed", yaml };
+        return { kind: "landed", yaml: written.yaml };
     }
 
     /**
@@ -988,15 +993,15 @@ export class TripStore {
     /**
      * Writes the trip on screen back to its slot when storage missed its last edit, so what
      * gets parked or replaced is the trip the user was looking at. False when that write
-     * fails too, and nothing should move. A no-op in the usual case, where every edit has
-     * already been persisted: re-serializing then would rewrite bytes a sync record hashes,
-     * which reads as an edit nobody made. A slot that failed to load has nothing on screen
+     * fails too, and nothing should move. A no-op in the usual case, where storage already
+     * holds what is on screen — and it has to stay one, since a write marks the trip due for
+     * publishing although nothing changed. A slot that failed to load has nothing on screen
      * and is parked as stored, so the user can switch to a trip that works and repair this
      * one from the editor later.
      */
     private flushUnsaved(): boolean {
         const stored = this.storedYaml();
-        if (!this.data || stored === null || canonicalYaml(stored) === serializeToYaml(this.data)) return true;
+        if (!this.data || stored === null || stored === serializeToYaml(this.data)) return true;
         return this.persist();
     }
 
@@ -1006,12 +1011,12 @@ export class TripStore {
      * reloads unless the outcome is `declined` or `invalid`, and keys anything by trip on the
      * `profileId` reported here.
      */
-    private place(yaml: string, ask: (question: PlaceQuestion) => boolean, options?: { verbatim?: boolean; }): PlaceOutcome {
+    private place(yaml: string, ask: (question: PlaceQuestion) => boolean): PlaceOutcome {
         const outgoing = getActiveProfileId();
         if (!this.flushUnsaved()) return { kind: "failed" };
         let outcome: Placement;
         try {
-            outcome = placeTrip(yaml, ask, options);
+            outcome = placeTrip(yaml, ask);
         } catch (err) {
             console.error("Failed to place trip:", err);
             showToast("儲存失敗，請稍後再試");
@@ -1079,7 +1084,7 @@ export class TripStore {
      * trip, must leave one copy rather than fork off a second.
      */
     async keepBothVersions(profileId: string, yaml: string): Promise<LandOutcome | null> {
-        const localYaml = appStorage.get(USER_YAML_KEY);
+        const localYaml = this.storedYaml();
         if (localYaml === null) return null;
         const outcome = await this.syncWithCloud(profileId, yaml, { force: "remote" });
         if (outcome?.kind === "landed") await this.branchLocalCopy(localYaml);
@@ -1098,7 +1103,7 @@ export class TripStore {
         forked.trip.id = genTripId();
         forked.trip.name = `${forked.trip.name}（本機版）`;
         try {
-            createProfile(serializeToYaml(forked));
+            addTrip(forked);
         } catch (err) {
             console.error("Failed to branch the local copy:", err);
             showToast("保留本機版本失敗，請稍後再試");
@@ -1125,7 +1130,7 @@ export class TripStore {
             return null;
         }
         if (!this.guardActive(profileId)) return { kind: "aborted" };
-        const outcome = this.place(yaml, () => true, { verbatim: true });
+        const outcome = this.place(yaml, () => true);
         if (outcome.kind === "invalid") {
             settingsDraft.yaml = yaml;
             showToast("此備份內容無效，已載入編輯器，請修正後再儲存");

@@ -322,7 +322,9 @@ export function buildRebindRecord(
 /**
  * The record for a copy both sides hold right now — just sent, just received, or proven
  * equal through `contentHash` — so one fingerprint stands for both memories. Recording it
- * on anything weaker claims an agreement that never happened.
+ * on anything weaker claims an agreement that never happened. A received copy is recorded
+ * as it crossed the wire although the app stores it canonical: for a file the app did not
+ * write the two differ, and reading as a local edit is how that file gets repaired.
  */
 export function agreedRecord(fileId: string, yaml: string, remoteMd5?: string): TripSyncRecord {
     const hash = yamlFingerprint(yaml);

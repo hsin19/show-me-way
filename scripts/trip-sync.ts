@@ -74,6 +74,9 @@ import { parseArgs } from "node:util";
  * without a second edit. Like the app it transfers only on an explicit checkout, pull or
  * push. The `$lib` imports resolve through `resolve-hooks.ts`, which the script preloads.
  *
+ * A push first rewrites the working copy into the canonical form the app stores — the
+ * original goes to a backup — so this machine, Drive and every phone hold the same bytes.
+ *
  * A push also puts the new version behind the trip's share link, unless `--no-share` says
  * not to: pushing is the owner's say-so that the version is ready, and holding the link
  * back would only leave recipients on the older one. The link's id, key and editToken come
@@ -565,9 +568,18 @@ async function pull(): Promise<void> {
 }
 
 async function push(): Promise<void> {
-    const { tripId, yaml } = checkedOut();
-    const blocker = pushBlocker(tripId, yaml);
+    const { tripId, path, yaml: written } = checkedOut();
+    const blocker = pushBlocker(tripId, written);
     if (blocker) throw new Error(`沒有上傳：${blocker}`);
+    // The app stores only the canonical form, so a file uploaded as hand-written would read as
+    // a local edit on every phone that pulls it. The working copy is rewritten before anything
+    // is planned, so status and pull compare the same bytes from here on.
+    const yaml = serializeToYaml(validateYaml(written));
+    if (yaml !== written) {
+        backup(tripId, written);
+        writeFileSync(path, yaml);
+        console.log("工作副本已整理成 app 的格式（註解與欄位順序不會保留）");
+    }
     const token = await accessToken();
     const record = await recordFor(token, tripId, yaml);
     let plan = await planCloudSync(token, record, yaml);
@@ -590,7 +602,7 @@ async function push(): Promise<void> {
 
 const RESHARE_HINT = "要更新時，手機載入新版後到「工具 → 行程管理」按「更新分享連結」";
 
-/** Replaces the ciphertext behind `link` with `yaml`, keeping its id and key, so the URL already handed out shows this version. */
+/** Replaces the ciphertext behind `link` with `yaml` (canonical, as the app shares it), keeping its id and key, so the URL already handed out shows this version. */
 async function refreshShareLink(token: string, fileId: string, link: ShareLinkRecord, yaml: string): Promise<void> {
     // A later push finds nothing to send and never gets here, so the message has to say the retry is the phone's.
     const failed = (reason: string) => {
@@ -599,8 +611,7 @@ async function refreshShareLink(token: string, fileId: string, link: ShareLinkRe
     };
     let payload: string;
     try {
-        // The form the app shares, not the working copy's bytes.
-        payload = await resealShareToken(serializeToYaml(validateYaml(yaml)), link.key);
+        payload = await resealShareToken(yaml, link.key);
     } catch {
         // A malformed key in the file's properties; the push itself has already landed.
         return failed("Drive 上記的連結資料不完整，要分享得回手機重新產生一條");
@@ -629,7 +640,8 @@ const USAGE = `用法：pnpm run trip:sync <指令> [選項]
   status                     比較目前行程和雲端，不傳任何東西
   pull [--force]             用雲端版本更新本機
   push [--force] [--no-share]
-                             把本機版本上傳到雲端（先過 validateYaml），有分享連結就一起更新
+                             把本機版本整理成 app 的格式後上傳到雲端（原稿先備份），
+                             有分享連結就一起更新
 
 選項：
   --force                    pull：捨棄本機的修改、改用雲端版本（會先備份）

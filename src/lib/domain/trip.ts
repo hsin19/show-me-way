@@ -213,11 +213,14 @@ function normalizeTripData(raw: unknown): TripData {
     const filledDays: DayItinerary[] = [];
     let cursor: string | null = null;
     for (const authored of sortAuthoredDays(doc.days)) {
+        // `pace` goes last on every day — gap-filled, authored or defaulted — because a saved
+        // gap day comes back as an authored one, and a key that moved would make the next
+        // save's bytes differ from this one's: storage holds only canonical bytes, so
+        // serializeToYaml ∘ validateYaml has to be a fixpoint.
         while (cursor !== null && cursor < authored.date) {
-            filledDays.push({ day: 0, date: cursor, title: DEFAULT_DAY_TITLE, pace: DEFAULT_PACE, timeline: [] });
+            filledDays.push({ day: 0, date: cursor, title: DEFAULT_DAY_TITLE, timeline: [], pace: DEFAULT_PACE });
             cursor = addDaysIso(cursor, 1);
         }
-        // `pace` is re-added last whether authored or defaulted, so a defaulted one does not reorder keys on the next round-trip.
         const { pace, ...rest } = authored;
         filledDays.push({ day: 0, ...rest, pace: pace ?? DEFAULT_PACE });
         cursor = addDaysIso(authored.date, 1);
@@ -300,18 +303,5 @@ export function validateYaml(yamlStr: string): TripData {
     } catch (e: unknown) {
         const message = e instanceof Error ? e.message : "無效的 YAML 語法";
         throw new Error(message, { cause: e });
-    }
-}
-
-/**
- * The form a trip is compared in: re-serialized, so a hand-written or hand-edited copy is
- * judged on content rather than on spacing and key order. Null when it no longer validates,
- * which is by definition not equal to any version.
- */
-export function canonicalYaml(yaml: string): string | null {
-    try {
-        return serializeToYaml(validateYaml(yaml));
-    } catch {
-        return null;
     }
 }

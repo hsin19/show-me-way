@@ -1,7 +1,3 @@
-import {
-    serializeToYaml,
-    type TripData,
-} from "$lib/domain/trip";
 import { appStorage } from "./app-storage";
 
 export const USER_YAML_KEY = "user_yaml";
@@ -74,8 +70,4 @@ export function backupCurrentYaml(): void {
     } catch (err) {
         console.warn("[yaml-storage] Failed to save YAML backup:", err);
     }
-}
-
-export function saveTripData(data: TripData, yaml: string = serializeToYaml(data)): void {
-    appStorage.set(USER_YAML_KEY, yaml);
 }

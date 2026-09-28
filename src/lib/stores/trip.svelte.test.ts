@@ -32,6 +32,10 @@ import {
 import { gdriveSync } from "./gdrive.svelte";
 import { settingsDraft } from "./settings-draft.svelte";
 import { shareLinks } from "./share-link.svelte";
+import {
+    runToastAction,
+    toast,
+} from "./toast.svelte";
 import { tripOrigins } from "./trip-origin.svelte";
 import { TripStore } from "./trip.svelte";
 
@@ -408,7 +412,8 @@ describe("TripStore", () => {
 describe("TripStore whole-document writes", () => {
     const originalLocalStorage = globalThis.localStorage;
     // No `city`: `load()` would otherwise kick off a weather fetch these tests have no answer for.
-    const LOCAL_YAML = `trip:
+    // Canonical, because storage holds nothing else: these stand for what the app wrote.
+    const LOCAL_YAML = serializeToYaml(validateYaml(`trip:
   name: 本機行程
   id: t-local
   hotels: []
@@ -422,7 +427,7 @@ days:
 todo:
   - text: 買網卡
     checked: false
-`;
+`));
     const CLOUD_YAML = LOCAL_YAML.replace("本機行程", "雲端行程").replace("t-local", "t-cloud");
     const BROKEN_YAML = "trip:\n  name: '壞掉的'\n";
     let store: TripStore;
@@ -447,11 +452,25 @@ todo:
     });
 
     describe("landYaml", () => {
-        it("keeps the bytes as given, so a cloud pull stores what the sync record hashes", async () => {
-            const asDownloaded = CLOUD_YAML.replace("  hotels: []\n", "  hotels: []\n  start: '2020-01-01'\n");
-            const outcome = await store.landYaml(profileId, asDownloaded);
+        // A file this app did not write lands as different bytes than its record hashed, which
+        // is what makes it read as a local edit and brings up the upload that repairs it.
+        it("stores a whole document canonical whatever bytes it came in, and reports those", async () => {
+            const handWritten = `${LOCAL_YAML.replace("本機行程", "手改過").replace("  hotels: []\n", "  hotels: []\n  start: '2020-01-01'\n")}# 手寫註解\n`;
+            const outcome = await store.landYaml(profileId, handWritten);
             expect(outcome.kind).toBe("landed");
-            expect(appStorage.get(USER_YAML_KEY)).toBe(asDownloaded);
+            const stored = appStorage.get(USER_YAML_KEY);
+            expect(stored).toBe(serializeToYaml(validateYaml(handWritten)));
+            expect(outcome.kind === "landed" && outcome.yaml).toBe(stored);
+            expect(listYamlBackups()[0]?.yaml).toBe(LOCAL_YAML);
+        });
+
+        // In place means the same trip; a document that lost or changed its id must not cut it
+        // loose from the binding and link the slot carries.
+        it("keeps the slot's trip.id whatever the document says", async () => {
+            const outcome = await store.landYaml(profileId, CLOUD_YAML);
+            expect(outcome.kind).toBe("landed");
+            expect(appStorage.get(USER_YAML_KEY)).toContain("id: t-local");
+            expect(appStorage.get(USER_YAML_KEY)).toContain("雲端行程");
         });
 
         it("writes nothing for YAML that does not validate", async () => {
@@ -472,10 +491,11 @@ todo:
     describe("syncWithCloud", () => {
         it("lands a pulled copy and only then records it", async () => {
             const commit = vi.fn();
-            vi.spyOn(gdriveSync, "sync").mockResolvedValue({ action: "pulled", yaml: CLOUD_YAML, commit });
+            const pulled = LOCAL_YAML.replace("本機行程", "雲端改過的本機行程");
+            vi.spyOn(gdriveSync, "sync").mockResolvedValue({ action: "pulled", yaml: pulled, commit });
             const outcome = await store.syncWithCloud(profileId, LOCAL_YAML);
             expect(outcome?.kind).toBe("landed");
-            expect(appStorage.get(USER_YAML_KEY)).toBe(CLOUD_YAML);
+            expect(appStorage.get(USER_YAML_KEY)).toBe(pulled);
             expect(commit).toHaveBeenCalledTimes(1);
         });
 
@@ -631,6 +651,50 @@ todo:
             expect(appStorage.get(USER_YAML_KEY)).toContain("雲端行程");
             expect(listProfiles().map(p => p.name)).toEqual(["本機行程"]);
             expect(store.data?.trip.name).toBe("雲端行程");
+        });
+    });
+
+    describe("applyAiEdit", () => {
+        const proposal = LOCAL_YAML.replace("本機行程", "AI 改過的行程").replace("  id: t-local\n", "");
+
+        it("keeps the trip's id, and 復原 puts back exactly the bytes it replaced", () => {
+            expect(store.applyAiEdit(proposal)).toBe(true);
+            expect(appStorage.get(USER_YAML_KEY)).toContain("id: t-local");
+            expect(store.data?.trip.name).toBe("AI 改過的行程");
+
+            const undo = [...toast.items].reverse().find(item => item.action?.label === "復原");
+            runToastAction(undo!.id);
+
+            expect(appStorage.get(USER_YAML_KEY)).toBe(LOCAL_YAML);
+            expect(store.data?.trip.name).toBe("本機行程");
+        });
+
+        it("says so when storage refuses, instead of claiming the edit applied", () => {
+            const storage = globalThis.localStorage;
+            const setItem = storage.setItem.bind(storage);
+            vi.spyOn(storage, "setItem").mockImplementation((key, value) => {
+                if (key === "showmeway_user_yaml") throw new DOMException("full", "QuotaExceededError");
+                setItem(key, value);
+            });
+
+            expect(store.applyAiEdit(proposal)).toBe(false);
+
+            expect(store.data?.trip.name).toBe("本機行程");
+            expect(toast.items.at(-1)?.message).toBe("儲存失敗，請稍後再試");
+        });
+    });
+
+    describe("createProfile", () => {
+        // itinerary.local.yaml can be a trip:sync working copy of a trip already on this device.
+        it("gives the new trip an identity of its own, whatever id the template carries", async () => {
+            const template = LOCAL_YAML.replace("本機行程", "範本");
+            vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(template))));
+
+            await store.createProfile();
+
+            expect(store.data?.trip.name).toBe("範本");
+            expect(store.data?.trip.id).not.toBe("t-local");
+            expect(listProfiles().map(p => p.name)).toEqual(["本機行程"]);
         });
     });
 

@@ -187,20 +187,6 @@ describe("placeTrip", () => {
         expect(listProfiles()).toEqual([]);
     });
 
-    // A cloud file's sync record hashes the downloaded bytes; re-serializing them would read
-    // as an edit nobody made the moment they landed.
-    it("keeps the bytes as given when asked to, except for a copy, whose identity they lack", () => {
-        seedActive("東京", "t-tokyo");
-        const asDownloaded = `${tripYaml("大阪", "t-osaka")}\n# 手寫的註解\n`;
-
-        placeTrip(asDownloaded, yes, { verbatim: true });
-        expect(appStorage.get(USER_YAML_KEY)).toBe(asDownloaded);
-
-        const copyOfTokyo = `${tripYaml("東京改", "t-tokyo")}\n# 手寫的註解\n`;
-        placeTrip(copyOfTokyo, question => question.kind === "copy", { verbatim: true });
-        expect(appStorage.get(USER_YAML_KEY)).not.toContain("手寫的註解");
-    });
-
     it("canonicalizes what it stores, so a hand-edited arrival cannot persist runtime fields", () => {
         const outcome = placeTrip(tripYaml("東京", "t-tokyo"), yes);
 

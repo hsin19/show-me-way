@@ -7,6 +7,9 @@ import {
     serializeToYaml,
     validateYaml,
 } from "./trip";
+// The src tsconfig has no node types, so a Vite `?raw` import stands in for readFileSync.
+// eslint-disable-next-line no-restricted-imports -- public/ fixture sits outside src/lib
+import templateYaml from "../../../public/itinerary.yaml?raw";
 
 // Minimal valid itinerary wrapping the given `trip.hotels` YAML list body.
 function tripYaml(hotelsYaml: string): string {
@@ -638,6 +641,42 @@ describe("serializeToYaml 與 round-trip", () => {
         const first = serializeToYaml(validateYaml(richYaml));
         const second = serializeToYaml(validateYaml(first));
         expect(second).toBe(first);
+    });
+
+    // storage 只存 canonical：存過一次的 bytes 再存一次必須完全相同，否則每次 pull 或切換都會讀成本機有改動。
+    it("canonical 是定點：補上的空白日、舊版 region、手排的欄位順序再存一次都不變", () => {
+        const sources = [
+            richYaml,
+            // 06-12 沒寫，會補一天空白日。
+            [
+                "trip:",
+                "  name: '跳過一天'",
+                "  hotels: []",
+                "days:",
+                "  - date: '2026-06-11'",
+                "    title: '第一天'",
+                "    timeline: []",
+                "  - date: '2026-06-13'",
+                "    title: '第三天'",
+                "    timeline: []",
+            ].join("\n"),
+            [
+                "days:",
+                "  - timeline: []",
+                "    title: '手排順序'",
+                "    region: '舊版區域'",
+                "    date: '2026-06-11'",
+                "trip:",
+                "  hotels: []",
+                "  id: 't-order'",
+                "  name: '欄位順序'",
+            ].join("\n"),
+            templateYaml,
+        ];
+        for (const source of sources) {
+            const first = serializeToYaml(validateYaml(source));
+            expect(serializeToYaml(validateYaml(first))).toBe(first);
+        }
     });
 
     it("status / confirmation / alternatives / stops 經 round-trip 不遺失", () => {
