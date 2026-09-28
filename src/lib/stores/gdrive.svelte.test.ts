@@ -16,6 +16,7 @@ import {
     getActiveProfileId,
 } from "$lib/infra/storage/profiles";
 import { USER_YAML_KEY } from "$lib/infra/storage/yaml-storage";
+import { decideSyncAction } from "$lib/services/drive-sync";
 import {
     afterEach,
     beforeEach,
@@ -161,7 +162,7 @@ describe("sync: pushing", () => {
         // The user edited while that upload was in flight: the record must still describe
         // YAML_A, or the next sync would call the newer content already sent.
         expect(gdrive.loadTripSyncMap()[TRIP]?.localHash).not.toBe(yamlFingerprint(YAML_B));
-        expect(gdrive.decideSyncAction({
+        expect(decideSyncAction({
             record: gdrive.loadTripSyncMap()[TRIP]!,
             remoteExists: true,
             remoteMd5: "md5-1",
@@ -239,7 +240,7 @@ describe("sync: pulling", () => {
 
         expect(res?.action).toBe("pulled");
         expect(gdrive.loadTripSyncMap()[TRIP]).toEqual(behindRemote());
-        expect(gdrive.decideSyncAction({
+        expect(decideSyncAction({
             record: gdrive.loadTripSyncMap()[TRIP]!,
             remoteExists: true,
             remoteMd5: "md5-2",

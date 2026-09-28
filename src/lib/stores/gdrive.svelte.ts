@@ -1,7 +1,8 @@
-// Google Drive sync for one trip at a time, on top of infra/http/gdrive.ts: the pure
-// decisions (`decideSyncAction` for direction, `buildRebindRecord` for a file found
-// without a binding) and `planCloudSync`, which reads a trip's remote and hands back the
-// transfer it implies. What lives here is the device's side — the records, the conflicts
+// Google Drive sync for one trip at a time, on top of services/drive-sync.ts — the
+// decisions (`decideSyncAction` for direction, `rebindFor` for a trip whose binding is
+// missing or dead) and `planCloudSync`, which reads a trip's remote and hands back the
+// transfer it implies, all shared with trip:sync — and the Drive calls in
+// infra/http/gdrive.ts. What lives here is the device's side — the records, the conflicts
 // awaiting the user, the toasts. The mental model, in the order things go wrong:
 //
 // - The trip → file binding in `showmeway_gdrive_trips` is a rebuildable cache, not a
@@ -23,13 +24,10 @@
 import { googleClientId } from "$lib/config";
 import { yamlFingerprint } from "$lib/domain/utils";
 import {
-    agreedRecord,
-    buildRebindRecord,
     clearCachedAccessToken,
     clearDeadShareLink,
     clearGdriveUser,
     type CloudTripFile,
-    decideSyncAction,
     deleteCloudTrip,
     fetchCloudTrip,
     fetchGoogleUserInfo,
@@ -39,8 +37,6 @@ import {
     listCloudTrips,
     loadGdriveUser,
     loadTripSyncMap,
-    planCloudSync,
-    rebindCandidates,
     requestGoogleAccessToken,
     saveGdriveUser,
     saveTripSyncMap,
@@ -53,6 +49,12 @@ import {
     tripIdFromYaml,
 } from "$lib/infra/storage/profiles";
 import type { ShareLinkRecord } from "$lib/infra/storage/share-links";
+import {
+    agreedRecord,
+    decideSyncAction,
+    planCloudSync,
+    rebindFor,
+} from "$lib/services/drive-sync";
 import { SvelteSet } from "svelte/reactivity";
 import { shareLinks } from "./share-link.svelte";
 import { showToast } from "./toast.svelte";
@@ -553,27 +555,17 @@ class GDriveSyncState {
             return;
         }
 
-        const live = new Set(files.map(file => file.id));
-        const byTripId = rebindCandidates(files, Object.values(this.trips).map(record => record.fileId));
-        if (Object.keys(byTripId).length === 0) return;
-
         for (const { profileId, yaml } of listLocalTrips()) {
-            const bound = this.trips[profileId];
-            // A binding whose file has left the listing is as stale as a missing one: another
-            // device may already have uploaded the trip again, and a push through the dead
-            // binding would create a second copy beside it.
-            if (bound && live.has(bound.fileId)) continue;
-            const documentId = tripIdFromYaml(yaml);
-            const file = documentId === null ? undefined : byTripId[documentId];
-            if (!file || documentId === null) continue;
-            // Two profiles holding one trip id (a copy made before copies were re-identified)
-            // must not both claim the file; the first one wins and the other stays unbound.
-            delete byTripId[documentId];
-            if (bound) this.unbindTrip(profileId);
+            // Written before the next profile asks, so two profiles holding one trip id (a copy
+            // made before copies were re-identified) each take a file of their own rather than
+            // sharing one — and neither pushes a third copy of a trip Drive already holds twice.
+            const rebind = rebindFor(this.trips, profileId, tripIdFromYaml(yaml), yaml, files);
+            if (!rebind) continue;
+            if (this.trips[profileId]) this.unbindTrip(profileId);
             // `record.diverged` when they differ is the conflict — no separate in-memory
             // entry, which is what used to vanish on reload and let the next edit push.
-            this.writeRecord(profileId, buildRebindRecord(file, yamlFingerprint(yaml)));
-            this.absorbShareLink(profileId, file);
+            this.writeRecord(profileId, rebind.record);
+            this.absorbShareLink(profileId, rebind.file);
         }
     }
 
@@ -640,12 +632,12 @@ class GDriveSyncState {
                 if (this.pendingTransfer?.tripId === tripId) this.pendingTransfer = null;
                 try {
                     const token = await this.getValidToken(interactive ? "interactive" : "cache-only");
-                    const plan = await planCloudSync(token, this.trips[tripId] ?? null, localYaml, options.force);
-                    // Every decision other than push comes from a live remote; a forced pull with none has nothing to take.
-                    if (!plan) return null;
+                    const plan = await planCloudSync(token, this.trips[tripId] ?? null, localYaml);
+                    // The user's answer to a conflict replaces the decision.
+                    const decision = options.force === "local" ? "push" : options.force === "remote" ? "pull" : plan.decision;
                     if (plan.remoteFile) this.absorbShareLink(tripId, plan.remoteFile);
 
-                    if (plan.decision === "push") {
+                    if (decision === "push") {
                         if (options.checkOnly) {
                             this.pendingTransfer = { tripId, direction: "push" };
                             if (interactive) {
@@ -680,8 +672,11 @@ class GDriveSyncState {
                         return { action: "pushed", file: res };
                     }
 
-                    const { remoteFile } = plan;
-                    if (plan.decision === "pull") {
+                    // Every decision past push stands on a live remote; only a forced pull can find
+                    // none, and then there is nothing to take.
+                    const { remoteFile, pull } = plan;
+                    if (!remoteFile || !pull) return null;
+                    if (decision === "pull") {
                         if (options.checkOnly) {
                             // Arm the button's own "下載" tap rather than swapping the trip out
                             // from under a user who only asked to check.
@@ -696,7 +691,7 @@ class GDriveSyncState {
                             return { action: "conflict", file: remoteFile };
                         }
                         this.syncPhase = "pulling";
-                        const pulled = await plan.pull();
+                        const pulled = await pull();
                         // Recording — and announcing — the download is the caller's to
                         // trigger once it has actually persisted these bytes.
                         return {
@@ -714,7 +709,7 @@ class GDriveSyncState {
                         };
                     }
 
-                    if (plan.decision === "conflict") {
+                    if (decision === "conflict") {
                         // Deliberately changes nothing: re-binding or overwriting here would
                         // abandon whichever copy the user has not seen yet.
                         this.conflicts[tripId] = { tripId, fileName: remoteFile.name, kind: "both-changed" };

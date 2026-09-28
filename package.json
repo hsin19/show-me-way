@@ -14,7 +14,7 @@
     "lint:fix": "eslint . --fix",
     "schema:gen": "node --import ./scripts/resolve-hooks.ts scripts/gen-schema.ts",
     "schema:check": "node --import ./scripts/resolve-hooks.ts scripts/gen-schema.ts --check",
-    "trip:sync": "node --experimental-webstorage --localstorage-file=.trip-sync/localstorage --disable-warning=ExperimentalWarning --import ./scripts/resolve-hooks.ts scripts/trip-sync.ts",
+    "trip:sync": "node --import ./scripts/resolve-hooks.ts scripts/trip-sync.ts",
     "typecheck": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
     "test": "vitest run",
     "test:ci": "vitest run --coverage --reporter=default --reporter=github-actions --reporter=junit --outputFile.junit=test-report.junit.xml",

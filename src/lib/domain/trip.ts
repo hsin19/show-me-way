@@ -287,6 +287,17 @@ export function serializeToYaml(data: TripData): string {
     return SCHEMA_LINE + body;
 }
 
+/**
+ * `data` as the trip `id` it replaces in place — a Drive pull, a shared update taken, an AI
+ * edit, a download into trip:sync's working copy. In place means the same trip, so it keeps
+ * that id whatever the document says: one dropped by a hand edit, never written by the
+ * sender, or changed by the model must not cut the trip loose from its Drive file and links.
+ */
+export function asSameTrip(data: TripData, id: string): TripData {
+    data.trip.id = id;
+    return data;
+}
+
 /** `_id` for an item created at runtime: unique for the session, and stripped again on save. */
 export function createChecklistItemId(prefix: "todo" | "pack"): string {
     return `${prefix}-${runtimeIdSeq++}`;

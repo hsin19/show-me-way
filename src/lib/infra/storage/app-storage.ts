@@ -1,10 +1,10 @@
 /*
  * The app's key-value store. Callers name what they keep ("user_yaml", "gdrive_trips") and
- * never see what backs it — today localStorage under a namespace, which is Web Storage in
- * the browser, the stub in unit tests, and Node's `--localstorage-file` under `trip:sync`.
- * The namespace exists because production is a GitHub Pages project site: the origin is
- * shared with every other project on the account, and `showmeway_` is what tells this app's
- * keys from theirs. It is written here and nowhere else in the app's source — index.html's
+ * never see what backs it — localStorage under a namespace by default, which is Web Storage
+ * in the browser and the stub in unit tests, and a file of its own under `trip:sync`, which
+ * swaps it in with `useAppStorage`. The namespace exists because production is a GitHub
+ * Pages project site: the origin is shared with every other project on the account, and
+ * `showmeway_` is what tells this app's keys from theirs. It is written here and nowhere else in the app's source — index.html's
  * pre-paint script holds the one literal copy, for `theme`; tests and e2e spell physical
  * keys out on purpose, since those are what installed phones already hold.
  *
@@ -45,4 +45,19 @@ function namespacedWebStorage(namespace: string): AppStorage {
     };
 }
 
-export const appStorage: AppStorage = namespacedWebStorage("showmeway_");
+let backend: AppStorage = namespacedWebStorage("showmeway_");
+
+// A fixed object that looks the backend up on every call, so a caller that keeps a copy of it
+// still reaches whatever `useAppStorage` installs.
+export const appStorage: AppStorage = {
+    get: name => backend.get(name),
+    set: (name, value) => backend.set(name, value),
+    remove: name => backend.remove(name),
+    names: () => backend.names(),
+    sizeOf: name => backend.sizeOf(name),
+};
+
+/** Replace what backs `appStorage`, for a host that is not a browser. Call it before anything reads storage. */
+export function useAppStorage(storage: AppStorage): void {
+    backend = storage;
+}

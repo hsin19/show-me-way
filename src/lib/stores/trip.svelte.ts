@@ -16,6 +16,7 @@ import {
 } from "$lib/domain/share";
 import { buildDayReport } from "$lib/domain/timeline";
 import {
+    asSameTrip,
     createChecklistItemId,
     type DayItinerary,
     genTripId,
@@ -635,8 +636,7 @@ export class TripStore {
         if (!this.data || !isActiveProfile(profileId) || tripOrigins.linkFor(profileId)?.id !== link.id || this.sharedUpdate) return;
         // Measured as the slot's own trip, as taking it would land it: YAML without an id gets
         // a fresh one minted on every read, which would never match what was taken.
-        parsed.trip.id = this.data.trip.id;
-        const yaml = serializeToYaml(parsed);
+        const yaml = serializeToYaml(asSameTrip(parsed, this.data.trip.id));
         const tripName = parsed.trip.name;
         if (yamlFingerprint(yaml) === taken) return;
 
@@ -945,13 +945,11 @@ export class TripStore {
     }
 
     /**
-     * The whole-document replacement of the active slot's own trip: backed up first, and kept
-     * on the slot's `trip.id` whatever the document says, since in place means the same trip —
-     * an id dropped or changed in a Drive file or by the model must not cut it loose from its
-     * binding and link. Null when storage refused, which has been toasted.
+     * The whole-document replacement of the active slot's own trip (`asSameTrip`), backed up
+     * first. Null when storage refused, which has been toasted.
      */
     private replaceActiveTrip(data: TripData): Written | null {
-        if (this.data) data.trip.id = this.data.trip.id;
+        if (this.data) asSameTrip(data, this.data.trip.id);
         try {
             return writeActiveTrip(data, { backup: true });
         } catch (err) {

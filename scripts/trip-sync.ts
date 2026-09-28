@@ -2,15 +2,12 @@ import { SITE_URL } from "$lib/config";
 import { buildShortShareUrl } from "$lib/domain/share";
 import { resealShareToken } from "$lib/domain/share-crypto";
 import {
+    asSameTrip,
     serializeToYaml,
     validateYaml,
 } from "$lib/domain/trip";
-import { yamlFingerprint } from "$lib/domain/utils";
 import {
-    agreedRecord,
-    buildRebindRecord,
     clearDeadShareLink,
-    type CloudSyncPlan,
     type CloudTripFile,
     fetchCloudTrip,
     getCachedAccessToken,
@@ -18,8 +15,6 @@ import {
     listCloudTrips,
     loadGdriveUser,
     loadTripSyncMap,
-    planCloudSync,
-    rebindCandidates,
     saveGdriveUser,
     saveTripSyncMap,
     setCachedAccessToken,
@@ -30,10 +25,20 @@ import {
     updateHopBlob,
 } from "$lib/infra/http/hop";
 import {
+    type AppStorage,
+    useAppStorage,
+} from "$lib/infra/storage/app-storage";
+import {
     tripIdFromYaml,
     tripNameFromYaml,
 } from "$lib/infra/storage/profiles";
 import type { ShareLinkRecord } from "$lib/infra/storage/share-links";
+import {
+    agreedRecord,
+    type CloudSyncPlan,
+    planCloudSync,
+    rebindFor,
+} from "$lib/services/drive-sync";
 import { spawn } from "node:child_process";
 import {
     createHash,
@@ -68,11 +73,12 @@ import { parseArgs } from "node:util";
  * web app created without asking for the whole Drive.
  *
  * It is one more device to the sync model, not a new one, and keeps only what is CLI-shaped:
- * OAuth, working copies, argv. Everything else is the app's own code — `planCloudSync` for
- * the direction and the transfer, the record map and token cache in the localStorage Node
- * backs with `.trip-sync/localstorage` — so a rule changed in the app reaches this tool
- * without a second edit. Like the app it transfers only on an explicit checkout, pull or
- * push. The `$lib` imports resolve through `resolve-hooks.ts`, which the script preloads.
+ * OAuth, working copies, argv, and the file behind `appStorage`. Everything else is the app's
+ * own code — `planCloudSync` for the direction and the transfer, the record map and token
+ * cache it keeps through `appStorage`, backed here by `.trip-sync/state.json` rather than a
+ * browser's localStorage — so a rule changed in the app reaches this tool without a second
+ * edit. Like the app it transfers only on an explicit checkout, pull or push. The `$lib`
+ * imports resolve through `resolve-hooks.ts`, which the script preloads.
  *
  * A push first rewrites the working copy into the canonical form the app stores — the
  * original goes to a backup — so this machine, Drive and every phone hold the same bytes.
@@ -97,9 +103,39 @@ const SYNC_DIR = resolve(ROOT, ".trip-sync");
 const TOKEN_FILE = resolve(SYNC_DIR, "refresh-token");
 const TRIPS_DIR = resolve(SYNC_DIR, "trips");
 const BACKUP_DIR = resolve(SYNC_DIR, "backups");
+const STATE_FILE = resolve(SYNC_DIR, "state.json");
 const LINK = resolve(ROOT, "public/itinerary.local.yaml");
 const CHECKED_OUT_FILE = resolve(SYNC_DIR, "checked-out");
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
+
+/**
+ * This machine's `appStorage`: one JSON object, rewritten whole on every change — it holds a
+ * few sync records and a token cache. Unreadable counts as empty, since the records rebuild
+ * from the listing and the token from the refresh token.
+ */
+function fileStorage(path: string): AppStorage {
+    let entries: Record<string, string> = {};
+    try {
+        entries = JSON.parse(readFileSync(path, "utf8")) as Record<string, string>;
+    } catch {
+        // First run, or a file nothing here can use.
+    }
+    const save = () => writeFileSync(path, `${JSON.stringify(entries, null, 2)}\n`, { mode: 0o600 });
+    return {
+        get: name => entries[name] ?? null,
+        set: (name, value) => {
+            entries[name] = value;
+            save();
+        },
+        remove: name => {
+            if (!(name in entries)) return;
+            delete entries[name];
+            save();
+        },
+        names: () => Object.keys(entries),
+        sizeOf: name => (name.length + (entries[name] ?? "").length) * 2,
+    };
+}
 
 function loadEnv(): Record<string, string | undefined> {
     if (existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
@@ -329,37 +365,25 @@ function saveRecord(tripId: string, record: TripSyncRecord): void {
     saveTripSyncMap({ ...loadTripSyncMap(), [tripId]: record });
 }
 
-/**
- * The trip's record, rebuilt the way the app's `reconcileBindings` does when this machine
- * holds none yet — or holds one for a file that has left the listing, which another device
- * may already have replaced; pushing through it would create a second copy. Kept when
- * nothing replaced it, so the push re-creates the file.
- */
+/** The trip's record, rebound from the listing the way the app's `reconcileBindings` does (`rebindFor`). */
 async function recordFor(token: string, tripId: string, localYaml: string): Promise<TripSyncRecord | null> {
     const records = loadTripSyncMap();
-    const files = await listCloudTrips(token);
-    const live = new Set(files.map(file => file.id));
-    const known = records[tripId];
-    if (known && live.has(known.fileId)) return known;
-    const file = rebindCandidates(files, Object.values(records).map(record => record.fileId))[tripId];
-    if (!file) return known ?? null;
-    const record = buildRebindRecord(file, yamlFingerprint(localYaml));
-    saveRecord(tripId, record);
-    return record;
+    const rebind = rebindFor(records, tripId, tripId, localYaml, await listCloudTrips(token));
+    if (!rebind) return records[tripId] ?? null;
+    saveRecord(tripId, rebind.record);
+    return rebind.record;
 }
 
 /**
  * What this machine keeps of `tripId`'s downloaded file: the form the app stores, as every
  * device does, so a working copy is non-canonical only once it has been edited here. A file
- * the app did not write then reads as a local edit, which the next push repairs. Kept on the
- * trip's own id, as the app keeps a slot's, so a file that lost its id is not pushed back as
- * another trip. Kept as downloaded when it does not parse, so it can be fixed here.
+ * the app did not write then reads as a local edit, which the next push repairs. A download
+ * replaces the working copy in place, so it keeps the trip's id (`asSameTrip`). Kept as
+ * downloaded when it does not parse, so it can be fixed here.
  */
 function asStored(yaml: string, tripId: string): string {
     try {
-        const data = validateYaml(yaml);
-        data.trip.id = tripId;
-        return serializeToYaml(data);
+        return serializeToYaml(asSameTrip(validateYaml(yaml), tripId));
     } catch {
         return yaml;
     }
@@ -568,20 +592,17 @@ async function status(): Promise<void> {
 }
 
 /*
- * pull and push plan without `--force` first and pass it on only when that plan calls for
- * it. A forced pull overrides a conflict or this machine's own edits, which the backup
- * keeps; a forced push overrides a conflict only, since past a plain pull it would put this
- * machine's older copy over edits it never saw.
+ * `--force` runs the transfer the plan did not choose, and only where overriding is the
+ * point: a forced pull takes the cloud copy over a conflict or this machine's own edits,
+ * which the backup keeps; a forced push overrides a conflict only, since past a plain pull it
+ * would put this machine's older copy over edits it never saw.
  */
 async function pull(): Promise<void> {
     const { tripId, path, yaml: localYaml } = checkedOut();
     const token = await accessToken();
-    const record = await recordFor(token, tripId, localYaml);
-    let plan = await planCloudSync(token, record, localYaml);
-    if (flags.force && (plan.decision === "conflict" || (plan.decision === "push" && plan.remoteFile))) {
-        plan = await planCloudSync(token, record, localYaml, "remote") ?? plan;
-    }
-    if (plan.decision !== "pull") return report(tripId, plan, "pull");
+    const plan = await planCloudSync(token, await recordFor(token, tripId, localYaml), localYaml);
+    const forced = flags.force && (plan.decision === "conflict" || plan.decision === "push");
+    if ((plan.decision !== "pull" && !forced) || !plan.pull || !plan.remoteFile) return report(tripId, plan, "pull");
 
     const { yaml, record: pulled } = await plan.pull();
     // Local trip files are gitignored, so an overwrite would otherwise be the only copy gone.
@@ -606,11 +627,9 @@ async function push(): Promise<void> {
         console.log("工作副本已整理成 app 的格式（註解與欄位順序不會保留）");
     }
     const token = await accessToken();
-    const record = await recordFor(token, tripId, yaml);
-    let plan = await planCloudSync(token, record, yaml);
+    const plan = await planCloudSync(token, await recordFor(token, tripId, yaml), yaml);
     const forced = flags.force && plan.decision === "conflict";
-    if (forced) plan = await planCloudSync(token, record, yaml, "local");
-    if (plan.decision !== "push") return report(tripId, plan, "push");
+    if (plan.decision !== "push" && !forced) return report(tripId, plan, "push");
 
     // Undefined leaves the file's share-link properties in place: new ciphertext changes nothing they hold.
     const { file, record: pushed } = await plan.push(undefined);
@@ -735,11 +754,11 @@ if (command.takesArg && (args.length !== 1 || !args[0]?.trim())) usageError(`${n
 if (!command.takesArg && args.length > 0) usageError(`${name} 不接參數`);
 if (flags.force && !command.takesForce) usageError("--force 只能用在 pull / push");
 if (flags["no-share"] && !command.takesNoShare) usageError("--no-share 只能用在 push");
-// Node opens the localStorage file on first access and fails outright if its directory is
-// missing. chmod rather than mkdir's mode, which applies only to a directory it creates:
-// this one holds the refresh token and, in localStorage, a live access token.
+// chmod rather than mkdir's mode, which applies only to a directory it creates: this one
+// holds the refresh token and, in the state file, a live access token.
 mkdirSync(SYNC_DIR, { recursive: true });
 chmodSync(SYNC_DIR, 0o700);
+useAppStorage(fileStorage(STATE_FILE));
 await command.run(args[0] ?? "").catch((error: unknown) => {
     console.error(describeError(error));
     process.exit(1);

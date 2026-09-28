@@ -41,6 +41,27 @@ describe("appStorage", () => {
         expect(appStorage.names().sort()).toEqual(["theme", "weather_tokyo"]);
     });
 
+    // trip:sync keeps its state in a file of its own rather than posing as a browser.
+    it("hands every call to the storage a host puts behind it", async () => {
+        vi.resetModules();
+        // Destructured before the swap on purpose: a copy taken early must still reach the new backend.
+        const { appStorage: early, useAppStorage } = await import("./app-storage");
+        const entries = new Map<string, string>();
+        useAppStorage({
+            get: name => entries.get(name) ?? null,
+            set: (name, value) => void entries.set(name, value),
+            remove: name => void entries.delete(name),
+            names: () => [...entries.keys()],
+            sizeOf: () => 0,
+        });
+
+        early.set("gdrive_trips", "{}");
+
+        expect(entries.get("gdrive_trips")).toBe("{}");
+        expect(storage.getItem("showmeway_gdrive_trips")).toBeNull();
+        expect(early.names()).toEqual(["gdrive_trips"]);
+    });
+
     it("sizes an entry by the key it is stored under, as the quota bills it", () => {
         appStorage.set("theme", "dark");
 
