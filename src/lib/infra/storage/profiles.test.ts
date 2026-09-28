@@ -16,10 +16,8 @@ import {
     createProfile,
     deleteProfile,
     ensureActiveProfileId,
-    ensureUniqueTripId,
     getActiveProfileId,
     listProfiles,
-    PROFILES_KEY,
     switchToProfile,
     tripIdFromYaml,
     tripNameFromYaml,
@@ -98,47 +96,6 @@ describe("trip profiles", () => {
             // Only `normalizeTripData` mints, so a reader must never invent one on the side.
             expect(tripIdFromYaml(yamlNamed("東京"))).toBeNull();
             expect(tripIdFromYaml("not: [valid")).toBeNull();
-        });
-    });
-
-    describe("ensureUniqueTripId", () => {
-        it("keeps the id of a trip this device does not hold", () => {
-            appStorage.set(USER_YAML_KEY, savedYaml("t-mine"));
-            const incoming = validateYaml(savedYaml("t-theirs"));
-
-            expect(ensureUniqueTripId(incoming)).toBe(false);
-            // Keeping it is the whole point: it is what lets two devices recognise one
-            // Drive file as the same trip.
-            expect(incoming.trip.id).toBe("t-theirs");
-        });
-
-        it("re-mints when the active trip is already that trip", () => {
-            appStorage.set(USER_YAML_KEY, savedYaml("t-1"));
-            const incoming = validateYaml(savedYaml("t-1"));
-
-            expect(ensureUniqueTripId(incoming)).toBe(true);
-            expect(incoming.trip.id).not.toBe("t-1");
-            expect(incoming.trip.id).toBeTruthy();
-        });
-
-        it("re-mints when a parked profile is already that trip", () => {
-            appStorage.set(USER_YAML_KEY, savedYaml("t-active"));
-            appStorage.set(
-                PROFILES_KEY,
-                JSON.stringify([{ id: "p-1", yaml: savedYaml("t-parked"), savedAt: "2026-08-01T00:00:00Z" }]),
-            );
-            const incoming = validateYaml(savedYaml("t-parked"));
-
-            expect(ensureUniqueTripId(incoming)).toBe(true);
-            expect(incoming.trip.id).not.toBe("t-parked");
-        });
-
-        it("survives storage holding trips written before ids existed", () => {
-            appStorage.set(USER_YAML_KEY, yamlNamed("東京"));
-            const incoming = validateYaml(savedYaml("t-1"));
-
-            expect(ensureUniqueTripId(incoming)).toBe(false);
-            expect(incoming.trip.id).toBe("t-1");
         });
     });
 

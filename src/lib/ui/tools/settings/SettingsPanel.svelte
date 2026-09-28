@@ -6,6 +6,7 @@ import { fetchDefaultYamlText } from "$lib/infra/http/itinerary-loader";
 import { appStorage } from "$lib/infra/storage/app-storage";
 import {
     ensureActiveProfileId,
+    isActiveProfile,
     type ProfileInfo,
     tripNameFromYaml,
     tripStartDateFromYaml,
@@ -70,7 +71,7 @@ let {
 let yamlInput = $state("");
 let validationError = $state<string | null>(null);
 // A pasted short link makes save() a network round trip; this keeps a second tap
-// from running importSharedTrip twice and stacking two confirm dialogs.
+// from placing it twice and stacking two confirm dialogs.
 let saving = $state(false);
 let yamlBackups = $state<YamlBackup[]>([]);
 // What the editor is compared against to spot unsaved edits.
@@ -145,23 +146,7 @@ async function save() {
     if (saving) return;
     saving = true;
     try {
-        const outcome = await tripStore.saveFromEditor(activeTripId, yamlInput);
-        switch (outcome.kind) {
-            case "landed":
-            case "imported":
-                adoptSaved(outcome.yaml);
-                onDone();
-                break;
-            case "unchanged":
-                onDone();
-                break;
-            case "invalid":
-                // What was typed stays put; only the message changes.
-                validationError = outcome.error;
-                break;
-            case "aborted":
-                break;
-        }
+        if (applyLanding(await tripStore.saveFromEditor(activeTripId, yamlInput))) onDone();
     } finally {
         saving = false;
     }
@@ -227,18 +212,19 @@ let cloudButton = $derived.by(() => {
 });
 
 /**
- * Persists an unsaved editor draft before anything uploads it — canonical form, so what
- * goes to Drive carries a `trip.id`. False when the draft does not parse, in which case
- * nothing was written and the error is in the editor.
+ * Saves an unsaved editor draft before anything uploads it, as 儲存並解析 would — so what
+ * goes to Drive is canonical and carries a `trip.id`. False when there is nothing to go on
+ * with: the draft does not parse (the error is in the editor), was turned down, or landed
+ * as a trip other than the one whose cloud state this panel is showing, which closes it.
  */
 async function landDraft(): Promise<boolean> {
     if (yamlInput === yamlSnapshot) return true;
-    const outcome = await tripStore.landYaml(activeTripId, yamlInput, { canonical: true });
-    if (outcome.kind === "invalid") {
-        validationError = outcome.error;
-        showToast("請先修正編輯器中的 YAML 格式錯誤");
-    }
-    return applyLanding(outcome);
+    const outcome = await tripStore.saveFromEditor(activeTripId, yamlInput);
+    if (outcome.kind === "invalid") showToast("請先修正編輯器中的 YAML 格式錯誤");
+    if (!applyLanding(outcome)) return false;
+    if (isActiveProfile(activeTripId)) return true;
+    onDone();
+    return false;
 }
 
 async function handleCloudAction() {

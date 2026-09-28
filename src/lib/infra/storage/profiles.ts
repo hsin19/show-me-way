@@ -145,32 +145,12 @@ export function listLocalTrips(): { profileId: string; yaml: string; }[] {
 }
 
 /**
- * The profile slot holding the trip with this id, or null. A slot rather than the trip
- * itself, because that is what everything else here — switching, parking, the Drive
- * binding — is keyed by.
+ * The slot holding the trip with this id, with the YAML in it, or null. A slot rather than
+ * the trip itself, because that is what everything else here — switching, parking, the
+ * Drive binding — is keyed by.
  */
-function findProfileByTripId(tripId: string): string | null {
-    return findLocalTripByTripId(tripId)?.profileId ?? null;
-}
-
-/** `findProfileByTripId` plus the YAML in that slot, for a caller that has to compare contents. */
 export function findLocalTripByTripId(tripId: string): { profileId: string; yaml: string; } | null {
     return listLocalTrips().find(trip => tripIdFromYaml(trip.yaml) === tripId) ?? null;
-}
-
-/**
- * Re-mint `data.trip.id` if this device already holds that trip, and report whether it
- * did. An imported copy keeps its identity by default — that is what lets two devices
- * recognise the same trip in Drive — so this is only about the one case where keeping it
- * would be wrong: importing a trip alongside the copy it came from, where the two are
- * separate trips from here on and must not compete for one cloud file.
- *
- * Mutates `data` in place, so call it before serializing.
- */
-export function ensureUniqueTripId(data: TripData): boolean {
-    if (findProfileByTripId(data.trip.id) === null) return false;
-    data.trip.id = genTripId();
-    return true;
 }
 
 /** Parked trips only, newest first — the active one lives in USER_YAML_KEY. */

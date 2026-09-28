@@ -21,11 +21,6 @@
 //   gone decides `push`, and a button labelled 比對 may not re-create a deleted file.
 
 import { googleClientId } from "$lib/config";
-import {
-    serializeToYaml,
-    type TripData,
-    validateYaml,
-} from "$lib/domain/trip";
 import { yamlFingerprint } from "$lib/domain/utils";
 import {
     agreedRecord,
@@ -54,8 +49,6 @@ import {
     updateCloudShareLink,
 } from "$lib/infra/http/gdrive";
 import {
-    createProfile,
-    ensureUniqueTripId,
     listLocalTrips,
     tripIdFromYaml,
 } from "$lib/infra/storage/profiles";
@@ -209,10 +202,12 @@ class GDriveSyncState {
 
     /**
      * Adopts a Drive file as this trip's cloud copy, recording the downloaded bytes as
-     * what both sides now agree on. The caller must have persisted `yaml` first.
+     * what both sides now agree on, and the share link the file carries as this trip's.
+     * The caller must have persisted `yaml` first.
      */
-    adoptCloudTrip(tripId: string, fileId: string, yaml: string, remoteMd5?: string) {
+    adoptCloudTrip(tripId: string, fileId: string, yaml: string, remoteMd5?: string, shareLink?: ShareLinkRecord) {
         this.adopt(tripId, agreedRecord(fileId, yaml, remoteMd5));
+        if (shareLink) shareLinks.adopt(tripId, shareLink);
     }
 
     /** Stores an agreement both sides hold, which is also what settles any conflict on the trip. */
@@ -559,8 +554,8 @@ class GDriveSyncState {
             const documentId = tripIdFromYaml(yaml);
             const file = documentId === null ? undefined : byTripId[documentId];
             if (!file || documentId === null) continue;
-            // Two profiles holding one trip id (a copy made before ensureUniqueTripId) must
-            // not both claim the file; the first one wins and the other stays unbound.
+            // Two profiles holding one trip id (a copy made before copies were re-identified)
+            // must not both claim the file; the first one wins and the other stays unbound.
             delete byTripId[documentId];
             // `record.diverged` when they differ is the conflict — no separate in-memory
             // entry, which is what used to vanish on reload and let the next edit push.
@@ -748,56 +743,6 @@ class GDriveSyncState {
                 return null;
             },
         );
-    }
-
-    /**
-     * 載入為新行程 — adopts a Drive file as a brand-new local profile: load →
-     * validate → `createProfile` → `adoptCloudTrip`, the one sequence every
-     * "load a cloud trip I am not bound to yet" entry point needs.
-     *
-     * Returns null when the download failed or `beforeCommit` refused — both have
-     * already told the user why. On invalid YAML `yaml` still comes back so a caller
-     * with an editing surface can seed it for correction; a caller without one
-     * can ignore that field. `beforeCommit` runs only once validation succeeds,
-     * right before `createProfile` reads the outgoing trip out of storage — the
-     * one place a caller needs to flush its own in-memory edits first, and returning
-     * false there aborts rather than parking a stale copy of the trip being replaced.
-     */
-    async importCloudTripAsProfile(
-        fileId: string,
-        beforeCommit?: () => boolean,
-    ): Promise<{ ok: true; yaml: string; profileId: string; } | { ok: false; yaml: string; error: string; } | null> {
-        const pulled = await this.loadTripYaml(fileId);
-        if (!pulled) return null;
-        const yaml = pulled.yaml;
-        let parsed: TripData;
-        try {
-            parsed = validateYaml(yaml);
-        } catch (err) {
-            const error = err instanceof Error ? err.message : "雲端 YAML 格式錯誤，請檢查！";
-            return { ok: false, yaml, error };
-        }
-        if (beforeCommit && !beforeCommit()) return null;
-        // A file whose trip this device already holds — a duplicate in Drive, or a copy
-        // the last rebind pass missed — arrives as a second trip, not as that one. Sharing
-        // an id would make the two fight over a single cloud file.
-        const reIdentified = ensureUniqueTripId(parsed);
-        const localYaml = reIdentified ? serializeToYaml(parsed) : yaml;
-        const profileId = createProfile(localYaml);
-        // Only the copy that kept the file's identity is that file's trip. Binding a
-        // re-identified one would hand it the very cloud file it was split away from; left
-        // unbound it gets a file of its own on the next push.
-        if (!reIdentified) {
-            // Only the copy that kept the file's identity may claim its share link too:
-            // updating that link from a copy split away from it would replace what the
-            // original trip's recipients see.
-            if (pulled.shareLink) shareLinks.adopt(profileId, pulled.shareLink);
-            // The bytes just downloaded, not the cached listing's checksum: a stale entry
-            // would record an agreement matching no version and report a conflict nobody
-            // caused.
-            this.adoptCloudTrip(profileId, fileId, yaml, pulled.md5);
-        }
-        return { ok: true, yaml: localYaml, profileId };
     }
 
     async deleteTrip(fileId: string): Promise<boolean> {

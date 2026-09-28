@@ -360,7 +360,7 @@ test("衝突時兩份都留：雲端版成為這趟行程，本機版另存成�
 });
 
 test("雲端行程清單：載入為新行程，原行程仍可切回；刪除後該列消失", async ({ page }) => {
-    await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "另一趟旅行", content: yamlNamed("另一趟旅行") }]);
+    await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "另一趟旅行", content: yamlNamed("另一趟旅行").replace("id: t-fixture", "id: t-other") }]);
     await seedItinerary(page);
     await seedConnected(page);
     await page.goto("/");

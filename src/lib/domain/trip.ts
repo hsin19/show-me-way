@@ -302,3 +302,16 @@ export function validateYaml(yamlStr: string): TripData {
         throw new Error(message, { cause: e });
     }
 }
+
+/**
+ * The form a trip is compared in: re-serialized, so a hand-written or hand-edited copy is
+ * judged on content rather than on spacing and key order. Null when it no longer validates,
+ * which is by definition not equal to any version.
+ */
+export function canonicalYaml(yaml: string): string | null {
+    try {
+        return serializeToYaml(validateYaml(yaml));
+    } catch {
+        return null;
+    }
+}

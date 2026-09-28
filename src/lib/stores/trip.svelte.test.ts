@@ -9,6 +9,7 @@ import { appStorage } from "$lib/infra/storage/app-storage";
 import {
     ensureActiveProfileId,
     listProfiles,
+    PROFILES_KEY,
 } from "$lib/infra/storage/profiles";
 import {
     backupCurrentYaml,
@@ -221,6 +222,21 @@ describe("TripStore", () => {
             expect(localStorage.getItem("showmeway_user_yaml")).toContain("東京之旅");
         });
 
+        it("keeps the hash when the trip could not be stored, since nothing else holds the key", async () => {
+            const sealed = await sealShareToken(TEST_YAML);
+            stubHash(`#h=abcd1234.${sealed.key}`);
+            stubFetchStatus(200, { payload: sealed.payload });
+            const storage = globalThis.localStorage;
+            const setItem = storage.setItem.bind(storage);
+            vi.spyOn(storage, "setItem").mockImplementation((key, value) => {
+                if (key === "showmeway_user_yaml") throw new DOMException("full", "QuotaExceededError");
+                setItem(key, value);
+            });
+
+            await store.maybeImportSharedItinerary();
+            expect(replaceState).not.toHaveBeenCalled();
+        });
+
         it("leaves the inline path untouched — no fetch, hash always cleared", async () => {
             const fetchMock = vi.fn();
             vi.stubGlobal("fetch", fetchMock);
@@ -431,19 +447,7 @@ todo:
     });
 
     describe("landYaml", () => {
-        it("stores the canonical form when asked, backing up what it replaces", async () => {
-            const handwritten = CLOUD_YAML.replace("  hotels: []\n", "  hotels: []\n  start: '2020-01-01'\n");
-            const outcome = await store.landYaml(profileId, handwritten, { canonical: true });
-            expect(outcome.kind).toBe("landed");
-            const stored = appStorage.get(USER_YAML_KEY);
-            expect(stored).toContain("雲端行程");
-            expect(stored).not.toMatch(/^\s+start:/m);
-            expect(outcome.kind === "landed" && outcome.yaml).toBe(stored);
-            expect(listYamlBackups()[0]?.yaml).toBe(LOCAL_YAML);
-            expect(store.data?.trip.name).toBe("雲端行程");
-        });
-
-        it("keeps the bytes as given by default, so a cloud pull stores what the sync record hashes", async () => {
+        it("keeps the bytes as given, so a cloud pull stores what the sync record hashes", async () => {
             const asDownloaded = CLOUD_YAML.replace("  hotels: []\n", "  hotels: []\n  start: '2020-01-01'\n");
             const outcome = await store.landYaml(profileId, asDownloaded);
             expect(outcome.kind).toBe("landed");
@@ -514,35 +518,102 @@ todo:
     });
 
     describe("loadCloudTrip", () => {
-        it("flushes in-memory edits before the outgoing trip is parked", async () => {
-            const spy = vi.spyOn(gdriveSync, "importCloudTripAsProfile").mockImplementation((_fileId, beforeCommit) => {
-                expect(beforeCommit?.()).toBe(true);
-                // What `createProfile` would now read out of storage carries the edit.
-                expect(appStorage.get(USER_YAML_KEY)).toContain("checked: true");
-                return Promise.resolve({ ok: true as const, yaml: CLOUD_YAML, profileId: "p-cloud" });
-            });
+        afterEach(() => {
+            gdriveSync.unbindTrip(ensureActiveProfileId());
+        });
+
+        it("adds the file's trip as one of its own, bound to that file, and parks the current one", async () => {
+            vi.spyOn(gdriveSync, "loadTripYaml").mockResolvedValue({ yaml: CLOUD_YAML, md5: "md5-cloud" });
+
+            const outcome = await store.loadCloudTrip("file-cloud", "雲端行程");
+
+            expect(outcome?.kind).toBe("landed");
+            // As downloaded, so the record just adopted agrees with what is stored.
+            expect(appStorage.get(USER_YAML_KEY)).toBe(CLOUD_YAML);
+            expect(gdriveSync.cloudFileId(ensureActiveProfileId())).toBe("file-cloud");
+            expect(gdriveSync.hasUnpushedEdits(ensureActiveProfileId(), CLOUD_YAML)).toBe(false);
+            expect(listProfiles().map(p => p.name)).toEqual(["本機行程"]);
+        });
+
+        // Reachable when Drive holds a duplicate of a trip this device has bound elsewhere.
+        it("keeps a copy of a trip this device holds unbound, so it cannot claim the duplicate file", async () => {
+            vi.spyOn(gdriveSync, "loadTripYaml").mockResolvedValue({ yaml: LOCAL_YAML.replace("本機行程", "本機行程重複檔"), md5: "md5-dup" });
+            vi.stubGlobal("confirm", vi.fn().mockReturnValueOnce(false).mockReturnValue(true));
+
+            const outcome = await store.loadCloudTrip("file-dup", "本機行程重複檔");
+
+            expect(outcome?.kind).toBe("landed");
+            expect(appStorage.get(USER_YAML_KEY)).not.toContain("t-local");
+            expect(gdriveSync.cloudFileId(ensureActiveProfileId())).toBeNull();
+        });
+
+        it("writes the trip on screen back first when storage missed its last edit", async () => {
+            vi.spyOn(gdriveSync, "loadTripYaml").mockResolvedValue({ yaml: CLOUD_YAML });
             const item = store.data?.todo[0];
             if (item) item.checked = true;
-            const outcome = await store.loadCloudTrip("file-1", "雲端行程");
-            expect(spy).toHaveBeenCalledTimes(1);
-            expect(outcome?.kind).toBe("landed");
+
+            await store.loadCloudTrip("file-cloud", "雲端行程");
+
+            expect(listProfiles()).toHaveLength(1);
+            const parked = JSON.parse(appStorage.get(PROFILES_KEY) ?? "[]") as { yaml: string; }[];
+            expect(parked[0]?.yaml).toContain("checked: true");
         });
 
         it("hands an invalid download to the editor draft instead of parking anything", async () => {
-            vi.spyOn(gdriveSync, "importCloudTripAsProfile").mockResolvedValue({ ok: false, yaml: BROKEN_YAML, error: "壞了" });
+            vi.spyOn(gdriveSync, "loadTripYaml").mockResolvedValue({ yaml: BROKEN_YAML });
             const outcome = await store.loadCloudTrip("file-1", "雲端行程");
-            expect(outcome).toEqual({ kind: "invalid", yaml: BROKEN_YAML, error: "壞了" });
+            expect(outcome?.kind).toBe("invalid");
+            expect(outcome?.kind === "invalid" && outcome.yaml).toBe(BROKEN_YAML);
             expect(settingsDraft.yaml).toBe(BROKEN_YAML);
             expect(appStorage.get(USER_YAML_KEY)).toBe(LOCAL_YAML);
         });
     });
 
     describe("saveFromEditor", () => {
-        it("saves typed YAML in canonical form", async () => {
-            const outcome = await store.saveFromEditor(profileId, CLOUD_YAML.replace("  hotels: []\n", "  hotels: []\n  departure: '2020-01-01T00:00:00'\n"));
+        it("saves an edit of this trip in place, in canonical form, without asking", async () => {
+            const ask = vi.fn(() => true);
+            vi.stubGlobal("confirm", ask);
+            const edited = LOCAL_YAML.replace("本機行程", "本機行程改").replace("  hotels: []\n", "  hotels: []\n  departure: '2020-01-01T00:00:00'\n");
+
+            const outcome = await store.saveFromEditor(profileId, edited);
+
             expect(outcome.kind).toBe("landed");
+            expect(ask).not.toHaveBeenCalled();
+            expect(ensureActiveProfileId()).toBe(profileId);
             expect(appStorage.get(USER_YAML_KEY)).not.toMatch(/^\s+departure:/m);
+            expect(store.data?.trip.name).toBe("本機行程改");
+            expect(listYamlBackups()[0]?.yaml).toBe(LOCAL_YAML);
+        });
+
+        // The slot is still wearing this trip's Drive binding; writing another trip into it
+        // would push that trip over this one's cloud file.
+        it("adds another trip as one of its own, leaving the current one parked with its binding", async () => {
+            gdriveSync.adoptCloudTrip(profileId, "file-local", LOCAL_YAML);
+            onTestFinished(() => {
+                gdriveSync.unbindTrip(profileId);
+            });
+
+            const outcome = await store.saveFromEditor(profileId, CLOUD_YAML);
+
+            expect(outcome.kind).toBe("landed");
+            expect(ensureActiveProfileId()).not.toBe(profileId);
             expect(store.data?.trip.name).toBe("雲端行程");
+            expect(listProfiles().map(p => p.name)).toEqual(["本機行程"]);
+            expect(gdriveSync.cloudFileId(profileId)).toBe("file-local");
+            expect(gdriveSync.cloudFileId(ensureActiveProfileId())).toBeNull();
+        });
+
+        // The schema's own promise: deleting `trip.id` severs the trip from its cloud file.
+        it("counts YAML without a trip.id as another trip, and writes nothing when that is declined", async () => {
+            const ask = vi.fn(() => false);
+            vi.stubGlobal("confirm", ask);
+
+            const outcome = await store.saveFromEditor(profileId, LOCAL_YAML.replace("  id: t-local\n", ""));
+
+            expect(outcome.kind).toBe("aborted");
+            expect(ask).toHaveBeenCalledTimes(1);
+            expect(appStorage.get(USER_YAML_KEY)).toBe(LOCAL_YAML);
+            expect(listProfiles()).toEqual([]);
         });
 
         it("leaves what was typed alone when it does not parse", async () => {
@@ -556,22 +627,59 @@ todo:
             vi.stubGlobal("location", { origin: "https://trip.hsin19.com", pathname: "/", search: "", hash: "" });
             const link = `https://trip.hsin19.com/#s=${await encodeShareToken(CLOUD_YAML)}`;
             const outcome = await store.saveFromEditor(profileId, link);
-            expect(outcome.kind).toBe("imported");
+            expect(outcome.kind).toBe("landed");
             expect(appStorage.get(USER_YAML_KEY)).toContain("雲端行程");
             expect(listProfiles().map(p => p.name)).toEqual(["本機行程"]);
             expect(store.data?.trip.name).toBe("雲端行程");
         });
     });
 
+    describe("switchProfile", () => {
+        // What storage holds is what a sync record hashes; a pull stores the file's bytes as
+        // downloaded, and rewriting them on the way out would read as an edit nobody made.
+        it("parks the outgoing trip byte for byte when nothing on screen is unsaved", async () => {
+            appStorage.set(PROFILES_KEY, JSON.stringify([{ id: "p-other", yaml: CLOUD_YAML, savedAt: "2026-01-01T00:00:00.000Z" }]));
+
+            await store.switchProfile("p-other");
+
+            const parked = JSON.parse(appStorage.get(PROFILES_KEY) ?? "[]") as { id: string; yaml: string; }[];
+            expect(parked.find(p => p.id === profileId)?.yaml).toBe(LOCAL_YAML);
+        });
+    });
+
     describe("restoreBackup", () => {
-        it("puts a backed-up copy back and snapshots the one it replaces", async () => {
+        it("puts a backed-up copy back, byte for byte, and snapshots the one it replaces", async () => {
             backupCurrentYaml();
-            appStorage.set(USER_YAML_KEY, CLOUD_YAML);
+            const edited = LOCAL_YAML.replace("本機行程", "本機行程改");
+            appStorage.set(USER_YAML_KEY, edited);
+            store.data = validateYaml(edited);
             const savedAt = listYamlBackups()[0]?.savedAt ?? "";
             const outcome = await store.restoreBackup(profileId, savedAt);
             expect(outcome?.kind).toBe("landed");
+            expect(ensureActiveProfileId()).toBe(profileId);
             expect(appStorage.get(USER_YAML_KEY)).toBe(LOCAL_YAML);
-            expect(listYamlBackups()[0]?.yaml).toBe(CLOUD_YAML);
+            expect(listYamlBackups()[0]?.yaml).toBe(edited);
+        });
+
+        // The ring is shared by every trip on the device, so a backup can be another trip's.
+        it("brings another trip's backup back as a trip of its own, leaving the current one parked with its binding", async () => {
+            backupCurrentYaml();
+            appStorage.set(USER_YAML_KEY, CLOUD_YAML);
+            store.data = validateYaml(CLOUD_YAML);
+            gdriveSync.adoptCloudTrip(profileId, "file-cloud", CLOUD_YAML);
+            onTestFinished(() => {
+                gdriveSync.unbindTrip(profileId);
+            });
+            const savedAt = listYamlBackups()[0]?.savedAt ?? "";
+
+            const outcome = await store.restoreBackup(profileId, savedAt);
+
+            expect(outcome?.kind).toBe("landed");
+            expect(ensureActiveProfileId()).not.toBe(profileId);
+            expect(appStorage.get(USER_YAML_KEY)).toBe(LOCAL_YAML);
+            expect(listProfiles().map(p => p.name)).toEqual(["雲端行程"]);
+            expect(gdriveSync.cloudFileId(profileId)).toBe("file-cloud");
+            expect(gdriveSync.cloudFileId(ensureActiveProfileId())).toBeNull();
         });
 
         it("does nothing for an entry the ring no longer holds", async () => {
@@ -740,12 +848,23 @@ days:
 
         const outcome = await store.saveFromEditor(profileId, `#h=wxyz9876.${LINK.key}`);
 
-        expect(outcome.kind).toBe("imported");
+        expect(outcome.kind).toBe("landed");
         expect(appStorage.get(USER_YAML_KEY)).toContain("抵達車站");
         expect(tripOrigins.takenHash(profileId)).toBe(yamlFingerprint(serializeToYaml(validateYaml(sendersEdit))));
         expect(tripOrigins.linkFor(profileId)).toEqual({ id: "wxyz9876", key: LINK.key });
 
         await store.checkSharedTripForUpdates(() => {});
+        expect(store.sharedUpdate).toBeNull();
+    });
+
+    it("drops the offer once another trip takes the slot it was about", async () => {
+        await stubLinkPayload(received.replace("抵達機場", "抵達車站"));
+        tripOrigins.markShared(profileId, LINK, received);
+        await store.checkSharedTripForUpdates(() => {});
+        vi.stubGlobal("confirm", () => true);
+
+        await store.saveFromEditor(profileId, `#s=${await encodeShareToken(RECEIVED_YAML.replace("t-shared", "t-other"))}`);
+
         expect(store.sharedUpdate).toBeNull();
     });
 

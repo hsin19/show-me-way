@@ -38,6 +38,29 @@ test("設定：編輯 YAML 並儲存後套用新行程", async ({ page }) => {
     await expect(page).toHaveTitle("改版行程");
 });
 
+// 另一趟的 YAML（trip.id 不同）不能直接蓋掉目前這趟：它會繼承這趟的雲端檔與分享連結。
+test("設定：貼上另一趟行程的 YAML，確認後另存為新行程，原本那趟停放保留", async ({ page }) => {
+    await seedItinerary(page);
+    await page.goto("/");
+    const asked: string[] = [];
+    page.on("dialog", dialog => {
+        asked.push(dialog.message());
+        void dialog.accept();
+    });
+
+    await openSettings(page);
+    await page.getByLabel("行程資料 (YAML)").fill(EDITED_YAML.replace("id: t-fixture", "id: t-other"));
+    await page.getByRole("button", { name: "儲存並解析" }).click();
+
+    await expect(page.getByRole("status")).toContainText("已另存為新行程「改版行程」，原本的行程已保留");
+    await expect(page.getByRole("heading", { level: 2, name: "改版行程" })).toBeVisible();
+    expect(asked).toEqual([expect.stringContaining("和目前的行程不是同一趟")]);
+
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    await page.getByRole("button", { name: /目前行程/ }).click();
+    await expect(page.getByRole("button", { name: /測試行程.*切換/ })).toBeVisible();
+});
+
 test("備份還原：儲存後產生備份，還原回前一版行程", async ({ page }) => {
     await seedItinerary(page);
     await page.goto("/");

@@ -1,8 +1,9 @@
 // The active trip and everything that replaces it wholesale. Despite the name this is
 // mostly orchestration: profile switching, share-link landing, cloud pulls, backup
 // restore, AI edits. Every whole-document write of `showmeway_user_yaml` outside
-// `persist()` goes through `landYaml` — backup, confirm the slot is still active, write,
-// reload — and UI only mirrors the returned outcome. A new such write belongs here.
+// `persist()` is either an arriving trip handed to `placeTrip`, which picks its slot by
+// `trip.id`, or the slot's own trip updated through `landYaml` — backup, confirm the slot
+// is still active, write, reload — and UI only mirrors the returned outcome.
 
 import {
     clearShareHash,
@@ -14,6 +15,7 @@ import {
 } from "$lib/domain/share";
 import { buildDayReport } from "$lib/domain/timeline";
 import {
+    canonicalYaml,
     createChecklistItemId,
     type DayItinerary,
     genTripId,
@@ -36,23 +38,25 @@ import {
     createProfile,
     deleteProfile,
     ensureActiveProfileId,
+    getActiveProfileId,
     isActiveProfile,
     listProfiles,
     type ProfileInfo,
     switchToProfile,
     tripIdFromYaml,
+    tripNameFromYaml,
 } from "$lib/infra/storage/profiles";
-import {
-    canonicalYaml,
-    importSharedTrip,
-    type ShareImportOutcome,
-} from "$lib/infra/storage/share-import";
 import {
     backupCurrentYaml,
     getYamlBackup,
     saveTripData,
     USER_YAML_KEY,
 } from "$lib/infra/storage/yaml-storage";
+import {
+    type Placement,
+    type PlaceQuestion,
+    placeTrip,
+} from "$lib/services/place-trip";
 import { SvelteSet } from "svelte/reactivity";
 import {
     gdriveSync,
@@ -108,13 +112,51 @@ export interface SharedUpdate {
     localChanged: boolean;
 }
 
-/** What 儲存並解析 did with the editor's text. */
-export type EditorSaveOutcome =
-    | LandOutcome
-    /** A pasted share link landed as a trip of its own or over the copy already here; the editor should now show `yaml`. */
-    | { kind: "imported"; yaml: string; }
-    /** A pasted share link carried the version this device already holds; switched to it, wrote nothing. */
-    | { kind: "unchanged"; };
+/** The words a share link puts to `placeTrip`'s questions. */
+function askAboutLink(question: PlaceQuestion): boolean {
+    switch (question.kind) {
+        case "replace":
+            return confirm(`「${question.name}」你已經有這趟行程了。要用連結裡的版本覆蓋原本那份嗎？（可以復原）`);
+        case "copy":
+            return confirm("那要另外匯入成一份副本嗎？原本那份會保留。");
+        case "add":
+            return confirm("偵測到分享的行程，要匯入為新行程嗎？（目前行程會保留，可隨時切回）");
+    }
+}
+
+/**
+ * The editor's words. Its save button already answers the one question it would otherwise
+ * ask — replacing the trip on screen — so only a trip other than that one gets asked about.
+ */
+function askAboutEditorYaml(question: PlaceQuestion): boolean {
+    switch (question.kind) {
+        case "replace":
+            return question.active || confirm(`「${question.name}」是這台裝置上已存的另一趟行程。要用編輯器裡的內容覆蓋那份嗎？（可以復原）`);
+        case "copy":
+            return confirm("那要另存成一份副本嗎？原本那份會保留。");
+        case "add":
+            return confirm("這份 YAML 和目前的行程不是同一趟（trip.id 不同或沒有），要另存成新行程嗎？目前行程會保留，可隨時切回。要改的是目前這趟的話，請保留它原本的 trip.id。");
+    }
+}
+
+/**
+ * A Drive file's words. 確定載入 has already agreed to add it; only replacing a copy this
+ * device holds is left to ask — a file the 雲端行程 list offers is one nothing here is bound
+ * to, so a trip it matches is bound to another file and may carry edits that file lacks.
+ */
+function askAboutCloudFile(question: PlaceQuestion): boolean {
+    switch (question.kind) {
+        case "replace":
+            return confirm(`「${question.name}」你已經有這趟行程了。要用雲端的這份覆蓋原本那份嗎？（可以復原）`);
+        case "copy":
+            return confirm("那要另外載入成一份副本嗎？原本那份會保留。");
+        case "add":
+            return true;
+    }
+}
+
+/** A placement, or storage refused a write — no trip lost, though the active slot may have moved, so reload either way. */
+type PlaceOutcome = Placement | { kind: "failed"; };
 
 export class TripStore {
     data = $state<TripData | null>(null);
@@ -248,14 +290,11 @@ export class TripStore {
             this.sharedLinkLoading = false;
         }
 
-        try {
-            this.landSharedTrip(validateYaml(yaml), link);
-        } catch (err) {
-            console.error("Failed to import shared itinerary:", err);
-            showToast("分享連結內容無效，已略過");
-        } finally {
-            clearShareHash();
-        }
+        const outcome = this.landSharedTrip(yaml, link);
+        // Nothing stored the trip, so the address bar still holds the only copy of the key.
+        if (outcome.kind === "failed") return;
+        if (outcome.kind === "invalid") showToast("分享連結內容無效，已略過");
+        clearShareHash();
     }
 
     toggleChecklistItem(list: "todo" | "packing", id: string) {
@@ -638,8 +677,9 @@ export class TripStore {
 
     /**
      * 兩份都留 — the sender's version takes this slot, keeping its identity and its link, and
-     * what was here is parked as a trip of its own. The local copy is read out before the
-     * update overwrites it, and the branch happens only once the new version has landed.
+     * is parked there; what was here comes back as a trip of its own and is the one on
+     * screen. The local copy is read out before the update overwrites it, and the branch
+     * happens only once the new version has landed.
      */
     async keepBothOverSharedUpdate(): Promise<LandOutcome | null> {
         const localYaml = this.storedYaml();
@@ -784,7 +824,7 @@ export class TripStore {
             showToast("無法建立新行程，請稍後再試");
             return;
         }
-        if (!this.persist()) return;
+        if (!this.flushUnsaved()) return;
         try {
             createProfile(yaml);
         } catch (err) {
@@ -798,9 +838,7 @@ export class TripStore {
     }
 
     async switchProfile(id: string, onSuccess?: () => void) {
-        // No trip in memory means the active slot failed to load; it is parked as-is so the user can
-        // still switch to a trip that works and repair this one from the editor later.
-        if (this.data && !this.persist()) return;
+        if (!this.flushUnsaved()) return;
         try {
             switchToProfile(id);
         } catch (err) {
@@ -839,22 +877,36 @@ export class TripStore {
     }
 
     /**
-     * 載入為新行程 from the 雲端行程 list. In-memory edits are flushed before the outgoing trip
-     * is parked, so what gets parked is the trip the user was looking at rather than the last
-     * persisted copy. On invalid YAML the download is left in the editor's draft for repair.
+     * 載入 from the 雲端行程 list: the file is placed by its `trip.id` like any arrival. Only an
+     * addition that kept the file's identity is that file's trip and takes its binding and
+     * share link; a copy was split away from it, and a trip already here keeps the file it is
+     * bound to. Null when the download failed, which has already been toasted. On invalid
+     * YAML the download is left in the editor's draft for repair.
      */
     async loadCloudTrip(fileId: string, fileName: string): Promise<LandOutcome | null> {
-        const result = await gdriveSync.importCloudTripAsProfile(fileId, () => !this.data || this.persist());
-        if (!result) return null;
-        if (!result.ok) {
-            console.error("Cloud YAML validation failed:", result.error);
-            settingsDraft.yaml = result.yaml;
+        const pulled = await gdriveSync.loadTripYaml(fileId);
+        if (!pulled) return null;
+        const outcome = this.place(pulled.yaml, askAboutCloudFile, { verbatim: true });
+        if (outcome.kind === "invalid") {
+            console.error("Cloud YAML validation failed:", outcome.error);
+            settingsDraft.yaml = pulled.yaml;
             showToast("此雲端行程格式有誤，已載入編輯器，請修正後再儲存");
-            return { kind: "invalid", yaml: result.yaml, error: result.error };
+            return { kind: "invalid", yaml: pulled.yaml, error: outcome.error };
         }
+        if (outcome.kind === "declined") return { kind: "aborted" };
+        // The bytes just downloaded, not the cached listing's checksum: a stale entry would
+        // record an agreement matching no version and report a conflict nobody caused.
+        if (outcome.kind === "added" && !outcome.copy) gdriveSync.adoptCloudTrip(outcome.profileId, fileId, pulled.yaml, pulled.md5, pulled.shareLink);
         await this.load();
-        showToast(`已從 Google Drive 載入「${fileName}」為新行程`);
-        return { kind: "landed", yaml: result.yaml };
+        if (outcome.kind === "failed") return { kind: "aborted" };
+        showToast(
+            outcome.kind === "added"
+                ? `已從 Google Drive 載入「${fileName}」為新行程`
+                : outcome.kind === "replaced"
+                ? `已用 Google Drive 上的「${fileName}」更新行程，可在行程管理還原前一版`
+                : "這趟行程已經是雲端上的版本",
+        );
+        return { kind: "landed", yaml: outcome.kind === "unchanged" ? this.storedYaml() ?? pulled.yaml : outcome.yaml };
     }
 
     async deleteCloudTrip(fileId: string) {
@@ -881,86 +933,118 @@ export class TripStore {
     }
 
     /**
-     * Validate `yaml`, write it into `profileId`'s slot and reload. Re-checks that the slot is
-     * still the active one right before writing: callers reach here across awaits, and a
-     * profile switch in that gap must not land bytes meant for the previous trip.
-     *
-     * `canonical` stores the re-serialized form rather than the bytes given. That is what
-     * the editor's own saves want, and it is load-bearing for anything about to be uploaded:
-     * a hand-written trip has no `trip.id` until `normalizeTripData` mints one, and raw bytes
-     * on Drive would carry no identity for `reconcileBindings` to match. A cloud pull keeps
-     * the bytes as downloaded, so what is stored is what the sync record hashes.
+     * Validate `yaml`, write it into `profileId`'s slot and reload — the slot's own trip, updated
+     * in place, as a cloud pull or a taken update is; an arriving trip goes to `placeTrip`
+     * instead. Re-checks that the slot is still the active one right before writing: callers
+     * reach here across awaits, and a profile switch in that gap must not land bytes meant for
+     * the previous trip. Stores the bytes as given, so what is stored is what a sync record
+     * hashes.
      */
-    async landYaml(profileId: string, yaml: string, { canonical = false } = {}): Promise<LandOutcome> {
-        let parsed: TripData;
+    async landYaml(profileId: string, yaml: string): Promise<LandOutcome> {
         try {
-            parsed = validateYaml(yaml);
+            validateYaml(yaml);
         } catch (err) {
             console.error("YAML validation failed:", err);
             return { kind: "invalid", yaml, error: err instanceof Error ? err.message : "YAML 格式錯誤，請檢查縮排！" };
         }
-        const stored = canonical ? serializeToYaml(parsed) : yaml;
-        if (!this.guardActive(profileId) || !this.writeUserYaml(stored)) return { kind: "aborted" };
+        if (!this.guardActive(profileId) || !this.writeUserYaml(yaml)) return { kind: "aborted" };
         await this.load();
-        return { kind: "landed", yaml: stored };
+        return { kind: "landed", yaml };
     }
 
     /**
-     * 儲存並解析 — the editor's save, which is also the import path for a pasted share link. A
-     * link is a whole trip with its own identity, not new contents for this slot, so it takes
-     * the same branching as the `#s=`/`#h=` hash instead of being written over the active
-     * trip — which would leave it wearing this trip's Drive binding.
+     * 儲存並解析 — typed YAML and a pasted share link alike: each is a whole trip with an
+     * identity of its own, so both are placed by `trip.id` instead of being written over the
+     * active trip, which would leave another trip wearing this one's Drive binding. `landed`
+     * reports what the slot the trip is now in holds, which may not be `profileId`'s.
      */
-    async saveFromEditor(profileId: string, text: string): Promise<EditorSaveOutcome> {
+    async saveFromEditor(profileId: string, text: string): Promise<LandOutcome> {
         const link = parseShareLink(text);
-        if (!link) {
-            const outcome = await this.landYaml(profileId, text, { canonical: true });
-            if (outcome.kind === "landed") {
-                this.notePendingPublish(profileId, { explicit: true });
-                showToast("自訂 YAML 行程儲存成功！");
+        let yaml = text;
+        if (link) {
+            try {
+                yaml = await resolveShareLink(link);
+            } catch (err) {
+                console.error("Share link import failed:", err);
+                return { kind: "invalid", yaml: text, error: err instanceof Error ? err.message : "分享連結內容無效" };
             }
-            return outcome;
-        }
-        let parsed: TripData;
-        try {
-            parsed = validateYaml(await resolveShareLink(link));
-        } catch (err) {
-            console.error("Share link import failed:", err);
-            return { kind: "invalid", yaml: text, error: err instanceof Error ? err.message : "分享連結內容無效" };
         }
         if (!this.guardActive(profileId)) return { kind: "aborted" };
-        const outcome = this.landSharedTrip(parsed, link);
+        const outcome = link ? this.landSharedTrip(yaml, link) : this.landEditorYaml(yaml);
+        if (outcome.kind === "invalid") return { kind: "invalid", yaml: text, error: outcome.error };
         if (outcome.kind === "declined") return { kind: "aborted" };
         await this.load();
-        if (outcome.kind === "unchanged") return outcome;
-        // `outcome.profileId`, never `profileId`: an import moves the active slot.
-        this.notePendingPublish(outcome.profileId, { explicit: true });
-        return { kind: "imported", yaml: outcome.yaml };
+        if (outcome.kind === "failed") return { kind: "aborted" };
+        return { kind: "landed", yaml: outcome.kind === "unchanged" ? this.storedYaml() ?? yaml : outcome.yaml };
+    }
+
+    private landEditorYaml(yaml: string): PlaceOutcome {
+        const outcome = this.place(yaml, askAboutEditorYaml);
+        if (outcome.kind === "added") showToast(`已另存為新行程「${tripNameFromYaml(outcome.yaml)}」，原本的行程已保留`);
+        else if (outcome.kind === "replaced" || outcome.kind === "unchanged") showToast("自訂 YAML 行程儲存成功！");
+        return outcome;
     }
 
     /**
-     * Runs `importSharedTrip` and says what it did. The launch hash and a pasted link both
-     * come through here, so they cannot drift on the wording — or on which imports get
+     * Writes the trip on screen back to its slot when storage missed its last edit, so what
+     * gets parked or replaced is the trip the user was looking at. False when that write
+     * fails too, and nothing should move. A no-op in the usual case, where every edit has
+     * already been persisted: re-serializing then would rewrite bytes a sync record hashes,
+     * which reads as an edit nobody made. A slot that failed to load has nothing on screen
+     * and is parked as stored, so the user can switch to a trip that works and repair this
+     * one from the editor later.
+     */
+    private flushUnsaved(): boolean {
+        const stored = this.storedYaml();
+        if (!this.data || stored === null || canonicalYaml(stored) === serializeToYaml(this.data)) return true;
+        return this.persist();
+    }
+
+    /**
+     * `placeTrip`, plus what every arrival owes the rest of this store: offers about the
+     * outgoing trip go, and a written trip is due wherever its slot is published. The caller
+     * reloads unless the outcome is `declined` or `invalid`, and keys anything by trip on the
+     * `profileId` reported here.
+     */
+    private place(yaml: string, ask: (question: PlaceQuestion) => boolean, options?: { verbatim?: boolean; }): PlaceOutcome {
+        const outgoing = getActiveProfileId();
+        if (!this.flushUnsaved()) return { kind: "failed" };
+        let outcome: Placement;
+        try {
+            outcome = placeTrip(yaml, ask, options);
+        } catch (err) {
+            console.error("Failed to place trip:", err);
+            showToast("儲存失敗，請稍後再試");
+            return { kind: "failed" };
+        }
+        if (outcome.kind === "declined" || outcome.kind === "invalid") return outcome;
+        // A standing offer from a link was measured against what this slot held before.
+        this.clearSharedUpdate();
+        if (outcome.profileId !== outgoing) this.clearSyncPrompts();
+        if (outcome.kind !== "unchanged") this.notePendingPublish(outcome.profileId, { explicit: true });
+        return outcome;
+    }
+
+    /**
+     * Places a resolved share link and says what it did. The launch hash and a pasted link
+     * both come through here, so they cannot drift on the wording — or on which imports get
      * marked as someone else's and watched for updates.
      *
-     * Only a copy that kept the link's own `trip.id` is that link's trip. One the import
-     * had to re-identify was split away from it deliberately, and watching the link from
-     * there would offer to overwrite the fork with the original.
+     * Only an addition that kept the link's own `trip.id` is that link's trip. A copy was
+     * split away from it deliberately, and watching the link from there would offer to
+     * overwrite the fork with the original.
      */
-    private landSharedTrip(parsed: TripData, link: ShareLink): ShareImportOutcome {
-        const incomingId = parsed.trip.id;
+    private landSharedTrip(yaml: string, link: ShareLink): PlaceOutcome {
         const credentials = link.kind === "short" ? { id: link.id, key: link.key } : null;
-        const outcome = importSharedTrip(parsed);
-        if (outcome.kind === "overwritten") {
+        const outcome = this.place(yaml, askAboutLink);
+        if (outcome.kind === "replaced") {
             // The reopened link is now the version this slot has taken. Without this the
             // next background check would find the very bytes just landed "newer" than what
             // was recorded, and raise a divergence nobody caused.
             tripOrigins.recordTaken(outcome.profileId, outcome.yaml, credentials ?? undefined);
             showToast("已用分享連結更新行程，可在行程管理還原前一版");
-        } else if (outcome.kind === "imported") {
-            if (tripIdFromYaml(outcome.yaml) === incomingId) {
-                tripOrigins.markShared(outcome.profileId, credentials, outcome.yaml);
-            }
+        } else if (outcome.kind === "added") {
+            if (!outcome.copy) tripOrigins.markShared(outcome.profileId, credentials, outcome.yaml);
             showToast("已匯入分享的行程");
         } else if (outcome.kind === "unchanged") showToast("這趟行程已經是連結裡的版本");
         return outcome;
@@ -988,10 +1072,11 @@ export class TripStore {
 
     /**
      * 兩份都留 — the conflict resolution that discards neither side. The cloud copy takes this
-     * trip's slot, keeping its id and Drive binding, and what was here is parked as a trip of
-     * its own. The local YAML is read out before the pull overwrites it, and the branch happens
-     * only once the cloud bytes have actually landed — a pull that failed validation, or a trip
-     * switched out from under the round trip, must leave one copy rather than fork off a second.
+     * trip's slot, keeping its id and Drive binding, and is parked there; what was here comes
+     * back as a trip of its own and is the one on screen. The local YAML is read out before
+     * the pull overwrites it, and the branch happens only once the cloud bytes have actually
+     * landed — a pull that failed validation, or a trip switched out from under the round
+     * trip, must leave one copy rather than fork off a second.
      */
     async keepBothVersions(profileId: string, yaml: string): Promise<LandOutcome | null> {
         const localYaml = appStorage.get(USER_YAML_KEY);
@@ -1024,8 +1109,13 @@ export class TripStore {
     }
 
     /**
-     * 還原備份. The entry is read out before anything is written, or a full ring could evict the
-     * very backup being restored; validation runs before the pre-restore snapshot, so a failed
+     * 還原備份. The ring holds every trip's backups, so a backup is placed by its `trip.id` like
+     * any arrival: its own trip goes back to that version wherever it is parked, and a trip no
+     * longer on this device comes back as one of its own — never written over whichever trip
+     * happens to be active. 確定還原 has already answered every question placing could ask.
+     *
+     * The entry is read out before anything is written, or a full ring could evict the very
+     * backup being restored; validation runs before the pre-restore snapshot, so a failed
      * restore leaves the ring untouched and the bad copy in the editor's draft instead.
      */
     async restoreBackup(profileId: string, savedAt: string): Promise<LandOutcome | null> {
@@ -1034,13 +1124,18 @@ export class TripStore {
             showToast("找不到此備份");
             return null;
         }
-        const outcome = await this.landYaml(profileId, yaml);
-        if (outcome.kind === "landed") showToast("已還原備份的行程");
-        else if (outcome.kind === "invalid") {
+        if (!this.guardActive(profileId)) return { kind: "aborted" };
+        const outcome = this.place(yaml, () => true, { verbatim: true });
+        if (outcome.kind === "invalid") {
             settingsDraft.yaml = yaml;
             showToast("此備份內容無效，已載入編輯器，請修正後再儲存");
+            return { kind: "invalid", yaml, error: outcome.error };
         }
-        return outcome;
+        if (outcome.kind === "declined") return { kind: "aborted" };
+        await this.load();
+        if (outcome.kind === "failed") return { kind: "aborted" };
+        showToast(outcome.kind === "added" ? `已將備份還原為新行程「${tripNameFromYaml(outcome.yaml)}」，原本的行程已保留` : "已還原備份的行程");
+        return { kind: "landed", yaml: outcome.kind === "unchanged" ? this.storedYaml() ?? yaml : outcome.yaml };
     }
 
     /** 回復預設行程: drop the active slot's YAML so the bundled template loads. False when nothing changed. */

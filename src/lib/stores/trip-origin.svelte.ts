@@ -6,7 +6,7 @@
 // Only a trip that landed in a slot of its own, keeping the link's own identity, is
 // marked. Reopening a persistent link for a trip this device already holds is taking an
 // update to your own trip rather than being handed someone else's, and a copy that had to
-// be re-identified (`ensureUniqueTripId`) deliberately forked away from the link.
+// be re-identified to sit beside it (`placeTrip`'s `copy`) deliberately forked away from the link.
 //
 // The record holds the link's id next to its key, which is what lets a background check
 // ask the sender for a newer version without the URL being reopened. The privacy rule is

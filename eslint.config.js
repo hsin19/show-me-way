@@ -99,6 +99,23 @@ export default defineConfig(
         },
     },
     {
+        // Re-lists "../*": a later block's no-restricted-imports replaces the earlier one whole.
+        files: ["src/lib/services/**/*.{ts,js}"],
+        rules: {
+            "no-restricted-imports": [
+                "error",
+                {
+                    patterns: [
+                        {
+                            group: ["../*", "$lib/stores", "$lib/stores/*", "$lib/ui", "$lib/ui/*"],
+                            message: "services/ is plain TypeScript below the stores; it must not depend on $lib/stores or $lib/ui.",
+                        },
+                    ],
+                },
+            ],
+        },
+    },
+    {
         files: ["src/**/*.{ts,svelte}"],
         ignores: ["src/lib/infra/storage/app-storage.ts", "src/lib/infra/storage/storage-admin.ts", "src/**/*.test.ts", "src/lib/testing/**"],
         rules: {
