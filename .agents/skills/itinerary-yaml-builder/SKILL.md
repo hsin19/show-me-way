@@ -11,7 +11,7 @@ Convert messy trip notes into a schema-valid `public/itinerary.local.yaml` for t
 
 ## Workflow
 
-1. **Ask for the output path first.** Inquire where the user wants to save the generated YAML file. Suggest `public/itinerary.local.yaml` as the default destination, but allow them to specify a custom target path (e.g. in `Downloads/` or another local path).
+1. **Ask for the output path first.** Inquire where the user wants to save the generated YAML file. Suggest `public/itinerary.local.yaml` as the default destination, but allow them to specify a custom target path (e.g. in `Downloads/` or another local path). If `public/itinerary.local.yaml` is a symlink, `pnpm run trip:sync checkout` made it: it is the working copy of the trip checked out there, so use it only to edit that trip, write to its target in place rather than replacing the file, and draft a new trip at another path.
 2. **Read existing data if applicable.** If the target output file already exists, read it. Decide with the user whether you are **merging** into the current trip or **replacing** it. Never silently discard existing days/hotels.
 3. **Extract structured facts from the notes.** Pull out: trip name, hotels, and a per-day timeline (each day carries its own `date`). Trip start/end dates and the countdown target are derived from those dates — do not record them separately. Ask the user only for missing fields that are *required* (see below) and cannot be inferred. Don't over-ask — infer sensible values for optional fields.
 4. **Normalize.** Apply the conventions below (dates, ids, event `type`, time ranges, `localName`/`mapLink`).

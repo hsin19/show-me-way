@@ -1,3 +1,4 @@
+import { itinerarySchema } from "$lib/domain/trip-schema";
 import { toJsonSchema } from "@valibot/to-json-schema";
 import {
     readFileSync,
@@ -5,7 +6,6 @@ import {
 } from "node:fs";
 import { resolve } from "node:path";
 import type { MetadataAction } from "valibot";
-import { itinerarySchema } from "../src/lib/domain/trip-schema.ts";
 
 /*
  * Writes `schema/showmeway-schema.json` from `itinerarySchema` so the editor
@@ -13,8 +13,8 @@ import { itinerarySchema } from "../src/lib/domain/trip-schema.ts";
  * the app never reads it, and editors fetch it from GitHub raw (see `SCHEMA_LINE`
  * in `trip.ts`), so shipping it with the site would only add a dead asset. `--check` (CI, `pnpm run ci`) only
  * compares and fails when the file is stale; `pnpm run check` and the
- * pre-commit hook regenerate it. Run with plain `node`: Node 24 strips types
- * natively, which is why the relative import carries its `.ts` extension.
+ * pre-commit hook regenerate it. It runs on plain `node` (Node 24 strips types);
+ * the `$lib` import resolves through `resolve-hooks.ts`, which the package scripts preload.
  */
 
 const OUTPUT = resolve(import.meta.dirname, "../schema/showmeway-schema.json");

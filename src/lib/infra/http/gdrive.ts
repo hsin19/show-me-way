@@ -4,7 +4,11 @@ const GDRIVE_FOLDER_ID_STORAGE = "showmeway_gdrive_folder_id";
 export const GDRIVE_TRIPS_STORAGE = "showmeway_gdrive_trips";
 
 import { yamlFingerprint } from "$lib/domain/utils";
-import { tripStartDateFromYaml } from "$lib/infra/storage/profiles";
+import {
+    tripIdFromYaml,
+    tripNameFromYaml,
+    tripStartDateFromYaml,
+} from "$lib/infra/storage/profiles";
 import {
     decodeShareLinkProperties,
     encodeShareLinkProperties,
@@ -326,6 +330,32 @@ export function buildRebindRecord(
 }
 
 /**
+ * The record for a copy both sides hold right now — just sent, just received, or proven
+ * equal through `contentHash` — so one fingerprint stands for both memories. Recording it
+ * on anything weaker claims an agreement that never happened.
+ */
+export function agreedRecord(fileId: string, yaml: string, remoteMd5?: string): TripSyncRecord {
+    const hash = yamlFingerprint(yaml);
+    return { fileId, remoteMd5, localHash: hash, remoteHash: hash };
+}
+
+/**
+ * The Drive file each trip id would be rebound to, among the files no record names yet —
+ * the matching half of a rebind, before a caller pairs it with the trips it holds.
+ */
+export function rebindCandidates(files: CloudTripFile[], boundFileIds: string[]): Record<string, CloudTripFile> {
+    const byTripId: Record<string, CloudTripFile> = {};
+    for (const file of files) {
+        // Newest wins: `listCloudTrips` orders by modifiedTime, and duplicates sharing
+        // one trip id are exactly what the missing rebind used to produce.
+        if (file.tripId && !boundFileIds.includes(file.id) && !byTripId[file.tripId]) {
+            byTripId[file.tripId] = file;
+        }
+    }
+    return byTripId;
+}
+
+/**
  * Throws on a non-ok Drive response, dropping the cached token when Google rejected it.
  *
  * 401 only, deliberately: a Drive 403 is usually `rateLimitExceeded`, and clearing a
@@ -609,7 +639,7 @@ export async function fetchCloudTripMeta(token: string, fileId: string): Promise
     const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
     });
-    // 404 is the "remote copy is gone" signal smartSyncTrip re-creates from.
+    // 404 is the "remote copy is gone" signal `planCloudSync` re-creates the file from.
     if (res.status === 404) return null;
     assertDriveOk(res, "無法讀取雲端檔案資訊");
     const f = await res.json() as RawDriveFile;
@@ -791,6 +821,105 @@ export async function downloadCloudTripYaml(token: string, fileId: string): Prom
     assertDriveOk(res, "無法下載 Google Drive 檔案");
 
     return await res.text();
+}
+
+/**
+ * A Drive copy together with its metadata, for adopting a file nothing is bound to yet. The
+ * metadata may be older than the bytes, never newer.
+ */
+export async function fetchCloudTrip(token: string, fileId: string): Promise<{ yaml: string; remoteFile: CloudTripFile | null; }> {
+    // Metadata first, not in parallel: a write landing in between then pairs new bytes with
+    // an older md5, which at worst raises a pull or a conflict nobody needed. The other way
+    // round pairs old bytes with the new md5, and the record would call that write taken.
+    const remoteFile = await fetchCloudTripMeta(token, fileId);
+    const yaml = await downloadCloudTripYaml(token, fileId);
+    return { yaml, remoteFile };
+}
+
+/** What one sync of one trip found, with the transfer it implies left for the caller to run. */
+export type CloudSyncPlan =
+    | { decision: "push"; remoteFile: CloudTripFile | null; push: (shareLink: ShareLinkRecord | undefined) => Promise<{ file: CloudTripFile; record: TripSyncRecord; }>; }
+    | { decision: "pull"; remoteFile: CloudTripFile; pull: () => Promise<{ yaml: string; record: TripSyncRecord; }>; }
+    | { decision: "conflict"; remoteFile: CloudTripFile; }
+    | { decision: "up_to_date"; remoteFile: CloudTripFile; settled: TripSyncRecord | null; };
+
+/**
+ * Reads a trip's Drive copy live and decides the direction against `record`. Nothing
+ * transfers here: `push` and `pull` are thunks for the caller to run on the user's tap,
+ * and the records they hand back are the caller's to store — a pulled one only after the
+ * bytes have landed on its side.
+ *
+ * `force` is the user's answer to a conflict and replaces the decision. Null when a
+ * decision other than `push` has no live remote behind it, which only a forced pull of
+ * an unbound or deleted file reaches — so without `"remote"` there is always a plan.
+ */
+export function planCloudSync(token: string, record: TripSyncRecord | null, localYaml: string, force?: "local"): Promise<CloudSyncPlan>;
+/** As above; null only for a forced pull with no live remote. */
+export function planCloudSync(token: string, record: TripSyncRecord | null, localYaml: string, force?: "local" | "remote"): Promise<CloudSyncPlan | null>;
+export async function planCloudSync(
+    token: string,
+    record: TripSyncRecord | null,
+    localYaml: string,
+    force?: "local" | "remote",
+): Promise<CloudSyncPlan | null> {
+    const remoteFile = record ? await fetchCloudTripMeta(token, record.fileId) : null;
+    const decision = force === "local"
+        ? "push"
+        : force === "remote"
+        ? "pull"
+        : decideSyncAction({
+            record,
+            remoteExists: !!remoteFile,
+            remoteMd5: remoteFile?.md5Checksum ?? null,
+            remoteHash: remoteFile?.contentHash ?? null,
+            localHash: yamlFingerprint(localYaml),
+        });
+
+    if (decision === "push") {
+        return {
+            decision,
+            remoteFile,
+            push: async shareLink => {
+                const file = await uploadOrUpdateCloudTrip(token, tripNameFromYaml(localYaml), localYaml, {
+                    // A record whose Drive copy is gone has to create a new file rather than
+                    // PATCH the id that just answered 404.
+                    fileId: remoteFile?.id,
+                    // The trip's own id out of the YAML: it is what another device, or this
+                    // one after losing its local state, recognises the file by.
+                    tripId: tripIdFromYaml(localYaml) ?? undefined,
+                    shareLink,
+                });
+                // Fingerprinted from the bytes actually sent, not from whatever the editor
+                // holds by now: a save that landed mid-upload is not in `localYaml`, and
+                // recording the current content would mark that edit as sent.
+                return { file, record: agreedRecord(file.id, localYaml, file.md5Checksum) };
+            },
+        };
+    }
+
+    if (!record || !remoteFile) return null;
+    if (decision === "pull") {
+        return {
+            decision,
+            remoteFile,
+            pull: async () => {
+                const yaml = await downloadCloudTripYaml(token, record.fileId);
+                return { yaml, record: agreedRecord(record.fileId, yaml, remoteFile.md5Checksum) };
+            },
+        };
+    }
+    if (decision === "conflict") return { decision, remoteFile };
+
+    // Both sides having moved to the same content decides as up_to_date, but leaves the
+    // recorded base naming the copies they moved away from — the next real edit would
+    // then read as "both changed" and raise a conflict nobody caused. Re-recorded only on
+    // proven content equality: up_to_date is also reached with the remote's movement
+    // unknowable, and stamping an unverified base there is exactly what the checksums
+    // exist to prevent.
+    const settled = remoteFile.contentHash && remoteFile.contentHash === yamlFingerprint(localYaml)
+        ? agreedRecord(record.fileId, localYaml, remoteFile.md5Checksum)
+        : null;
+    return { decision, remoteFile, settled };
 }
 
 /** Delete a file in Google Drive */

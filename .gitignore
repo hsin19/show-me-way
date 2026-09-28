@@ -39,3 +39,7 @@ e2e/test-results
 *.njsproj
 *.sln
 *.sw?
+
+# `pnpm run trip:sync` working copies, sync records and backups. public/itinerary.local.yaml
+# may be a symlink into it, and a dangling one fails `vite build`, so delete the two together.
+.trip-sync/

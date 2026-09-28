@@ -1,6 +1,8 @@
-// Google Drive sync for one trip at a time, on top of the pure decisions in
-// infra/http/gdrive.ts (`decideSyncAction` for direction, `buildRebindRecord` for a file
-// found without a binding). The mental model, in the order things go wrong:
+// Google Drive sync for one trip at a time, on top of infra/http/gdrive.ts: the pure
+// decisions (`decideSyncAction` for direction, `buildRebindRecord` for a file found
+// without a binding) and `planCloudSync`, which reads a trip's remote and hands back the
+// transfer it implies. What lives here is the device's side — the records, the conflicts
+// awaiting the user, the toasts. The mental model, in the order things go wrong:
 //
 // - The trip → file binding in `showmeway_gdrive_trips` is a rebuildable cache, not a
 //   record of truth: `reconcileBindings` re-derives a lost one after every listing from
@@ -25,14 +27,14 @@ import {
 } from "$lib/domain/trip";
 import { yamlFingerprint } from "$lib/domain/utils";
 import {
+    agreedRecord,
     buildRebindRecord,
     clearCachedAccessToken,
     clearGdriveUser,
     type CloudTripFile,
     decideSyncAction,
     deleteCloudTrip,
-    downloadCloudTripYaml,
-    fetchCloudTripMeta,
+    fetchCloudTrip,
     fetchGoogleUserInfo,
     getCachedAccessToken,
     getGdriveClientId,
@@ -41,20 +43,20 @@ import {
     listCloudTrips,
     loadGdriveUser,
     loadTripSyncMap,
+    planCloudSync,
+    rebindCandidates,
     requestGoogleAccessToken,
     saveGdriveUser,
     saveTripSyncMap,
     type TripSyncMap,
     type TripSyncRecord,
     updateCloudShareLink,
-    uploadOrUpdateCloudTrip,
 } from "$lib/infra/http/gdrive";
 import {
     createProfile,
     ensureUniqueTripId,
     listLocalTrips,
     tripIdFromYaml,
-    tripNameFromYaml,
 } from "$lib/infra/storage/profiles";
 import type { ShareLinkRecord } from "$lib/infra/storage/share-links";
 import { SvelteSet } from "svelte/reactivity";
@@ -207,13 +209,14 @@ class GDriveSyncState {
     /**
      * Adopts a Drive file as this trip's cloud copy, recording the downloaded bytes as
      * what both sides now agree on. The caller must have persisted `yaml` first.
-     *
-     * `yaml` is the agreed content on both sides — every caller either just sent those
-     * bytes or just received them — so one fingerprint stands for both memories.
      */
     adoptCloudTrip(tripId: string, fileId: string, yaml: string, remoteMd5?: string) {
-        const hash = yamlFingerprint(yaml);
-        this.writeRecord(tripId, { fileId, remoteMd5, localHash: hash, remoteHash: hash });
+        this.adopt(tripId, agreedRecord(fileId, yaml, remoteMd5));
+    }
+
+    /** Stores an agreement both sides hold, which is also what settles any conflict on the trip. */
+    private adopt(tripId: string, record: TripSyncRecord) {
+        this.writeRecord(tripId, record);
         delete this.conflicts[tripId];
     }
 
@@ -503,15 +506,7 @@ class GDriveSyncState {
             return;
         }
 
-        const boundFileIds = Object.values(this.trips).map(record => record.fileId);
-        const byTripId: Record<string, CloudTripFile> = {};
-        for (const file of files) {
-            // Newest wins: `listCloudTrips` orders by modifiedTime, and duplicates sharing
-            // one trip id are exactly what the missing rebind used to produce.
-            if (file.tripId && !boundFileIds.includes(file.id) && !byTripId[file.tripId]) {
-                byTripId[file.tripId] = file;
-            }
-        }
+        const byTripId = rebindCandidates(files, Object.values(this.trips).map(record => record.fileId));
         if (Object.keys(byTripId).length === 0) return;
 
         for (const { profileId, yaml } of listLocalTrips()) {
@@ -527,32 +522,6 @@ class GDriveSyncState {
             this.writeRecord(profileId, buildRebindRecord(file, yamlFingerprint(yaml)));
             this.absorbShareLink(profileId, file);
         }
-    }
-
-    /** Uploads `yaml` and records it as what both sides now agree on. */
-    private async push(
-        token: string,
-        tripName: string,
-        yaml: string,
-        tripId: string,
-        fileId: string | null,
-    ): Promise<CloudTripFile> {
-        const res = await uploadOrUpdateCloudTrip(token, tripName, yaml, {
-            fileId: fileId ?? undefined,
-            // The trip's own id out of the YAML, not `tripId` — that one names a local
-            // profile slot and means nothing on another device, which is what made the
-            // appProperty useless for recognising a trip after the local state was lost.
-            tripId: tripIdFromYaml(yaml) ?? undefined,
-            // Undefined, not null, when this device holds no link: absence means "leave
-            // whatever the file carries" — only a revoke clears it. The properties are
-            // metadata, so nothing here reaches the YAML a recipient decrypts.
-            shareLink: shareLinks.forTrip(tripId) ?? undefined,
-        });
-        // Fingerprinted from the bytes actually sent, not from whatever the editor holds
-        // now: a save that landed mid-upload is not in `yaml`, and recording the current
-        // content would mark that edit as sent and let the next sync drop it.
-        this.adoptCloudTrip(tripId, res.id, yaml, res.md5Checksum);
-        return res;
     }
 
     /**
@@ -618,46 +587,38 @@ class GDriveSyncState {
                 if (this.pendingTransfer?.tripId === tripId) this.pendingTransfer = null;
                 try {
                     const token = await this.getValidToken(interactive ? "interactive" : "cache-only");
-                    const record = this.trips[tripId] ?? null;
-                    const remoteFile = record ? await fetchCloudTripMeta(token, record.fileId) : null;
-                    if (remoteFile) this.absorbShareLink(tripId, remoteFile);
+                    const plan = await planCloudSync(token, this.trips[tripId] ?? null, localYaml, options.force);
+                    // Every decision other than push comes from a live remote; a forced pull with none has nothing to take.
+                    if (!plan) return null;
+                    if (plan.remoteFile) this.absorbShareLink(tripId, plan.remoteFile);
 
-                    const decision = options.force === "local"
-                        ? "push"
-                        : options.force === "remote"
-                        ? "pull"
-                        : decideSyncAction({
-                            record,
-                            remoteExists: !!remoteFile,
-                            remoteMd5: remoteFile?.md5Checksum ?? null,
-                            remoteHash: remoteFile?.contentHash ?? null,
-                            localHash: yamlFingerprint(localYaml),
-                        });
-
-                    if (decision === "push") {
+                    if (plan.decision === "push") {
                         if (options.checkOnly) {
                             this.pendingTransfer = { tripId, direction: "push" };
                             if (interactive) {
                                 showToast(
-                                    remoteFile
-                                        ? `雲端「${remoteFile.name}」落後於本機，可以上傳更新`
+                                    plan.remoteFile
+                                        ? `雲端「${plan.remoteFile.name}」落後於本機，可以上傳更新`
                                         : "雲端還沒有這趟行程的備份，可以上傳建立",
                                 );
                             }
-                            return { action: "push_ready", file: remoteFile ?? undefined };
+                            return { action: "push_ready", file: plan.remoteFile ?? undefined };
                         }
                         this.syncPhase = "pushing";
-                        // A record whose Drive copy is gone has to create a new file rather than
-                        // PATCH the id that just answered 404.
-                        const targetFileId = remoteFile && record ? record.fileId : null;
-                        const res = await this.push(token, tripNameFromYaml(localYaml), localYaml, tripId, targetFileId);
+                        // Undefined, not null, when this device holds no link: absence means "leave
+                        // whatever the file carries" — only a revoke clears it. The properties are
+                        // metadata, so nothing here reaches the YAML a recipient decrypts. Read
+                        // after `absorbShareLink`, so a link the file just taught this device rides along.
+                        const pushed = await plan.push(shareLinks.forTrip(tripId) ?? undefined);
+                        this.adopt(tripId, pushed.record);
+                        const res = pushed.file;
                         if (interactive) {
                             // A forced push is the user resolving a conflict, so say what it cost
                             // rather than reporting it as a routine sync.
                             showToast(
                                 options.force === "local"
                                     ? `已以本機版本覆蓋雲端「${res.name}」`
-                                    : targetFileId
+                                    : plan.remoteFile
                                     ? `已同步「${res.name}」到 Google Drive`
                                     : `已建立雲端備份「${res.name}」`,
                             );
@@ -666,10 +627,8 @@ class GDriveSyncState {
                         return { action: "pushed", file: res };
                     }
 
-                    // Every remaining decision came from a live remote, which is what produced it.
-                    if (!record || !remoteFile) return null;
-
-                    if (decision === "pull") {
+                    const { remoteFile } = plan;
+                    if (plan.decision === "pull") {
                         if (options.checkOnly) {
                             // Arm the button's own "下載" tap rather than swapping the trip out
                             // from under a user who only asked to check.
@@ -684,21 +643,21 @@ class GDriveSyncState {
                             return { action: "conflict", file: remoteFile };
                         }
                         this.syncPhase = "pulling";
-                        const yaml = await downloadCloudTripYaml(token, record.fileId);
+                        const pulled = await plan.pull();
                         // Recording — and announcing — the download is the caller's to
                         // trigger once it has actually persisted these bytes.
                         return {
                             action: "pulled",
-                            yaml,
+                            yaml: pulled.yaml,
                             file: remoteFile,
                             commit: () => {
-                                this.adoptCloudTrip(tripId, record.fileId, yaml, remoteFile.md5Checksum);
+                                this.adopt(tripId, pulled.record);
                                 showToast(`已載入雲端版本「${remoteFile.name}」`);
                             },
                         };
                     }
 
-                    if (decision === "conflict") {
+                    if (plan.decision === "conflict") {
                         // Deliberately changes nothing: re-binding or overwriting here would
                         // abandon whichever copy the user has not seen yet.
                         this.conflicts[tripId] = { tripId, fileName: remoteFile.name, kind: "both-changed" };
@@ -708,15 +667,7 @@ class GDriveSyncState {
                         return { action: "conflict", file: remoteFile };
                     }
 
-                    // Both sides having moved to the same content decides as up_to_date, but
-                    // leaves the recorded base naming the copies they moved away from — the
-                    // next real edit would then read as "both changed" and raise a conflict
-                    // nobody caused. Re-recorded only on proven content equality: up_to_date
-                    // is also reached with the remote's movement unknowable, and stamping an
-                    // unverified base there is exactly what the checksums exist to prevent.
-                    if (remoteFile.contentHash && remoteFile.contentHash === yamlFingerprint(localYaml)) {
-                        this.adoptCloudTrip(tripId, record.fileId, localYaml, remoteFile.md5Checksum);
-                    }
+                    if (plan.settled) this.adopt(tripId, plan.settled);
                     if (interactive) showToast(`「${remoteFile.name}」本地與雲端已是最新狀態`);
                     return { action: "up_to_date", file: remoteFile };
                 } finally {
@@ -744,11 +695,8 @@ class GDriveSyncState {
             },
             async () => {
                 const token = await this.getValidToken();
-                const [remote, yaml] = await Promise.all([
-                    fetchCloudTripMeta(token, fileId),
-                    downloadCloudTripYaml(token, fileId),
-                ]);
-                return { yaml, md5: remote?.md5Checksum, shareLink: remote?.shareLink };
+                const { yaml, remoteFile } = await fetchCloudTrip(token, fileId);
+                return { yaml, md5: remoteFile?.md5Checksum, shareLink: remoteFile?.shareLink };
             },
             msg => {
                 showToast(`下載雲端行程失敗: ${msg}`);
