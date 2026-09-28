@@ -1,11 +1,16 @@
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { execSync } from "node:child_process";
+import { realpathSync } from "node:fs";
+import path from "node:path";
 import {
     fileURLToPath,
     URL,
 } from "node:url";
-import { defineConfig } from "vite";
+import {
+    defineConfig,
+    type Plugin,
+} from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 const basePath = process.env.BASE_PATH?.replace(/^\/+|\/+$/g, "");
@@ -27,6 +32,33 @@ function resolveGitSha(): string {
         return "dev";
     }
 }
+
+// Vite keeps public/ out of the module graph and only notices files being added
+// or removed there, so editing the itinerary a device without a saved trip falls
+// back to never reloads the page. The symlink is re-resolved on every event
+// because `trip:sync checkout` repoints it. A trip saved in localStorage still
+// wins over these files after the reload (fetchItinerary).
+function reloadOnItineraryEdit(): Plugin {
+    const publicDir = fileURLToPath(new URL("./public", import.meta.url));
+    const localLink = path.join(publicDir, "itinerary.local.yaml");
+    const bundled = path.join(publicDir, "itinerary.yaml");
+    return {
+        name: "showmeway:reload-on-itinerary-edit",
+        apply: "serve",
+        configureServer(server) {
+            server.watcher.on("all", (_event, file) => {
+                let target: string | null;
+                try {
+                    target = realpathSync(localLink);
+                } catch {
+                    target = null;
+                }
+                if (file === localLink || file === bundled || file === target) server.ws.send({ type: "full-reload" });
+            });
+        },
+    };
+}
+
 const appVersion = resolveGitSha();
 const buildTime = new Date().toISOString();
 
@@ -56,6 +88,7 @@ export default defineConfig({
         strictPort: true,
     },
     plugins: [
+        reloadOnItineraryEdit(),
         svelte(),
         tailwindcss(),
         VitePWA({
