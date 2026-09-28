@@ -38,7 +38,8 @@ export type Placement =
     /** Exactly the version this device already holds; switched to it, wrote nothing. */
     | { kind: "unchanged"; profileId: string; }
     /**
-     * Landed as a trip of its own, with the previously active one parked. `copy` when it had
+     * Landed as a trip of its own: in a new slot with the previously active one parked, or
+     * in the active slot itself when that held no trip, keeping its `profileId`. `copy` when it had
      * to be re-identified to sit beside the trip it came from, which makes it no longer that
      * trip: nothing that follows the original — its cloud file, its link — may follow this.
      */
@@ -88,8 +89,10 @@ export function placeTrip(yaml: string, ask: (question: PlaceQuestion) => boolea
         // Two trips sharing an id would fight over one Drive file.
         incoming.trip.id = genTripId();
         copy = true;
-    } else if (appStorage.get(USER_YAML_KEY) && !ask({ kind: "add" })) {
-        return { kind: "declined" };
     }
-    return { kind: "added", ...addTrip(incoming), copy };
+    const occupied = !!appStorage.get(USER_YAML_KEY);
+    if (existing === null && occupied && !ask({ kind: "add" })) return { kind: "declined" };
+    // An empty slot — a fresh install, or one reset to the template — holds no trip and wears
+    // no ties, so the arrival takes it instead of a new slot beside it.
+    return { kind: "added", ...(occupied ? addTrip(incoming) : writeActiveTrip(incoming, { backup: false })), copy };
 }

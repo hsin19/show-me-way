@@ -329,16 +329,40 @@ function saveRecord(tripId: string, record: TripSyncRecord): void {
     saveTripSyncMap({ ...loadTripSyncMap(), [tripId]: record });
 }
 
-/** The trip's record, rebuilt the way the app's `reconcileBindings` does when this machine holds none yet. */
+/**
+ * The trip's record, rebuilt the way the app's `reconcileBindings` does when this machine
+ * holds none yet — or holds one for a file that has left the listing, which another device
+ * may already have replaced; pushing through it would create a second copy. Kept when
+ * nothing replaced it, so the push re-creates the file.
+ */
 async function recordFor(token: string, tripId: string, localYaml: string): Promise<TripSyncRecord | null> {
     const records = loadTripSyncMap();
+    const files = await listCloudTrips(token);
+    const live = new Set(files.map(file => file.id));
     const known = records[tripId];
-    if (known) return known;
-    const file = rebindCandidates(await listCloudTrips(token), Object.values(records).map(record => record.fileId))[tripId];
-    if (!file) return null;
+    if (known && live.has(known.fileId)) return known;
+    const file = rebindCandidates(files, Object.values(records).map(record => record.fileId))[tripId];
+    if (!file) return known ?? null;
     const record = buildRebindRecord(file, yamlFingerprint(localYaml));
     saveRecord(tripId, record);
     return record;
+}
+
+/**
+ * What this machine keeps of `tripId`'s downloaded file: the form the app stores, as every
+ * device does, so a working copy is non-canonical only once it has been edited here. A file
+ * the app did not write then reads as a local edit, which the next push repairs. Kept on the
+ * trip's own id, as the app keeps a slot's, so a file that lost its id is not pushed back as
+ * another trip. Kept as downloaded when it does not parse, so it can be fixed here.
+ */
+function asStored(yaml: string, tripId: string): string {
+    try {
+        const data = validateYaml(yaml);
+        data.trip.id = tripId;
+        return serializeToYaml(data);
+    } catch {
+        return yaml;
+    }
 }
 
 function backup(label: string, content: string): void {
@@ -495,7 +519,7 @@ async function checkoutTarget(query: string): Promise<{ tripId: string; name: st
     if (existsSync(path)) return { tripId: match.tripId, name: match.name, existed: true };
     const { yaml, remoteFile } = await fetchCloudTrip(token, match.id);
     mkdirSync(TRIPS_DIR, { recursive: true });
-    writeFileSync(path, yaml);
+    writeFileSync(path, asStored(yaml, match.tripId));
     saveRecord(match.tripId, agreedRecord(match.id, yaml, remoteFile?.md5Checksum));
     console.log(`已從雲端下載「${match.name}」`);
     return { tripId: match.tripId, name: match.name, existed: false };
@@ -562,7 +586,7 @@ async function pull(): Promise<void> {
     const { yaml, record: pulled } = await plan.pull();
     // Local trip files are gitignored, so an overwrite would otherwise be the only copy gone.
     backup(tripId, localYaml);
-    writeFileSync(path, yaml);
+    writeFileSync(path, asStored(yaml, tripId));
     saveRecord(tripId, pulled);
     console.log(`已從雲端「${plan.remoteFile.name}」更新`);
 }
@@ -573,7 +597,8 @@ async function push(): Promise<void> {
     if (blocker) throw new Error(`沒有上傳：${blocker}`);
     // The app stores only the canonical form, so a file uploaded as hand-written would read as
     // a local edit on every phone that pulls it. The working copy is rewritten before anything
-    // is planned, so status and pull compare the same bytes from here on.
+    // is planned, so status and pull compare the same bytes from here on — and since checkout
+    // and pull store the canonical form, only an edit made here is ever rewritten.
     const yaml = serializeToYaml(validateYaml(written));
     if (yaml !== written) {
         backup(tripId, written);

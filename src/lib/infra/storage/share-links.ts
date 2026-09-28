@@ -73,8 +73,9 @@ export function saveShareLinkMap(map: ShareLinkMap): void {
  *
  * Two keys rather than one because Drive caps each property at 124 bytes of key plus
  * value, and hop decides how long an `editToken` is. Times ride as base-36 epoch seconds
- * for the same reason; they are labels, so a file written without them still yields a
- * usable link.
+ * for the same reason. `createdAt` decides which of two competing links a slot keeps
+ * (`ShareLinkStore.adopt`); the others are labels. A file written without them still
+ * yields a usable link.
  */
 export const SHARE_LINK_PROPERTY = "shareLink";
 export const SHARE_LINK_TIMES_PROPERTY = "shareLinkAt";
@@ -113,14 +114,15 @@ export function decodeShareLinkProperties(shareLink?: string, shareLinkAt?: stri
     const [id, key, editToken] = (shareLink ?? "").split(".");
     if (!id || !key || !editToken) return null;
     const [created, updated, expires] = (shareLinkAt ?? "").split(".");
-    // Stamped now when the times are absent: they only drive the labels in 行程管理, and
-    // refusing the link over them would lose the one thing worth carrying.
+    // Refusing the link over missing times would lose the one thing worth carrying. The labels
+    // fall back to now; the minting time to the epoch, so an undated link never outranks one
+    // this device knows the age of.
     const fallback = new Date().toISOString();
     return {
         id,
         key,
         editToken,
-        createdAt: fromEpoch36(created) ?? fallback,
+        createdAt: fromEpoch36(created) ?? new Date(0).toISOString(),
         updatedAt: fromEpoch36(updated) ?? fallback,
         expiresAt: fromEpoch36(expires),
     };

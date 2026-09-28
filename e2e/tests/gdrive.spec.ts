@@ -5,6 +5,7 @@ import {
     expect,
     FIXTURE_YAML,
     seedItinerary,
+    stubMissingLocalItinerary,
     test,
 } from "./fixtures";
 
@@ -226,6 +227,27 @@ test("連線 Google：走完 GIS 流程並把行程建立成雲端檔", async ({
     await expect(page.getByRole("button", { name: /目前行程/ })).toHaveAccessibleName(/已同步雲端/);
 });
 
+// 新安裝（或回復預設後）的 slot 只在畫面上放著範本，storage 裡什麼都沒有。上傳的必須是存下來、
+// 帶著 trip.id 的那份，否則雲端檔認不出是哪一趟，按鈕也不該把面板關掉了事。
+test("空的行程上傳：先存成這趟行程再傳，雲端檔帶著 trip.id", async ({ page }) => {
+    const drive = await installFakeDrive(page);
+    await stubMissingLocalItinerary(page);
+    await seedConnected(page);
+    await page.goto("/");
+
+    await openTripManagement(page);
+    // 範本是非同步抓進編輯器的；還沒抓到之前，編輯器裡沒有東西可以存。
+    await expect(page.getByLabel("行程資料 (YAML)")).toHaveValue(/trip:/);
+    await page.getByRole("button", { name: "上傳此行程至 Google Drive (建立新檔案)" }).click();
+    await expect(page.getByText(/已建立雲端備份/)).toBeVisible();
+
+    expect(drive.list()).toHaveLength(1);
+    const stored = await page.evaluate(() => localStorage.getItem("showmeway_user_yaml"));
+    expect(drive.list()[0]?.content).toBe(stored);
+    expect(stored).toMatch(/^ {2}id: \S+$/m);
+    await expect(page.getByRole("button", { name: /目前行程/ })).toHaveAccessibleName(/已同步雲端/);
+});
+
 test("重新綁定：登出再登入後靠 trip.id 認回雲端檔案，不是當成沒備份過", async ({ page }) => {
     // 登出會留下行程本身，但不留 sync record —— 修好之前這裡會顯示「建立新檔案」，
     // 按下去就多一份重複的雲端檔。
@@ -273,6 +295,37 @@ test("按一下同步：雲端較新時先給下載按鈕，再按一次才真�
     // 覆蓋前先進了備份環，所以還原得回來。
     await openTripManagement(page);
     await expect(page.getByRole("button", { name: /還原/ }).first()).toBeVisible();
+});
+
+// 在 Drive 網頁上手改、或別的工具推上去的檔，不是 app 會寫的樣子。app 只存自己的格式，所以下載下來
+// 就讀成「本機有改動」，上傳一次雲端就回到 app 的格式 —— 這就是修復，不另外處理。
+test("雲端檔被手改過：下載後認得出來，按上傳才把雲端修回 app 的格式", async ({ page }) => {
+    const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML, tripId: "t-fixture" }]);
+    await seedItinerary(page);
+    await seedConnected(page, { record: { fileId: CLOUD_FILE_ID, remoteMd5: md5Of(FIXTURE_YAML), localHash: yamlFingerprint(FIXTURE_YAML) } });
+    await page.goto("/");
+    // 開啟時的清單已經拿到了，之後才被手改：下載之後若還拿那份舊清單來比，就會誤判成衝突。
+    await expect(page.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
+    drive.write(CLOUD_FILE_ID, `# 在 Drive 網頁上手改\n${yamlNamed("手改過的行程")}`);
+
+    await openTripManagement(page);
+    await page.getByRole("button", { name: "同步行程 (比對本地與雲端內容差異)" }).click();
+    await page.getByRole("button", { name: "下載雲端最新版本 (覆蓋本機)" }).click();
+    await expect(page.getByText(/已載入雲端版本/)).toBeVisible();
+
+    // 認得出來：存成 app 的格式後跟下載的不一樣，按鈕變成上傳，回到前景時提示要上傳 —— 不是誤報成
+    // 兩邊都改過 —— 而且沒按之前什麼都沒送出去。
+    await expect(page.getByRole("button", { name: "上傳本機異動到 Google Drive (覆蓋雲端版本)" })).toBeVisible();
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await expect(page.getByText("行程有改動還沒上傳到 Google Drive")).toBeVisible();
+    await expect(page.getByText("雲端與本機都有修改，請選擇要保留哪一份")).toBeHidden();
+    expect(drive.counts().uploads).toBe(0);
+
+    await page.getByRole("button", { name: "上傳", exact: true }).click();
+
+    await expect.poll(() => drive.counts().uploads).toBe(1);
+    expect(drive.read(CLOUD_FILE_ID)).toBe(yamlNamed("手改過的行程"));
+    await expect(page.getByRole("button", { name: "同步行程 (比對本地與雲端內容差異)" })).toBeVisible();
 });
 
 test("按一下上傳：本機與雲端都改過時停下來問，且兩側都不動", async ({ page }) => {

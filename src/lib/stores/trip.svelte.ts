@@ -361,6 +361,8 @@ export class TripStore {
         if (!written) return false;
         const profileIdAtEdit = written.profileId;
         this.data = parsed;
+        // Written against the version just replaced; saving it would quietly undo the edit.
+        settingsDraft.yaml = null;
         this.notePendingPublish(profileIdAtEdit);
         weatherStore.loadTrip(parsed.days, parsed.trip.city);
         if (previousYaml) {
@@ -382,6 +384,7 @@ export class TripStore {
                     }
                     if (!this.replaceActiveTrip(restored)) return;
                     this.data = restored;
+                    settingsDraft.yaml = null;
                     this.notePendingPublish(profileIdAtEdit);
                     weatherStore.loadTrip(restored.days, restored.trip.city);
                     showToast("已復原為套用前的行程");
@@ -498,6 +501,16 @@ export class TripStore {
     }
 
     /**
+     * Every standing offer about the trip on screen — a newer shared version, a cloud copy to
+     * take, changes to publish — for whatever puts another trip or another version there: each
+     * was measured against what it replaced, and a tap on one would act on the wrong trip.
+     */
+    private dropOffers() {
+        this.clearSharedUpdate();
+        this.clearSyncPrompts();
+    }
+
+    /**
      * 背景檢查. Ask both places the active trip can have moved — its Drive file and, for a
      * trip received from someone else, the share link it came from — and say what each
      * found. Nothing is transferred and nothing is decided: the tap on the notice is what
@@ -508,7 +521,13 @@ export class TripStore {
      */
     async checkForUpdates(openTripManagement: () => void): Promise<void> {
         await gdriveSync.refreshFiles();
-        if (!this.promptCloudReconnect(openTripManagement)) this.promptCloudUpdate(openTripManagement);
+        if (!this.promptCloudReconnect(openTripManagement)) {
+            this.promptCloudUpdate(openTripManagement);
+            // Asked again against the listing just fetched: a prompt raised from an older one
+            // stands aside for a cloud change that may since have turned out to be this
+            // device's own pull, and then neither notice would speak.
+            this.promptToPublish();
+        }
         await this.checkSharedTripForUpdates(openTripManagement);
     }
 
@@ -604,18 +623,21 @@ export class TripStore {
         if (Date.now() - this.lastSharedCheckAt < SHARED_CHECK_TTL_MS) return;
         this.lastSharedCheckAt = Date.now();
 
-        let yaml: string;
-        let tripName: string;
+        let parsed: TripData;
         try {
-            const parsed = validateYaml(await resolveShareLink({ kind: "short", ...link }));
-            yaml = serializeToYaml(parsed);
-            tripName = parsed.trip.name;
+            parsed = validateYaml(await resolveShareLink({ kind: "short", ...link }));
         } catch (err) {
             console.warn("Failed to re-read the shared trip link:", err);
             return;
         }
-        // The user may have switched trips across the round trip.
-        if (!isActiveProfile(profileId) || this.sharedUpdate) return;
+        // The user may have switched trips across the round trip, or reset this one — which
+        // keeps the slot but forgets the link it came from.
+        if (!this.data || !isActiveProfile(profileId) || tripOrigins.linkFor(profileId)?.id !== link.id || this.sharedUpdate) return;
+        // Measured as the slot's own trip, as taking it would land it: YAML without an id gets
+        // a fresh one minted on every read, which would never match what was taken.
+        parsed.trip.id = this.data.trip.id;
+        const yaml = serializeToYaml(parsed);
+        const tripName = parsed.trip.name;
         if (yamlFingerprint(yaml) === taken) return;
 
         this.sharedUpdate = {
@@ -646,8 +668,7 @@ export class TripStore {
     }
 
     /** 採用對方版本 — land what the link now carries, over this device's copy. */
-    async takeSharedUpdate(): Promise<LandOutcome | null> {
-        const update = this.sharedUpdate;
+    async takeSharedUpdate(update = this.sharedUpdate): Promise<LandOutcome | null> {
         if (!update || !this.guardActive(update.profileId)) return null;
         const outcome = await this.landYaml(update.profileId, update.yaml);
         if (outcome.kind !== "landed") return outcome;
@@ -675,10 +696,10 @@ export class TripStore {
      * screen. The local copy is read out before the update overwrites it, and the branch
      * happens only once the new version has landed.
      */
-    async keepBothOverSharedUpdate(): Promise<LandOutcome | null> {
+    async keepBothOverSharedUpdate(update = this.sharedUpdate): Promise<LandOutcome | null> {
         const localYaml = this.storedYaml();
         if (localYaml === null) return null;
-        const outcome = await this.takeSharedUpdate();
+        const outcome = await this.takeSharedUpdate(update);
         if (outcome?.kind === "landed") await this.branchLocalCopy(localYaml);
         return outcome;
     }
@@ -829,6 +850,7 @@ export class TripStore {
             showToast("建立新行程失敗，請稍後再試");
             return;
         }
+        this.dropOffers();
         await this.load();
         showToast("已建立新行程，請填入行程內容");
         onSuccess?.();
@@ -844,7 +866,7 @@ export class TripStore {
             this.profiles = listProfiles();
             return;
         }
-        this.clearSharedUpdate();
+        this.dropOffers();
         showToast("已切換行程");
         await this.load();
         onSuccess?.();
@@ -894,7 +916,12 @@ export class TripStore {
         // The bytes just downloaded, not the cached listing's checksum: a stale entry would
         // record an agreement matching no version and report a conflict nobody caused. Not
         // what was stored — a file this app did not write should read as a local edit.
-        if (outcome.kind === "added" && !outcome.copy) gdriveSync.adoptCloudTrip(outcome.profileId, fileId, pulled.yaml, pulled.md5, pulled.shareLink);
+        if (outcome.kind === "added" && !outcome.copy) {
+            gdriveSync.adoptCloudTrip(outcome.profileId, fileId, pulled.yaml, pulled.md5, pulled.shareLink);
+            // The listing may predate this version of the file, and a file this app did not
+            // write — stored canonical, so a local edit — would read against it as a conflict.
+            void gdriveSync.refreshFiles({ force: true });
+        }
         await this.load();
         if (outcome.kind === "failed") return { kind: "aborted" };
         showToast(
@@ -975,7 +1002,7 @@ export class TripStore {
             }
         }
         if (!this.guardActive(profileId)) return { kind: "aborted" };
-        const outcome = link ? this.landSharedTrip(yaml, link) : this.landEditorYaml(yaml);
+        const outcome = link ? this.landSharedTrip(yaml, link) : this.landEditorYaml(yaml, profileId);
         if (outcome.kind === "invalid") return { kind: "invalid", yaml: text, error: outcome.error };
         if (outcome.kind === "declined") return { kind: "aborted" };
         await this.load();
@@ -983,10 +1010,11 @@ export class TripStore {
         return { kind: "landed", yaml: outcome.kind === "unchanged" ? this.storedYaml() ?? yaml : outcome.yaml };
     }
 
-    private landEditorYaml(yaml: string): PlaceOutcome {
+    private landEditorYaml(yaml: string, profileId: string): PlaceOutcome {
         const outcome = this.place(yaml, askAboutEditorYaml);
-        if (outcome.kind === "added") showToast(`已另存為新行程「${tripNameFromYaml(outcome.yaml)}」，原本的行程已保留`);
-        else if (outcome.kind === "replaced" || outcome.kind === "unchanged") showToast("自訂 YAML 行程儲存成功！");
+        // An empty slot takes the trip in place, and then nothing was kept beside it.
+        if (outcome.kind === "added" && outcome.profileId !== profileId) showToast(`已另存為新行程「${tripNameFromYaml(outcome.yaml)}」，原本的行程已保留`);
+        else if (outcome.kind === "added" || outcome.kind === "replaced" || outcome.kind === "unchanged") showToast("自訂 YAML 行程儲存成功！");
         return outcome;
     }
 
@@ -1012,8 +1040,9 @@ export class TripStore {
      * `profileId` reported here.
      */
     private place(yaml: string, ask: (question: PlaceQuestion) => boolean): PlaceOutcome {
-        const outgoing = getActiveProfileId();
         if (!this.flushUnsaved()) return { kind: "failed" };
+        const outgoing = getActiveProfileId();
+        const empty = this.storedYaml() === null;
         let outcome: Placement;
         try {
             outcome = placeTrip(yaml, ask);
@@ -1023,9 +1052,11 @@ export class TripStore {
             return { kind: "failed" };
         }
         if (outcome.kind === "declined" || outcome.kind === "invalid") return outcome;
-        // A standing offer from a link was measured against what this slot held before.
-        this.clearSharedUpdate();
-        if (outcome.profileId !== outgoing) this.clearSyncPrompts();
+        // An empty slot can still carry a link shared from the template on screen, which the
+        // trip taking the slot must not inherit.
+        if (empty && outcome.profileId === outgoing) this.forgetSlot(outcome.profileId);
+        // Nothing changed on screen, so the offers standing still describe it.
+        if (outcome.kind !== "unchanged" || outcome.profileId !== outgoing) this.dropOffers();
         if (outcome.kind !== "unchanged") this.notePendingPublish(outcome.profileId, { explicit: true });
         return outcome;
     }
@@ -1051,7 +1082,16 @@ export class TripStore {
         } else if (outcome.kind === "added") {
             if (!outcome.copy) tripOrigins.markShared(outcome.profileId, credentials, outcome.yaml);
             showToast("已匯入分享的行程");
-        } else if (outcome.kind === "unchanged") showToast("這趟行程已經是連結裡的版本");
+        } else if (outcome.kind === "unchanged") {
+            // Still worth recording: a link the sender recreated carries the same trip under a
+            // new id, and a watch left on the old one would fail quietly from here on.
+            const stored = this.storedYaml();
+            if (stored !== null) tripOrigins.recordTaken(outcome.profileId, stored, credentials ?? undefined);
+            // The link has just shown it carries what is here, so an offer of another version
+            // from it is out of date — and was measured against the baseline just moved.
+            if (this.sharedUpdate?.profileId === outcome.profileId) this.clearSharedUpdate();
+            showToast("這趟行程已經是連結裡的版本");
+        }
         return outcome;
     }
 
@@ -1109,6 +1149,7 @@ export class TripStore {
             showToast("保留本機版本失敗，請稍後再試");
             return;
         }
+        this.dropOffers();
         await this.load();
         showToast(`已保留兩份，這台裝置的版本另存為「${forked.trip.name}」`);
     }
@@ -1139,7 +1180,7 @@ export class TripStore {
         if (outcome.kind === "declined") return { kind: "aborted" };
         await this.load();
         if (outcome.kind === "failed") return { kind: "aborted" };
-        showToast(outcome.kind === "added" ? `已將備份還原為新行程「${tripNameFromYaml(outcome.yaml)}」，原本的行程已保留` : "已還原備份的行程");
+        showToast(outcome.kind === "added" && outcome.profileId !== profileId ? `已將備份還原為新行程「${tripNameFromYaml(outcome.yaml)}」，原本的行程已保留` : "已還原備份的行程");
         return { kind: "landed", yaml: outcome.kind === "unchanged" ? this.storedYaml() ?? yaml : outcome.yaml };
     }
 
@@ -1167,7 +1208,7 @@ export class TripStore {
         this.forgetSlot(profileId);
         // A standing 下載 offer was about the old trip's file; with the binding gone its tap
         // would upload the template as a new one.
-        this.clearSyncPrompts();
+        this.dropOffers();
         showToast("已恢復為預設行程…");
         await this.load();
         return true;

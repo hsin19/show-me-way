@@ -548,7 +548,7 @@ todo:
             const outcome = await store.loadCloudTrip("file-cloud", "雲端行程");
 
             expect(outcome?.kind).toBe("landed");
-            // As downloaded, so the record just adopted agrees with what is stored.
+            // Canonical already, so storage holds what was downloaded and the record agrees with it.
             expect(appStorage.get(USER_YAML_KEY)).toBe(CLOUD_YAML);
             expect(gdriveSync.cloudFileId(ensureActiveProfileId())).toBe("file-cloud");
             expect(gdriveSync.hasUnpushedEdits(ensureActiveProfileId(), CLOUD_YAML)).toBe(false);
@@ -621,6 +621,33 @@ todo:
             expect(listProfiles().map(p => p.name)).toEqual(["本機行程"]);
             expect(gdriveSync.cloudFileId(profileId)).toBe("file-local");
             expect(gdriveSync.cloudFileId(ensureActiveProfileId())).toBeNull();
+        });
+
+        // A share tapped on the template of an empty slot mints a link for that slot.
+        it("lets a trip taking an empty slot start without the link shared from the template", async () => {
+            appStorage.remove(USER_YAML_KEY);
+            shareLinks.adopt(profileId, { id: "tmpl0001", key: "k".repeat(22), editToken: "tok", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", expiresAt: null });
+
+            const outcome = await store.saveFromEditor(profileId, CLOUD_YAML);
+
+            expect(outcome.kind).toBe("landed");
+            expect(ensureActiveProfileId()).toBe(profileId);
+            expect(shareLinks.forTrip(profileId)).toBeNull();
+        });
+
+        it("leaves a pending publish prompt standing when a save changed nothing", async () => {
+            vi.useFakeTimers();
+            onTestFinished(() => {
+                vi.useRealTimers();
+            });
+            shareLinks.adopt(profileId, { id: "own00001", key: "k".repeat(22), editToken: "tok", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", expiresAt: null });
+            store.toggleChecklistItem("todo", store.data!.todo[0]!._id!);
+
+            await store.saveFromEditor(profileId, appStorage.get(USER_YAML_KEY)!);
+            vi.advanceTimersByTime(12_000);
+
+            expect(toast.items.at(-1)?.message).toBe("行程有改動，分享連結還是舊版本");
+            shareLinks.forget(profileId);
         });
 
         // The schema's own promise: deleting `trip.id` severs the trip from its cloud file.
@@ -699,12 +726,15 @@ todo:
     });
 
     describe("switchProfile", () => {
-        // What storage holds is what a sync record hashes; a pull stores the file's bytes as
-        // downloaded, and rewriting them on the way out would read as an edit nobody made.
-        it("parks the outgoing trip byte for byte when nothing on screen is unsaved", async () => {
+        // A write marks the trip's share link stale, so one on the way out would offer a link
+        // update for a change nobody made.
+        it("parks the outgoing trip as stored, without writing it again, when nothing on screen is unsaved", async () => {
             appStorage.set(PROFILES_KEY, JSON.stringify([{ id: "p-other", yaml: CLOUD_YAML, savedAt: "2026-01-01T00:00:00.000Z" }]));
+            const persist = vi.spyOn(store, "persist");
 
             await store.switchProfile("p-other");
+
+            expect(persist).not.toHaveBeenCalled();
 
             const parked = JSON.parse(appStorage.get(PROFILES_KEY) ?? "[]") as { id: string; yaml: string; }[];
             expect(parked.find(p => p.id === profileId)?.yaml).toBe(LOCAL_YAML);
@@ -853,6 +883,39 @@ days:
         expect(store.sharedUpdate).toBeNull();
     });
 
+    it("says nothing when the link's YAML carries no trip.id and nothing else changed", async () => {
+        await stubLinkPayload(RECEIVED_YAML.replace("  id: t-shared\n", ""));
+        tripOrigins.markShared(profileId, LINK, received);
+
+        await store.checkSharedTripForUpdates(() => {});
+
+        expect(store.sharedUpdate).toBeNull();
+    });
+
+    it("drops what a check finds once the trip was reset while it ran", async () => {
+        const sealed = await sealShareToken(received.replace("抵達機場", "抵達車站"));
+        LINK.key = sealed.key;
+        tripOrigins.markShared(profileId, LINK, received);
+        let answer!: () => void;
+        vi.stubGlobal(
+            "fetch",
+            vi.fn((url: string) => {
+                if (String(url).includes("itinerary")) return Promise.resolve(new Response(RECEIVED_YAML.replace("t-shared", "t-template")));
+                return new Promise(resolve => {
+                    answer = () => resolve(new Response(JSON.stringify({ payload: sealed.payload })));
+                });
+            }),
+        );
+
+        const check = store.checkSharedTripForUpdates(() => {});
+        await vi.waitFor(() => expect(answer).toBeTypeOf("function"));
+        await store.resetToDefault(profileId);
+        answer();
+        await check;
+
+        expect(store.sharedUpdate).toBeNull();
+    });
+
     it("offers the sender's new version when this device has not touched its copy", async () => {
         const sendersEdit = received.replace("抵達機場", "抵達車站");
         await stubLinkPayload(sendersEdit);
@@ -928,6 +991,57 @@ days:
         vi.stubGlobal("confirm", () => true);
 
         await store.saveFromEditor(profileId, `#s=${await encodeShareToken(RECEIVED_YAML.replace("t-shared", "t-other"))}`);
+
+        expect(store.sharedUpdate).toBeNull();
+    });
+
+    it("drops the offer when a new trip takes the screen", async () => {
+        await stubLinkPayload(received.replace("抵達機場", "抵達車站"));
+        tripOrigins.markShared(profileId, LINK, received);
+        await store.checkSharedTripForUpdates(() => {});
+        expect(store.sharedUpdate).not.toBeNull();
+        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(RECEIVED_YAML.replace("t-shared", "t-template")))));
+
+        await store.createProfile();
+
+        expect(store.sharedUpdate).toBeNull();
+    });
+
+    it("reopening a link the sender recreated watches the new id, even when nothing changed", async () => {
+        tripOrigins.markShared(profileId, { id: "abcd1234", key: "old-key" }, received);
+        await stubLinkPayload(received);
+        vi.stubGlobal("confirm", () => true);
+
+        const outcome = await store.saveFromEditor(profileId, `#h=wxyz9876.${LINK.key}`);
+
+        expect(outcome.kind).toBe("landed");
+        expect(tripOrigins.linkFor(profileId)).toEqual({ id: "wxyz9876", key: LINK.key });
+    });
+
+    // 兩份都留 lands the editor's draft first, and landing anything drops the standing offer.
+    it("keeps both even when the editor's draft was landed just before", async () => {
+        await stubLinkPayload(received.replace("抵達機場", "抵達車站"));
+        tripOrigins.markShared(profileId, LINK, received);
+        await store.checkSharedTripForUpdates(() => {});
+        const update = store.sharedUpdate;
+        await store.saveFromEditor(profileId, received.replace("抵達機場", "先去吃飯"));
+
+        const outcome = await store.keepBothOverSharedUpdate(update);
+
+        expect(outcome?.kind).toBe("landed");
+        expect(listProfiles().map(p => p.name)).toEqual(["朋友的行程"]);
+        expect(appStorage.get(USER_YAML_KEY)).toContain("先去吃飯");
+    });
+
+    it("reopening a link that now carries this device's version drops the offer of another one", async () => {
+        await stubLinkPayload(received.replace("抵達機場", "抵達車站"));
+        tripOrigins.markShared(profileId, LINK, received);
+        await store.checkSharedTripForUpdates(() => {});
+        expect(store.sharedUpdate).not.toBeNull();
+        // The sender went back to the version this device holds.
+        await stubLinkPayload(received);
+
+        await store.saveFromEditor(profileId, `#h=${LINK.id}.${LINK.key}`);
 
         expect(store.sharedUpdate).toBeNull();
     });

@@ -218,7 +218,8 @@ let cloudButton = $derived.by(() => {
  * as a trip other than the one whose cloud state this panel is showing, which closes it.
  */
 async function landDraft(): Promise<boolean> {
-    if (yamlInput === yamlSnapshot) return true;
+    // An empty slot shows the template without having stored it, so it is saved like any draft.
+    if (yamlInput === yamlSnapshot && appStorage.get(USER_YAML_KEY) !== null) return true;
     const outcome = await tripStore.saveFromEditor(activeTripId, yamlInput);
     if (outcome.kind === "invalid") showToast("請先修正編輯器中的 YAML 格式錯誤");
     if (!applyLanding(outcome)) return false;
@@ -228,9 +229,12 @@ async function landDraft(): Promise<boolean> {
 }
 
 async function handleCloudAction() {
-    // An unsaved draft is what the user means by "this trip".
-    if (!await landDraft()) return;
-    await cloudButton.run?.();
+    const run = cloudButton.run;
+    // An unsaved draft is what the user means by "this trip" — for a transfer. Signing in
+    // moves nothing, and saving would store an empty slot's template as a trip, which the
+    // trip loaded from the cloud next would then park beside itself.
+    if (run !== loginToCloud && !await landDraft()) return;
+    await run?.();
 }
 
 async function keepLocalVersion() {
@@ -266,7 +270,11 @@ async function handleTakeSharedUpdate() {
 }
 
 async function handleKeepBothShared() {
-    if (applyLanding(await tripStore.keepBothOverSharedUpdate())) onDone();
+    // Read first: landing the draft drops every standing offer, this one included.
+    const update = tripStore.sharedUpdate;
+    // Through landDraft, like the Drive strip's 兩份都留, so the copy kept is the trip the app is running.
+    if (!update || !await landDraft()) return;
+    if (applyLanding(await tripStore.keepBothOverSharedUpdate(update))) onDone();
 }
 
 let confirmingBackupSavedAt = $state<string | null>(null);

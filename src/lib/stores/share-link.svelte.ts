@@ -69,11 +69,14 @@ class ShareLinkStore {
      * must not rewrite storage on every listing.
      *
      * Never reaches hop, and never clears — a file written by a device that did not know
-     * about the link carries no properties, and that is not a revoke.
+     * about the link carries no properties, and that is not a revoke. Never goes back either:
+     * a different link minted no later than this slot's own is one this device has already
+     * replaced, still on the file only because the push that would have said so was skipped.
      */
     adopt(profileId: string, record: ShareLinkRecord) {
         const existing = this.forTrip(profileId);
         if (existing?.id === record.id && existing.key === record.key && existing.editToken === record.editToken) return;
+        if (existing && existing.id !== record.id && Date.parse(record.createdAt) <= Date.parse(existing.createdAt)) return;
         try {
             this.remember(profileId, record);
         } catch (err) {

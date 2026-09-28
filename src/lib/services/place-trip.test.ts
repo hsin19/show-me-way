@@ -62,14 +62,18 @@ describe("placeTrip", () => {
         vi.unstubAllGlobals();
     });
 
-    it("lands straight into an empty install without asking", () => {
+    // After a reset the slot keeps its id; staying in it is what lets the editor's cloud
+    // button go on to upload what was just saved there.
+    it("lands straight into an empty slot without asking, keeping the slot", () => {
+        appStorage.set(ACTIVE_PROFILE_KEY, "p-empty");
         const ask = vi.fn(yes);
 
         const outcome = placeTrip(tripYaml("東京", "t-tokyo"), ask);
 
-        expect(outcome.kind).toBe("added");
+        expect(outcome).toMatchObject({ kind: "added", profileId: "p-empty", copy: false });
         expect(ask).not.toHaveBeenCalled();
         expect(tripIdFromYaml(appStorage.get(USER_YAML_KEY)!)).toBe("t-tokyo");
+        expect(listProfiles()).toEqual([]);
     });
 
     it("parks the current trip rather than overwriting it when the arrival is a different trip", () => {

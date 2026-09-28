@@ -58,7 +58,7 @@ All color lives in `src/app.css`: the `@theme` block is the dark palette, `:root
 
 ## Commands
 
-- `pnpm dev` on port 8045, `vite preview` on 8046, both `strictPort`. localStorage is per origin, so a saved trip exists only there; on `EADDRINUSE` free the port instead of passing `--port`.
+- `pnpm dev` on port 8045, `vite preview` on 8046, both `strictPort`. localStorage is per origin, so a saved trip exists only there; on `EADDRINUSE` free the port instead of passing `--port`. The dev server serves only `src/`, `public/` and `node_modules/` (`server.fs.allow`) — `.trip-sync/` holds a refresh token — so a new top-level directory the page loads from has to be added there.
 - `pnpm run check` is the gate: schema generation, format, knip, lint, typecheck, unit tests, build, e2e, in that order, naming the step that failed. It **repairs** — `schema:gen`, `dprint fmt`, `knip --fix` (strips dead `export` keywords; tag `/** @public */` to keep one), `eslint --fix` — so a clean run edits files, including unrelated unformatted ones. knip runs before eslint on purpose: stripping `export` lets `no-unused-vars` report the symbol, and deleting it is yours to do. Its e2e step reuses the `dist/` the preceding build produced (`E2E_SKIP_BUILD=1`); `test:e2e` alone builds. Run `pnpm exec playwright install chromium webkit` once per machine.
 - CI (`.github/workflows/check.yml`, called by `pr.yml` and `deploy.yml`) runs the non-writing counterparts as one named step each, so a new check is a new step there. `pnpm run ci` is the same set as one non-repairing command minus e2e; its consumer is the Cloudflare Pages build outside this repo — it has no in-repo callers and is not dead.
 

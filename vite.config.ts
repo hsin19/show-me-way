@@ -82,6 +82,14 @@ export default defineConfig({
     server: {
         port: 8045,
         strictPort: true,
+        fs: {
+            // An allowlist: the page needs its source, public/ and its dependencies (the
+            // self-hosted fonts are read out of node_modules), and nothing else at the root may
+            // go out — least of all trip:sync's refresh token and Drive token cache in
+            // .trip-sync/. public/itinerary.local.yaml, a symlink into there, still reaches the
+            // page: the public-dir handler serves it without consulting this list.
+            allow: ["src", "public", "node_modules"],
+        },
     },
     preview: {
         port: 8046,

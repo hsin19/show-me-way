@@ -580,6 +580,20 @@ describe("rebinding after the local state is lost", () => {
         expect(sync.conflictFor(profileId)).toBeNull();
     });
 
+    // The file was deleted and another device has since uploaded the trip again.
+    it("re-binds a trip whose bound file is gone to the copy that replaced it, instead of pushing a second one", async () => {
+        seedUnboundTrip();
+        const profileId = getActiveProfileId()!;
+        gdrive.saveTripSyncMap({ [profileId]: { fileId: "file-deleted", remoteMd5: "md5-0", localHash: yamlFingerprint(YAML_ID), remoteHash: yamlFingerprint(YAML_ID) } });
+        await loadSync();
+        stubList([{ id: "file-2", name: "東京.yaml", tripId: "t-tokyo", contentHash: yamlFingerprint(YAML_ID) }]);
+
+        await sync.refreshFiles({ force: true });
+
+        expect(sync.cloudFileId(profileId)).toBe("file-2");
+        expect(sync.conflictFor(profileId)).toBeNull();
+    });
+
     it("binds but asks when the two copies have drifted apart", async () => {
         seedUnboundTrip(YAML_ID_EDITED);
         await loadSync();
@@ -811,6 +825,19 @@ describe("boundFileIdsFor", () => {
     });
 });
 
+describe("disconnect", () => {
+    // Signing into another account afterwards must not PATCH files the first one owns.
+    it("forgets every binding, which the next sign-in rebuilds from its own listing", async () => {
+        await loadSync();
+        sync.adoptCloudTrip(TRIP, "file-1", YAML_A, "md5-1");
+
+        sync.disconnect();
+
+        expect(sync.cloudFileId(TRIP)).toBeNull();
+        expect(gdrive.loadTripSyncMap()).toEqual({});
+    });
+});
+
 describe("hasUnpushedEdits", () => {
     it("is true only for a bound trip whose YAML has moved since the last agreement", async () => {
         gdrive.saveTripSyncMap({ [TRIP]: { fileId: "file-1", remoteMd5: "md5-1", localHash: yamlFingerprint(YAML_A) } });
@@ -854,12 +881,13 @@ describe("cloudCopyFor", () => {
         expect(sync.cloudCopyFor(TRIP, YAML_B)).toBe("behind");
     });
 
-    it("still counts the copy while signed out, since signing out leaves the file in Drive", async () => {
+    it("reports no copy once signed out, since signing out forgets the binding", async () => {
         gdrive.saveTripSyncMap({ [TRIP]: RECORD });
-        gdrive.clearGdriveUser();
         await loadSync();
 
-        expect(sync.cloudCopyFor(TRIP, YAML_A)).toBe("kept");
+        sync.disconnect();
+
+        expect(sync.cloudCopyFor(TRIP, YAML_A)).toBe("none");
     });
 
     it("reports no copy once a loaded listing no longer has the bound file", async () => {

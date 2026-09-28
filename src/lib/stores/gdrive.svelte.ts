@@ -308,9 +308,10 @@ class GDriveSyncState {
      * `kept` a copy holding at least everything local does, reloadable from the cloud list
      * once the delete unbinds it.
      *
-     * Not gated on being signed in: signing out leaves the file in Drive. The listing is
-     * consulted only to spot a bound file that has since gone, and only once it has
-     * actually loaded — a stale or missing listing falls back to trusting the binding.
+     * Signing out forgets every binding (`disconnect`), so a signed-out device answers
+     * `none` until the next listing rebinds. The listing is consulted only to spot a bound
+     * file that has since gone, and only once it has actually loaded — a stale or missing
+     * listing falls back to trusting the binding.
      */
     cloudCopyFor(tripId: string, localYaml: string): "none" | "behind" | "kept" {
         const fileId = this.cloudFileId(tripId);
@@ -466,6 +467,10 @@ class GDriveSyncState {
         this.user = null;
         this.cloudFiles = [];
         this.cloudListState = "idle";
+        // The bindings go with the account. Signing back in rebuilds them from the listing
+        // (`reconcileBindings`); signing into another one must not PATCH files this one owns,
+        // and with no account on record the next sign-in cannot tell which it is.
+        Object.keys(this.trips).forEach(tripId => this.unbindTrip(tripId));
         // Left behind it would keep rendering a strip whose buttons cannot do anything.
         this.conflicts = {};
         showToast("已取消 Google 雲端硬碟連線");
@@ -528,8 +533,9 @@ class GDriveSyncState {
      * same trip shows up as a local profile AND an unrelated cloud file, and the next sync
      * creates a duplicate rather than updating the file that is already there.
      *
-     * Only ever fills gaps — a trip that already has a record is left alone, and so is a
-     * file some other trip is bound to, so this can run after every listing.
+     * Only ever fills gaps — a trip bound to a file still listed is left alone, and so is a
+     * file some other trip is bound to, so this can run after every listing. A binding to a
+     * file that has left the listing counts as a gap.
      *
      * Silent when the two copies match, which is the common case and the reason
      * `contentHash` is published at all. When they differ the binding is still recorded
@@ -547,17 +553,23 @@ class GDriveSyncState {
             return;
         }
 
+        const live = new Set(files.map(file => file.id));
         const byTripId = rebindCandidates(files, Object.values(this.trips).map(record => record.fileId));
         if (Object.keys(byTripId).length === 0) return;
 
         for (const { profileId, yaml } of listLocalTrips()) {
-            if (this.trips[profileId]) continue;
+            const bound = this.trips[profileId];
+            // A binding whose file has left the listing is as stale as a missing one: another
+            // device may already have uploaded the trip again, and a push through the dead
+            // binding would create a second copy beside it.
+            if (bound && live.has(bound.fileId)) continue;
             const documentId = tripIdFromYaml(yaml);
             const file = documentId === null ? undefined : byTripId[documentId];
             if (!file || documentId === null) continue;
             // Two profiles holding one trip id (a copy made before copies were re-identified)
             // must not both claim the file; the first one wins and the other stays unbound.
             delete byTripId[documentId];
+            if (bound) this.unbindTrip(profileId);
             // `record.diverged` when they differ is the conflict — no separate in-memory
             // entry, which is what used to vanish on reload and let the next edit push.
             this.writeRecord(profileId, buildRebindRecord(file, yamlFingerprint(yaml)));

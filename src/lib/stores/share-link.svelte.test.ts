@@ -193,6 +193,20 @@ describe("shareLinks", () => {
         });
     });
 
+    // A link this device recreated, while the file still names the one it replaced because
+    // the push carrying the new one was skipped (busy, or the token had expired).
+    it("keeps its own link over an older one a Drive file still carries, and takes a newer one", async () => {
+        const store = await freshStore();
+        const link = (id: string, createdAt: string) => ({ id, key: "k".repeat(22), editToken: `tok-${id}`, createdAt, updatedAt: createdAt, expiresAt: null });
+        store.adopt("p1", link("newer001", "2026-09-02T00:00:00.000Z"));
+
+        store.adopt("p1", link("older001", "2026-09-01T00:00:00.000Z"));
+        expect(store.forTrip("p1")?.id).toBe("newer001");
+
+        store.adopt("p1", link("newest01", "2026-09-03T00:00:00.000Z"));
+        expect(store.forTrip("p1")?.id).toBe("newest01");
+    });
+
     it("forget drops the record without calling hop", async () => {
         const store = await freshStore();
         stubHop("abcd1234");
