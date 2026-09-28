@@ -11,8 +11,8 @@ import {
     it,
     vi,
 } from "vitest";
+import { appStorage } from "./app-storage";
 import {
-    ACTIVE_PROFILE_KEY,
     createProfile,
     deleteProfile,
     ensureActiveProfileId,
@@ -103,7 +103,7 @@ describe("trip profiles", () => {
 
     describe("ensureUniqueTripId", () => {
         it("keeps the id of a trip this device does not hold", () => {
-            storage.setItem(USER_YAML_KEY, savedYaml("t-mine"));
+            appStorage.set(USER_YAML_KEY, savedYaml("t-mine"));
             const incoming = validateYaml(savedYaml("t-theirs"));
 
             expect(ensureUniqueTripId(incoming)).toBe(false);
@@ -113,7 +113,7 @@ describe("trip profiles", () => {
         });
 
         it("re-mints when the active trip is already that trip", () => {
-            storage.setItem(USER_YAML_KEY, savedYaml("t-1"));
+            appStorage.set(USER_YAML_KEY, savedYaml("t-1"));
             const incoming = validateYaml(savedYaml("t-1"));
 
             expect(ensureUniqueTripId(incoming)).toBe(true);
@@ -122,8 +122,8 @@ describe("trip profiles", () => {
         });
 
         it("re-mints when a parked profile is already that trip", () => {
-            storage.setItem(USER_YAML_KEY, savedYaml("t-active"));
-            storage.setItem(
+            appStorage.set(USER_YAML_KEY, savedYaml("t-active"));
+            appStorage.set(
                 PROFILES_KEY,
                 JSON.stringify([{ id: "p-1", yaml: savedYaml("t-parked"), savedAt: "2026-08-01T00:00:00Z" }]),
             );
@@ -134,7 +134,7 @@ describe("trip profiles", () => {
         });
 
         it("survives storage holding trips written before ids existed", () => {
-            storage.setItem(USER_YAML_KEY, yamlNamed("東京"));
+            appStorage.set(USER_YAML_KEY, yamlNamed("東京"));
             const incoming = validateYaml(savedYaml("t-1"));
 
             expect(ensureUniqueTripId(incoming)).toBe(false);
@@ -153,13 +153,13 @@ describe("trip profiles", () => {
 
     describe("createProfile", () => {
         it("parks the current active trip and makes the new YAML active", () => {
-            storage.setItem(USER_YAML_KEY, yamlNamed("行程A"));
+            appStorage.set(USER_YAML_KEY, yamlNamed("行程A"));
             const firstId = ensureActiveProfileId();
 
             const newId = createProfile(yamlNamed("行程B"));
 
             // The new trip is now the active one.
-            expect(storage.getItem(USER_YAML_KEY)).toBe(yamlNamed("行程B"));
+            expect(appStorage.get(USER_YAML_KEY)).toBe(yamlNamed("行程B"));
             expect(getActiveProfileId()).toBe(newId);
             expect(newId).not.toBe(firstId);
 
@@ -173,7 +173,7 @@ describe("trip profiles", () => {
 
     describe("switchToProfile", () => {
         it("swaps the active trip with the chosen parked profile", () => {
-            storage.setItem(USER_YAML_KEY, yamlNamed("行程A"));
+            appStorage.set(USER_YAML_KEY, yamlNamed("行程A"));
             const idA = ensureActiveProfileId();
             createProfile(yamlNamed("行程B")); // parks A, B active
             const idB = getActiveProfileId();
@@ -185,7 +185,7 @@ describe("trip profiles", () => {
 
             // A is active again with its YAML restored.
             expect(getActiveProfileId()).toBe(idA);
-            expect(storage.getItem(USER_YAML_KEY)).toBe(yamlNamed("行程A"));
+            expect(appStorage.get(USER_YAML_KEY)).toBe(yamlNamed("行程A"));
 
             // B is now the parked one (it was pushed down on the way out).
             const parkedAfter = listProfiles();
@@ -195,35 +195,35 @@ describe("trip profiles", () => {
         });
 
         it("keeps the target parked when the active-slot write fails, so a quota error loses nothing", () => {
-            storage.setItem(USER_YAML_KEY, yamlNamed("行程A"));
+            appStorage.set(USER_YAML_KEY, yamlNamed("行程A"));
             const idA = ensureActiveProfileId();
             createProfile(yamlNamed("行程B"));
             const idB = getActiveProfileId();
 
             const realSetItem = storage.setItem.bind(storage);
             vi.spyOn(storage, "setItem").mockImplementation((key: string, value: string) => {
-                if (key === USER_YAML_KEY) throw new DOMException("quota", "QuotaExceededError");
+                if (key === "showmeway_user_yaml") throw new DOMException("quota", "QuotaExceededError");
                 realSetItem(key, value);
             });
             expect(() => switchToProfile(idA)).toThrow();
 
             // B is still active, and A — the one we were switching to — is still parked somewhere.
             expect(getActiveProfileId()).toBe(idB);
-            expect(storage.getItem(USER_YAML_KEY)).toBe(yamlNamed("行程B"));
+            expect(appStorage.get(USER_YAML_KEY)).toBe(yamlNamed("行程B"));
             expect(listProfiles().some(p => p.id === idA && p.name === "行程A")).toBe(true);
         });
 
         it("throws on an unknown profile id and leaves storage untouched", () => {
-            storage.setItem(USER_YAML_KEY, yamlNamed("行程A"));
+            appStorage.set(USER_YAML_KEY, yamlNamed("行程A"));
             ensureActiveProfileId();
             expect(() => switchToProfile("nope")).toThrow();
-            expect(storage.getItem(USER_YAML_KEY)).toBe(yamlNamed("行程A"));
+            expect(appStorage.get(USER_YAML_KEY)).toBe(yamlNamed("行程A"));
         });
     });
 
     describe("deleteProfile", () => {
         it("removes a parked profile without touching the active trip", () => {
-            storage.setItem(USER_YAML_KEY, yamlNamed("行程A"));
+            appStorage.set(USER_YAML_KEY, yamlNamed("行程A"));
             const idA = ensureActiveProfileId();
             createProfile(yamlNamed("行程B")); // parks A
             const activeId = getActiveProfileId();
@@ -233,17 +233,17 @@ describe("trip profiles", () => {
             expect(listProfiles()).toHaveLength(0);
             // Active trip is unaffected.
             expect(getActiveProfileId()).toBe(activeId);
-            expect(storage.getItem(USER_YAML_KEY)).toBe(yamlNamed("行程B"));
+            expect(appStorage.get(USER_YAML_KEY)).toBe(yamlNamed("行程B"));
         });
     });
 
     describe("storage keys", () => {
         it("persists profiles and the active id under the documented keys", () => {
-            storage.setItem(USER_YAML_KEY, yamlNamed("行程A"));
+            appStorage.set(USER_YAML_KEY, yamlNamed("行程A"));
             ensureActiveProfileId();
             createProfile(yamlNamed("行程B"));
-            expect(storage.getItem(ACTIVE_PROFILE_KEY)).toBeTruthy();
-            expect(JSON.parse(storage.getItem(PROFILES_KEY) ?? "[]")).toHaveLength(1);
+            expect(storage.getItem("showmeway_active_profile")).toBeTruthy();
+            expect(JSON.parse(storage.getItem("showmeway_profiles") ?? "[]")).toHaveLength(1);
         });
     });
 });

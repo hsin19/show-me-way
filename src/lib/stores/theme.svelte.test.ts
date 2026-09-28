@@ -1,3 +1,4 @@
+import { appStorage } from "$lib/infra/storage/app-storage";
 import { createLocalStorageStub } from "$lib/testing/stubs";
 import {
     afterEach,
@@ -64,7 +65,6 @@ function createDomStub() {
 }
 
 describe("theme store", () => {
-    let storage: ReturnType<typeof createLocalStorageStub>;
     let media: ReturnType<typeof createMediaStub>;
     let dom: ReturnType<typeof createDomStub>;
 
@@ -84,9 +84,8 @@ describe("theme store", () => {
     }
 
     beforeEach(() => {
-        storage = createLocalStorageStub();
         dom = createDomStub();
-        vi.stubGlobal("localStorage", storage);
+        vi.stubGlobal("localStorage", createLocalStorageStub());
         install(true);
     });
 
@@ -101,13 +100,13 @@ describe("theme store", () => {
 
         it("讀回已儲存的偏好", () => {
             for (const pref of ["system", "dark", "light"] as const) {
-                storage.setItem(THEME_KEY, pref);
+                appStorage.set(THEME_KEY, pref);
                 expect(readThemePref()).toBe(pref);
             }
         });
 
         it("無效的值退回 system", () => {
-            storage.setItem(THEME_KEY, "neon");
+            appStorage.set(THEME_KEY, "neon");
             expect(readThemePref()).toBe("system");
         });
 
@@ -140,7 +139,7 @@ describe("theme store", () => {
     describe("setThemePref", () => {
         it("持久化偏好並更新 data-theme 與 theme-color", () => {
             setThemePref("light");
-            expect(storage.getItem(THEME_KEY)).toBe("light");
+            expect(appStorage.get(THEME_KEY)).toBe("light");
             expect(theme.pref).toBe("light");
             expect(theme.resolved).toBe("light");
             expect(dom.document.documentElement.dataset.theme).toBe("light");
@@ -174,7 +173,7 @@ describe("theme store", () => {
 
     describe("initTheme", () => {
         it("採用已儲存的偏好", () => {
-            storage.setItem(THEME_KEY, "light");
+            appStorage.set(THEME_KEY, "light");
             install(true); // OS 偏好深色也要被明確的 light 覆蓋
             initTheme();
             expect(theme.pref).toBe("light");
@@ -194,7 +193,7 @@ describe("theme store", () => {
         });
 
         it("pref 為明確值時，系統切換不影響畫面", () => {
-            storage.setItem(THEME_KEY, "dark");
+            appStorage.set(THEME_KEY, "dark");
             install(true);
             initTheme();
 
@@ -204,7 +203,7 @@ describe("theme store", () => {
         });
 
         it("使用者改回 system 後，先前註冊的監聽器會恢復作用", () => {
-            storage.setItem(THEME_KEY, "dark");
+            appStorage.set(THEME_KEY, "dark");
             install(true);
             initTheme();
             media.emit(false);

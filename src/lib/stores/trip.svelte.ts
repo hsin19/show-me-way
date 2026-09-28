@@ -31,6 +31,7 @@ import {
     fetchItinerary,
 } from "$lib/infra/http/itinerary-loader";
 import { resolveShareLink } from "$lib/infra/http/share-link";
+import { appStorage } from "$lib/infra/storage/app-storage";
 import {
     createProfile,
     deleteProfile,
@@ -81,6 +82,9 @@ const PUBLISH_PROMPT_KEY = "publish-pending";
 // The inbound half, kept separate so the two notices replace themselves and not each other.
 const CLOUD_UPDATE_PROMPT_KEY = "cloud-update";
 const SHARED_UPDATE_PROMPT_KEY = "shared-update";
+// A declined reconnect keeps quiet for about half a travel day rather than on every return
+// from Maps. In memory on purpose: a cold start is a fresh session and may ask again.
+const RECONNECT_PROMPT_SNOOZE_MS = 6 * 60 * 60_000;
 // Re-reading a received link means downloading and decrypting the whole trip — hop exposes
 // no cheap "has this changed" — so it is worth one check per visit, not one per tab switch.
 const SHARED_CHECK_TTL_MS = 10 * 60_000;
@@ -138,6 +142,8 @@ export class TripStore {
     private lastSharedCheckAt = 0;
     /** Set by dismissing the prompt, cleared by the next foreground or explicit save. */
     private publishPromptDeclined = false;
+    /** Until when the expired-login notice stays quiet, set by letting it go. */
+    private reconnectPromptSnoozedUntil = 0;
 
     prepDone = $derived(this.data ? [...this.data.todo, ...this.data.packing].filter(i => i.checked).length : 0);
     prepTotal = $derived(this.data ? this.data.todo.length + this.data.packing.length : 0);
@@ -191,7 +197,7 @@ export class TripStore {
             migrateGdriveSyncState();
             // A trip stored before ids existed gets its minted id persisted once;
             // an identity that changes every launch is worse than none.
-            const storedYaml = localStorage.getItem(USER_YAML_KEY);
+            const storedYaml = appStorage.get(USER_YAML_KEY);
             if (storedYaml !== null && tripIdFromYaml(storedYaml) !== data.trip.id) this.persist();
         } catch (err) {
             console.error("Failed to load trip data:", err);
@@ -316,7 +322,7 @@ export class TripStore {
             return false;
         }
         if (this.data) parsed.trip.id = this.data.trip.id;
-        const previousYaml = localStorage.getItem(USER_YAML_KEY);
+        const previousYaml = appStorage.get(USER_YAML_KEY);
         const profileIdAtEdit = ensureActiveProfileId();
         backupCurrentYaml();
         this.data = parsed;
@@ -372,8 +378,10 @@ export class TripStore {
             // Onto the Drive file's metadata, so this trip's other devices update the same
             // link instead of minting a second one. Never for the inline fallback, which
             // mints no record and would therefore clear a link another device does hold.
-            // Metadata only: the key and editToken must never ride along to a recipient.
+            // Metadata only: the key and editToken must never ride along to a recipient. An
+            // inline fallback that followed a link hop refused does take that one off.
             if (outcome.kind !== "inline") void gdriveSync.pushShareLink(profileId);
+            else if (outcome.deadLinkId) void gdriveSync.dropDeadShareLink(profileId, outcome.deadLinkId);
             this.staleShareLinks.delete(profileId);
             const copyMsg = outcome.kind === "inline"
                 ? "分享連結已複製！網址較長，可用短網址服務縮短"
@@ -437,7 +445,7 @@ export class TripStore {
      */
     private storedYaml(): string | null {
         try {
-            return localStorage.getItem(USER_YAML_KEY);
+            return appStorage.get(USER_YAML_KEY);
         } catch {
             return null;
         }
@@ -466,8 +474,46 @@ export class TripStore {
      */
     async checkForUpdates(openTripManagement: () => void): Promise<void> {
         await gdriveSync.refreshFiles();
-        this.promptCloudUpdate(openTripManagement);
+        if (!this.promptCloudReconnect(openTripManagement)) this.promptCloudUpdate(openTripManagement);
         await this.checkSharedTripForUpdates(openTripManagement);
+    }
+
+    /**
+     * Say so when the Drive half of the check could not run. The token lasts an hour and GIS
+     * has no silent refresh, so after that every foreground's listing fails without a word
+     * and a newer cloud copy would go unnoticed; the tap on this notice is the user gesture
+     * a popup needs. Only for a trip bound to Drive — an unbound one has nothing to check.
+     *
+     * Letting it go — the ✕ or the expiry, as with the install prompt — snoozes it for
+     * `RECONNECT_PROMPT_SNOOZE_MS`; a token found valid ends the snooze, so the next expiry
+     * is announced again.
+     */
+    private promptCloudReconnect(openTripManagement: () => void): boolean {
+        if (!gdriveSync.needsReconnect()) {
+            this.reconnectPromptSnoozedUntil = 0;
+            return false;
+        }
+        if (!this.data || !navigator.onLine || Date.now() < this.reconnectPromptSnoozedUntil) return false;
+        const profileId = ensureActiveProfileId();
+        if (!gdriveSync.cloudFileId(profileId)) return false;
+        showToast({
+            message: "Google 雲端登入已過期，無法檢查行程更新",
+            actionLabel: "重新連線",
+            onAction: () => void this.reconnectAndCheck(openTripManagement),
+            showDismiss: true,
+            onDismiss: () => {
+                this.reconnectPromptSnoozedUntil = Date.now() + RECONNECT_PROMPT_SNOOZE_MS;
+            },
+            dedupeKey: CLOUD_UPDATE_PROMPT_KEY,
+        });
+        return true;
+    }
+
+    private async reconnectAndCheck(openTripManagement: () => void) {
+        if (!await gdriveSync.connect()) return;
+        // connect() has already started the listing; this joins that request.
+        await gdriveSync.refreshFiles();
+        this.promptCloudUpdate(openTripManagement);
     }
 
     /**
@@ -698,7 +744,11 @@ export class TripStore {
             }
             this.staleShareLinks.delete(profileId);
             if (outcome.kind !== "inline") void gdriveSync.pushShareLink(profileId);
-            if (outcome.kind === "recreated") {
+            else if (outcome.deadLinkId) void gdriveSync.dropDeadShareLink(profileId, outcome.deadLinkId);
+            if (outcome.kind === "inline") {
+                // The link hop refused could not be replaced, so nothing holds this version.
+                showToast("原本的分享連結已失效，暫時無法建立新連結，請稍後再按「分享行程」");
+            } else if (outcome.kind === "recreated") {
                 // A recreated link is a different URL and the one already handed out is dead,
                 // so the new one has to be reachable from the notice that says so.
                 showToast({
@@ -767,14 +817,25 @@ export class TripStore {
 
     deleteProfile(id: string) {
         deleteProfile(id);
-        gdriveSync.unbindTrip(id);
-        // Forgotten, not revoked: whoever holds the link keeps the last version until it
-        // expires. Deleting a trip from one phone is not a decision about their copy.
-        shareLinks.forget(id);
-        tripOrigins.forget(id);
-        if (this.sharedUpdate?.profileId === id) this.clearSharedUpdate();
+        this.forgetSlot(id);
         this.profiles = listProfiles();
         showToast("已刪除行程");
+    }
+
+    /**
+     * Drops everything kept about a slot besides its YAML — the Drive binding, the share link,
+     * the link it came from, an offer from that link — for a slot whose trip is gone. Kept,
+     * the binding and the link would publish whatever lands there to the old trip's audience,
+     * and the origin would offer the sender's trip over it. Forgotten, not revoked: whoever
+     * holds the link keeps the last version until it expires; dropping a trip on one phone is
+     * not a decision about their copy.
+     */
+    private forgetSlot(profileId: string) {
+        gdriveSync.unbindTrip(profileId);
+        shareLinks.forget(profileId);
+        this.staleShareLinks.delete(profileId);
+        tripOrigins.forget(profileId);
+        if (this.sharedUpdate?.profileId === profileId) this.clearSharedUpdate();
     }
 
     /**
@@ -810,7 +871,7 @@ export class TripStore {
     private writeUserYaml(yaml: string): boolean {
         try {
             backupCurrentYaml();
-            localStorage.setItem(USER_YAML_KEY, yaml);
+            appStorage.set(USER_YAML_KEY, yaml);
             return true;
         } catch (err) {
             console.error("Failed to persist YAML:", err);
@@ -933,7 +994,7 @@ export class TripStore {
      * switched out from under the round trip, must leave one copy rather than fork off a second.
      */
     async keepBothVersions(profileId: string, yaml: string): Promise<LandOutcome | null> {
-        const localYaml = localStorage.getItem(USER_YAML_KEY);
+        const localYaml = appStorage.get(USER_YAML_KEY);
         if (localYaml === null) return null;
         const outcome = await this.syncWithCloud(profileId, yaml, { force: "remote" });
         if (outcome?.kind === "landed") await this.branchLocalCopy(localYaml);
@@ -985,18 +1046,28 @@ export class TripStore {
     /** 回復預設行程: drop the active slot's YAML so the bundled template loads. False when nothing changed. */
     async resetToDefault(profileId: string): Promise<boolean> {
         if (!this.guardActive(profileId)) return false;
+        // A share or sync still in flight records its result on this slot when it lands, which
+        // would tie the template straight back to the old trip's link or Drive file.
+        if (this.isSharing || gdriveSync.isSyncing) {
+            showToast("正在同步或分享，完成後再回復預設");
+            return false;
+        }
         try {
             backupCurrentYaml();
-            localStorage.removeItem(USER_YAML_KEY);
+            appStorage.remove(USER_YAML_KEY);
         } catch (err) {
             console.error("Failed to reset trip data:", err);
             showToast("重設失敗，請稍後再試");
             return false;
         }
-        // Unbind rather than mark dirty: this discards the trip, and marking it dirty would arm
-        // an auto-sync that pushes the bundled template over the user's cloud itinerary. The
-        // Drive copy survives and reappears in the 雲端行程 list.
-        gdriveSync.unbindTrip(profileId);
+        // The slot stays and the template lands in it, so the old trip's ties have to go:
+        // left bound, the first edit would offer to push the template over the cloud copy,
+        // and the share link would reseal it for everyone holding that URL. The Drive copy
+        // survives and reappears in the 雲端行程 list.
+        this.forgetSlot(profileId);
+        // A standing 下載 offer was about the old trip's file; with the binding gone its tap
+        // would upload the template as a new one.
+        this.clearSyncPrompts();
         showToast("已恢復為預設行程…");
         await this.load();
         return true;

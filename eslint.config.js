@@ -98,4 +98,31 @@ export default defineConfig(
             ],
         },
     },
+    {
+        files: ["src/**/*.{ts,svelte}"],
+        ignores: ["src/lib/infra/storage/app-storage.ts", "src/lib/infra/storage/storage-admin.ts", "src/**/*.test.ts", "src/lib/testing/**"],
+        rules: {
+            "no-restricted-globals": ["error", { name: "localStorage", message: "Go through appStorage ($lib/infra/storage/app-storage), which owns the key namespace." }],
+            "no-restricted-properties": [
+                "error",
+                ...["window", "globalThis", "self"].map(object => ({ object, property: "localStorage", message: "Go through appStorage ($lib/infra/storage/app-storage), which owns the key namespace." })),
+            ],
+        },
+    },
+    {
+        files: ["src/lib/config.ts"],
+        rules: {
+            "no-restricted-imports": [
+                "error",
+                {
+                    patterns: [
+                        {
+                            group: ["../*", "./*", "$lib", "$lib/*"],
+                            message: "config.ts is a leaf every layer and plain Node import; it must not import anything from $lib.",
+                        },
+                    ],
+                },
+            ],
+        },
+    },
 );

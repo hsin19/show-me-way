@@ -2,9 +2,10 @@ import {
     serializeToYaml,
     type TripData,
 } from "$lib/domain/trip";
+import { appStorage } from "./app-storage";
 
-export const USER_YAML_KEY = "showmeway_user_yaml";
-export const YAML_BACKUPS_KEY = "showmeway_yaml_backups";
+export const USER_YAML_KEY = "user_yaml";
+export const YAML_BACKUPS_KEY = "yaml_backups";
 const MAX_YAML_BACKUPS = 5;
 
 export interface YamlBackup {
@@ -13,13 +14,13 @@ export interface YamlBackup {
 }
 
 /**
- * A localStorage key holding a JSON array, filtered down to elements `isValid`
+ * A stored entry holding a JSON array, filtered down to elements `isValid`
  * accepts. Missing, unparseable, non-array, or otherwise unreadable storage all
  * come back as `[]` rather than throwing — every caller's storage is optional.
  */
 export function readJsonArray<T>(key: string, isValid: (value: unknown) => value is T): T[] {
     try {
-        const raw = localStorage.getItem(key);
+        const raw = appStorage.get(key);
         if (!raw) return [];
         const parsed: unknown = JSON.parse(raw);
         if (!Array.isArray(parsed)) return [];
@@ -37,9 +38,9 @@ export function listYamlBackups(): YamlBackup[] {
         && typeof (entry as YamlBackup).yaml === "string");
 }
 
-/** The localStorage keys the backup ring occupies, for the storage accounting in App 設定. */
+/** The names the backup ring occupies in appStorage, for the storage accounting in App 設定. */
 export function yamlBackupKeys(): string[] {
-    return localStorage.getItem(YAML_BACKUPS_KEY) === null ? [] : [YAML_BACKUPS_KEY];
+    return appStorage.get(YAML_BACKUPS_KEY) === null ? [] : [YAML_BACKUPS_KEY];
 }
 
 /**
@@ -48,7 +49,7 @@ export function yamlBackupKeys(): string[] {
  */
 export function clearYamlBackups(): boolean {
     const existed = yamlBackupKeys().length > 0;
-    localStorage.removeItem(YAML_BACKUPS_KEY);
+    appStorage.remove(YAML_BACKUPS_KEY);
     return existed;
 }
 
@@ -63,18 +64,18 @@ export function getYamlBackup(savedAt: string): string | null {
  * it was protecting.
  */
 export function backupCurrentYaml(): void {
-    const yaml = localStorage.getItem(USER_YAML_KEY);
+    const yaml = appStorage.get(USER_YAML_KEY);
     if (!yaml) return;
     const backups = listYamlBackups();
     if (backups[0]?.yaml === yaml) return;
     backups.unshift({ savedAt: new Date().toISOString(), yaml });
     try {
-        localStorage.setItem(YAML_BACKUPS_KEY, JSON.stringify(backups.slice(0, MAX_YAML_BACKUPS)));
+        appStorage.set(YAML_BACKUPS_KEY, JSON.stringify(backups.slice(0, MAX_YAML_BACKUPS)));
     } catch (err) {
         console.warn("[yaml-storage] Failed to save YAML backup:", err);
     }
 }
 
 export function saveTripData(data: TripData, yaml: string = serializeToYaml(data)): void {
-    localStorage.setItem(USER_YAML_KEY, yaml);
+    appStorage.set(USER_YAML_KEY, yaml);
 }

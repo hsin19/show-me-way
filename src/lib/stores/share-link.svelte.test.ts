@@ -116,6 +116,20 @@ describe("shareLinks", () => {
         expect(store.forTrip("p-1")?.id).toBe("abcd1234");
     });
 
+    // The link's record is gone from this device, but the trip's Drive file still offers it to
+    // the owner's others, so the caller needs its id to take it off.
+    it("names the link hop refused when no replacement could be minted", async () => {
+        const store = await freshStore();
+        stubHop("abcd1234");
+        await store.publish("p-1", "v1");
+        vi.stubGlobal("fetch", vi.fn((_url: string, init?: RequestInit) => init?.method === "PUT" ? Promise.resolve(json({ error: "x" }, 404)) : Promise.reject(new TypeError("Failed to fetch"))));
+
+        const outcome = await store.publish("p-1", "v2");
+
+        expect(outcome).toMatchObject({ kind: "inline", deadLinkId: "abcd1234" });
+        expect(store.forTrip("p-1")).toBeNull();
+    });
+
     it("falls back to the inline link and remembers nothing when hop refuses a first upload", async () => {
         const store = await freshStore();
         vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new TypeError("Failed to fetch"))));
@@ -124,6 +138,7 @@ describe("shareLinks", () => {
 
         expect(outcome.kind).toBe("inline");
         expect((outcome as { url: string; }).url).toContain("#s=");
+        expect(outcome).not.toHaveProperty("deadLinkId");
         expect(store.forTrip("p-1")).toBeNull();
     });
 

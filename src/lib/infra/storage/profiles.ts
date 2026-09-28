@@ -9,13 +9,14 @@ import {
     parseYaml,
     type TripData,
 } from "$lib/domain/trip";
+import { appStorage } from "./app-storage";
 import {
     readJsonArray,
     USER_YAML_KEY,
 } from "./yaml-storage";
 
-export const PROFILES_KEY = "showmeway_profiles";
-export const ACTIVE_PROFILE_KEY = "showmeway_active_profile";
+export const PROFILES_KEY = "profiles";
+export const ACTIVE_PROFILE_KEY = "active_profile";
 
 interface StoredProfile {
     id: string;
@@ -41,11 +42,11 @@ function readStoredProfiles(): StoredProfile[] {
 }
 
 function writeStoredProfiles(list: StoredProfile[]): void {
-    localStorage.setItem(PROFILES_KEY, JSON.stringify(list));
+    appStorage.set(PROFILES_KEY, JSON.stringify(list));
 }
 
 export function getActiveProfileId(): string | null {
-    return localStorage.getItem(ACTIVE_PROFILE_KEY);
+    return appStorage.get(ACTIVE_PROFILE_KEY);
 }
 
 /**
@@ -63,7 +64,7 @@ export function ensureActiveProfileId(): string {
     let id = getActiveProfileId();
     if (!id) {
         id = genTripId();
-        localStorage.setItem(ACTIVE_PROFILE_KEY, id);
+        appStorage.set(ACTIVE_PROFILE_KEY, id);
     }
     return id;
 }
@@ -136,7 +137,7 @@ export function tripIdFromYaml(yaml: string): string | null {
  * anything by slot needs it to exist.
  */
 export function listLocalTrips(): { profileId: string; yaml: string; }[] {
-    const activeYaml = localStorage.getItem(USER_YAML_KEY);
+    const activeYaml = appStorage.get(USER_YAML_KEY);
     return [
         ...(activeYaml == null ? [] : [{ profileId: ensureActiveProfileId(), yaml: activeYaml }]),
         ...readStoredProfiles().map(p => ({ profileId: p.id, yaml: p.yaml })),
@@ -201,7 +202,7 @@ export function switchToProfile(targetId: string): void {
     const target = list.find(p => p.id === targetId);
     if (!target) throw new Error("找不到要切換的行程");
     const activeId = ensureActiveProfileId();
-    const activeYaml = localStorage.getItem(USER_YAML_KEY);
+    const activeYaml = appStorage.get(USER_YAML_KEY);
     // The target stays in the parked list until the active slot holds it: a quota
     // failure on any write then leaves a trip duplicated, never missing. Removing it
     // first and failing on the next write left the target in no key at all.
@@ -209,23 +210,23 @@ export function switchToProfile(targetId: string): void {
         ? [{ id: activeId, yaml: activeYaml, savedAt: new Date().toISOString() }, ...list]
         : list;
     writeStoredProfiles(parked);
-    localStorage.setItem(USER_YAML_KEY, target.yaml);
-    localStorage.setItem(ACTIVE_PROFILE_KEY, target.id);
+    appStorage.set(USER_YAML_KEY, target.yaml);
+    appStorage.set(ACTIVE_PROFILE_KEY, target.id);
     writeStoredProfiles(parked.filter(p => p.id !== targetId));
 }
 
 /** Start a new trip from `yaml`, parking the current one. Same caller contract as `switchToProfile`; returns the new profile's id. */
 export function createProfile(yaml: string): string {
     const activeId = ensureActiveProfileId();
-    const activeYaml = localStorage.getItem(USER_YAML_KEY);
+    const activeYaml = appStorage.get(USER_YAML_KEY);
     if (activeYaml != null) {
         const list = readStoredProfiles();
         list.unshift({ id: activeId, yaml: activeYaml, savedAt: new Date().toISOString() });
         writeStoredProfiles(list);
     }
     const id = genTripId();
-    localStorage.setItem(USER_YAML_KEY, yaml);
-    localStorage.setItem(ACTIVE_PROFILE_KEY, id);
+    appStorage.set(USER_YAML_KEY, yaml);
+    appStorage.set(ACTIVE_PROFILE_KEY, id);
     return id;
 }
 

@@ -9,6 +9,7 @@ import {
     type TripData,
     validateYaml,
 } from "$lib/domain/trip";
+import { appStorage } from "./app-storage";
 import {
     createProfile,
     ensureUniqueTripId,
@@ -78,7 +79,7 @@ export function importSharedTrip(incoming: TripData): ShareImportOutcome {
         }
         if (!confirm("那要另外匯入成一份副本嗎？原本那份會保留。")) return { kind: "declined" };
     } else if (
-        localStorage.getItem(USER_YAML_KEY)
+        appStorage.get(USER_YAML_KEY)
         && !confirm("偵測到分享的行程，要匯入為新行程嗎？（目前行程會保留，可隨時切回）")
     ) {
         return { kind: "declined" };

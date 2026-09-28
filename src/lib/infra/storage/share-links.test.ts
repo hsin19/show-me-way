@@ -7,6 +7,7 @@ import {
     it,
     vi,
 } from "vitest";
+import { appStorage } from "./app-storage";
 import {
     decodeShareLinkProperties,
     encodeShareLinkProperties,
@@ -37,27 +38,27 @@ describe("share-links storage", () => {
 
     it("round-trips a map under the app-prefixed key", () => {
         saveShareLinkMap({ "p-1": RECORD });
-        expect(SHARE_LINKS_KEY.startsWith("showmeway_")).toBe(true);
+        expect(localStorage.getItem("showmeway_share_links")).not.toBeNull();
         expect(loadShareLinkMap()).toEqual({ "p-1": RECORD });
     });
 
     it("removes the key rather than storing an empty map", () => {
         saveShareLinkMap({ "p-1": RECORD });
         saveShareLinkMap({});
-        expect(localStorage.getItem(SHARE_LINKS_KEY)).toBeNull();
+        expect(appStorage.get(SHARE_LINKS_KEY)).toBeNull();
     });
 
     // A record missing its token or key can only mislead the next publish into a PUT
     // that 401s, or into a link nobody can open.
     it("drops a malformed entry but keeps the rest", () => {
-        localStorage.setItem(SHARE_LINKS_KEY, JSON.stringify({ "p-1": RECORD, "p-2": { id: "x" }, "p-3": "nope" }));
+        appStorage.set(SHARE_LINKS_KEY, JSON.stringify({ "p-1": RECORD, "p-2": { id: "x" }, "p-3": "nope" }));
         expect(loadShareLinkMap()).toEqual({ "p-1": RECORD });
     });
 
     it("yields an empty map for garbage, an array, or blocked storage", () => {
-        localStorage.setItem(SHARE_LINKS_KEY, "{not json");
+        appStorage.set(SHARE_LINKS_KEY, "{not json");
         expect(loadShareLinkMap()).toEqual({});
-        localStorage.setItem(SHARE_LINKS_KEY, "[]");
+        appStorage.set(SHARE_LINKS_KEY, "[]");
         expect(loadShareLinkMap()).toEqual({});
         vi.stubGlobal("localStorage", {
             getItem: () => {

@@ -1,7 +1,9 @@
 <script lang="ts">
+import { REPO_URL } from "$lib/config";
 import { buildShortShareUrl } from "$lib/domain/share";
 import { formatBackupTime } from "$lib/domain/utils";
 import { fetchDefaultYamlText } from "$lib/infra/http/itinerary-loader";
+import { appStorage } from "$lib/infra/storage/app-storage";
 import {
     ensureActiveProfileId,
     type ProfileInfo,
@@ -81,7 +83,7 @@ onMount(async () => {
     if (gdriveSync.isConnected) {
         void gdriveSync.refreshFiles();
     }
-    let persisted = localStorage.getItem(USER_YAML_KEY);
+    let persisted = appStorage.get(USER_YAML_KEY);
     if (persisted === null) {
         try {
             persisted = await fetchDefaultYamlText();
@@ -498,7 +500,7 @@ function discardDraft() {
             <li>
                 可用此指令安裝行程小幫手 Skill：
                 <div class="bg-well-deep border border-line rounded px-2 py-1 mt-1 font-mono text-[10px] select-all break-all text-text-primary">
-                    npx skills add https://github.com/hsin19/show-me-way --skill itinerary-yaml-builder
+                    npx skills add {REPO_URL} --skill itinerary-yaml-builder
                 </div>
             </li>
         </ul>
@@ -614,7 +616,8 @@ function discardDraft() {
         <button
             type="button"
             onclick={() => (confirmingReset = true)}
-            class="w-full min-h-[44px] bg-tint-1 border border-card-border text-text-muted text-xs font-bold py-2.5 px-4 rounded-xl hover:text-danger hover:border-danger/40 hover:bg-danger/10 transition cursor-pointer"
+            disabled={tripStore.isSharing || gdriveSync.isSyncing}
+            class="w-full min-h-[44px] bg-tint-1 border border-card-border text-text-muted text-xs font-bold py-2.5 px-4 rounded-xl hover:text-danger hover:border-danger/40 hover:bg-danger/10 transition cursor-pointer disabled:opacity-40 disabled:cursor-wait"
         >
             回復預設行程
         </button>

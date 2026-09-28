@@ -1,9 +1,10 @@
-export const GDRIVE_USER_STORAGE = "showmeway_gdrive_user";
-const GDRIVE_TOKEN_STORAGE = "showmeway_gdrive_token";
-const GDRIVE_FOLDER_ID_STORAGE = "showmeway_gdrive_folder_id";
-export const GDRIVE_TRIPS_STORAGE = "showmeway_gdrive_trips";
+export const GDRIVE_USER_STORAGE = "gdrive_user";
+const GDRIVE_TOKEN_STORAGE = "gdrive_token";
+const GDRIVE_FOLDER_ID_STORAGE = "gdrive_folder_id";
+export const GDRIVE_TRIPS_STORAGE = "gdrive_trips";
 
 import { yamlFingerprint } from "$lib/domain/utils";
+import { appStorage } from "$lib/infra/storage/app-storage";
 import {
     tripIdFromYaml,
     tripNameFromYaml,
@@ -92,14 +93,6 @@ export interface TripSyncRecord {
 
 export type TripSyncMap = Record<string, TripSyncRecord>;
 
-const FALLBACK_CLIENT_ID = "849908319136-che7nc9nag6ua5gd3fipk9evme4ngjde.apps.googleusercontent.com";
-
-export function getGdriveClientId(): string {
-    const id = (typeof import.meta !== "undefined" && import.meta.env?.VITE_GOOGLE_CLIENT_ID) as string | undefined;
-    if (id && id.trim()) return id.trim();
-    return FALLBACK_CLIENT_ID;
-}
-
 function isValidGoogleUser(value: unknown): value is GoogleUser {
     return !!value
         && typeof value === "object"
@@ -121,7 +114,7 @@ export function clearGdriveUser(): void {
 
 function loadGdriveFolderId(): string | null {
     try {
-        return localStorage.getItem(GDRIVE_FOLDER_ID_STORAGE);
+        return appStorage.get(GDRIVE_FOLDER_ID_STORAGE);
     } catch {
         return null;
     }
@@ -130,7 +123,7 @@ function loadGdriveFolderId(): string | null {
 /** Exported for the store tests, which pre-seed the folder to skip the lookup round trip. */
 export function saveGdriveFolderId(folderId: string): void {
     try {
-        localStorage.setItem(GDRIVE_FOLDER_ID_STORAGE, folderId);
+        appStorage.set(GDRIVE_FOLDER_ID_STORAGE, folderId);
     } catch (e) {
         console.warn("Failed to save Google Drive Folder ID", e);
     }
@@ -138,7 +131,7 @@ export function saveGdriveFolderId(folderId: string): void {
 
 export function loadTripSyncMap(): TripSyncMap {
     try {
-        const raw = localStorage.getItem(GDRIVE_TRIPS_STORAGE);
+        const raw = appStorage.get(GDRIVE_TRIPS_STORAGE);
         if (!raw) return {};
         const parsed: unknown = JSON.parse(raw);
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
@@ -157,19 +150,19 @@ export function loadTripSyncMap(): TripSyncMap {
 
 export function saveTripSyncMap(map: TripSyncMap): void {
     try {
-        localStorage.setItem(GDRIVE_TRIPS_STORAGE, JSON.stringify(map));
+        appStorage.set(GDRIVE_TRIPS_STORAGE, JSON.stringify(map));
     } catch (e) {
         console.warn("Failed to save Google Drive sync state", e);
     }
 }
 
 /** Keys the earlier sync schemes wrote, before the one record per trip. */
-const LEGACY_KEY_PREFIXES = ["showmeway_gdrive_mod_"];
-const LEGACY_FILE_MAP_KEY = "showmeway_gdrive_file_map";
-const LEGACY_MD5_MAP_KEY = "showmeway_gdrive_md5_map";
-const LEGACY_DIRTY_MAP_KEY = "showmeway_gdrive_dirty_map";
+const LEGACY_KEY_PREFIXES = ["gdrive_mod_"];
+const LEGACY_FILE_MAP_KEY = "gdrive_file_map";
+const LEGACY_MD5_MAP_KEY = "gdrive_md5_map";
+const LEGACY_DIRTY_MAP_KEY = "gdrive_dirty_map";
 /** The opt-in that background pushes needed. Every transfer is a tap now, so the flag decides nothing. */
-const RETIRED_AUTO_SYNC_KEY = "showmeway_gdrive_auto_sync";
+const RETIRED_AUTO_SYNC_KEY = "gdrive_auto_sync";
 
 /**
  * Folds the earlier per-concern maps into the single record map and removes them, and
@@ -182,10 +175,10 @@ const RETIRED_AUTO_SYNC_KEY = "showmeway_gdrive_auto_sync";
  */
 export function migrateGdriveSyncState(): void {
     try {
-        const rawFiles = localStorage.getItem(LEGACY_FILE_MAP_KEY);
+        const rawFiles = appStorage.get(LEGACY_FILE_MAP_KEY);
         if (rawFiles) {
             const files: unknown = JSON.parse(rawFiles);
-            const md5s: unknown = JSON.parse(localStorage.getItem(LEGACY_MD5_MAP_KEY) ?? "{}");
+            const md5s: unknown = JSON.parse(appStorage.get(LEGACY_MD5_MAP_KEY) ?? "{}");
             if (files && typeof files === "object" && !Array.isArray(files)) {
                 const map = loadTripSyncMap();
                 for (const [tripId, fileId] of Object.entries(files as Record<string, unknown>)) {
@@ -196,14 +189,11 @@ export function migrateGdriveSyncState(): void {
                 saveTripSyncMap(map);
             }
         }
-        [LEGACY_FILE_MAP_KEY, LEGACY_MD5_MAP_KEY, LEGACY_DIRTY_MAP_KEY, RETIRED_AUTO_SYNC_KEY].forEach(key => localStorage.removeItem(key));
+        [LEGACY_FILE_MAP_KEY, LEGACY_MD5_MAP_KEY, LEGACY_DIRTY_MAP_KEY, RETIRED_AUTO_SYNC_KEY].forEach(key => appStorage.remove(key));
 
-        const stale: string[] = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && LEGACY_KEY_PREFIXES.some(prefix => key.startsWith(prefix))) stale.push(key);
-        }
-        stale.forEach(key => localStorage.removeItem(key));
+        appStorage.names()
+            .filter(name => LEGACY_KEY_PREFIXES.some(prefix => name.startsWith(prefix)))
+            .forEach(name => appStorage.remove(name));
     } catch (e) {
         console.warn("Failed to migrate Google Drive sync state", e);
     }
@@ -375,7 +365,7 @@ interface CachedTokenData {
 
 export function getCachedAccessToken(): string | null {
     try {
-        const raw = localStorage.getItem(GDRIVE_TOKEN_STORAGE);
+        const raw = appStorage.get(GDRIVE_TOKEN_STORAGE);
         if (!raw) return null;
         const data: unknown = JSON.parse(raw);
         if (
@@ -404,7 +394,7 @@ export function setCachedAccessToken(token: string, expiresInSeconds: number): v
             token,
             expiresAt: Date.now() + expiresInSeconds * 1000,
         };
-        localStorage.setItem(GDRIVE_TOKEN_STORAGE, JSON.stringify(data));
+        appStorage.set(GDRIVE_TOKEN_STORAGE, JSON.stringify(data));
     } catch (e) {
         console.warn("Failed to cache Google Drive Token", e);
     }
@@ -412,7 +402,7 @@ export function setCachedAccessToken(token: string, expiresInSeconds: number): v
 
 export function clearCachedAccessToken(): void {
     try {
-        localStorage.removeItem(GDRIVE_TOKEN_STORAGE);
+        appStorage.remove(GDRIVE_TOKEN_STORAGE);
     } catch (e) {
         console.warn("Failed to clear Google Drive Token", e);
     }
@@ -810,6 +800,22 @@ export async function updateCloudShareLink(token: string, fileId: string, record
         body: JSON.stringify({ appProperties: shareLinkProperties(record) }),
     });
     assertDriveOk(res, "無法更新雲端的分享連結");
+}
+
+/**
+ * Clears the share-link properties on `fileId` while they still name `linkId`, for a link hop
+ * answered 404/410 or 401 (`gone` / `unauthorized`) — never for any other answer or none,
+ * since the properties are how the owner's other devices find a link that may well still
+ * work. Left in place, every device reading the file would adopt a link nothing can update
+ * or revoke.
+ * Another device may already have put a replacement there, which the id check leaves alone.
+ * Reports whether it cleared.
+ */
+export async function clearDeadShareLink(token: string, fileId: string, linkId: string): Promise<boolean> {
+    const current = await fetchCloudTripMeta(token, fileId);
+    if (current?.shareLink?.id !== linkId) return false;
+    await updateCloudShareLink(token, fileId, null);
+    return true;
 }
 
 /** Download YAML content from a Google Drive file */

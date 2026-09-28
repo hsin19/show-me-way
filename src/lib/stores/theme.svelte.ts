@@ -7,7 +7,11 @@
 // first paint; keep the two in sync, and `e2e/tests/theme.spec.ts` catches it if
 // they drift.
 
-export const THEME_KEY = "showmeway_theme";
+import { appStorage } from "$lib/infra/storage/app-storage";
+
+// index.html's pre-paint script reads this as `showmeway_theme` — appStorage's namespace
+// spelled out, since that script cannot import it. Rename one, rename both.
+export const THEME_KEY = "theme";
 
 /** What the user chose. `system` follows the OS setting live. */
 export type ThemePref = "system" | "dark" | "light";
@@ -24,7 +28,7 @@ function isPref(value: unknown): value is ThemePref {
 /** `system` for an unset or unreadable preference — a private-mode read can throw. */
 export function readThemePref(): ThemePref {
     try {
-        const stored = localStorage.getItem(THEME_KEY);
+        const stored = appStorage.get(THEME_KEY);
         return isPref(stored) ? stored : "system";
     } catch {
         return "system";
@@ -73,7 +77,7 @@ function apply(next: ResolvedTheme): void {
 export function setThemePref(next: ThemePref): void {
     pref = next;
     try {
-        localStorage.setItem(THEME_KEY, next);
+        appStorage.set(THEME_KEY, next);
     } catch {
         // Only costs the user the preference surviving a reload.
     }

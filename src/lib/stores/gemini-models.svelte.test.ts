@@ -7,6 +7,7 @@ import {
     GEMINI_MODEL_STORAGE,
     loadGeminiModel,
 } from "$lib/infra/http/gemini";
+import { appStorage } from "$lib/infra/storage/app-storage";
 import { flushSync } from "svelte";
 import {
     afterEach,
@@ -87,7 +88,7 @@ describe("createModelPicker", () => {
     });
 
     it("keeps a stored preference the key still offers", async () => {
-        localStorage.setItem(GEMINI_MODEL_STORAGE, "gemini-2.0-flash");
+        appStorage.set(GEMINI_MODEL_STORAGE, "gemini-2.0-flash");
         stubModels(["gemini-2.5-flash", "gemini-2.0-flash"]);
         const picker = mountPicker(() => "key-a");
         await settle();
@@ -96,7 +97,7 @@ describe("createModelPicker", () => {
     });
 
     it("re-picks when the stored model is not among this key's models", async () => {
-        localStorage.setItem(GEMINI_MODEL_STORAGE, "gemini-retired");
+        appStorage.set(GEMINI_MODEL_STORAGE, "gemini-retired");
         stubModels(["gemini-2.5-flash"]);
         const picker = mountPicker(() => "key-a");
         await settle();

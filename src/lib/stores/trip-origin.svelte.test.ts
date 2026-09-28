@@ -1,4 +1,5 @@
 import { yamlFingerprint } from "$lib/domain/utils";
+import { appStorage } from "$lib/infra/storage/app-storage";
 import { createLocalStorageStub } from "$lib/testing/stubs";
 import {
     afterEach,
@@ -39,7 +40,7 @@ describe("tripOrigins", () => {
         expect(store.isShared("p1")).toBe(true);
         expect(store.linkFor("p1")).toEqual(LINK);
         expect(store.takenHash("p1")).toBe(yamlFingerprint(YAML));
-        expect(Object.keys(JSON.parse(localStorage.getItem(TRIP_ORIGINS_KEY)!) as object)).toEqual(["p1"]);
+        expect(Object.keys(JSON.parse(appStorage.get(TRIP_ORIGINS_KEY)!) as object)).toEqual(["p1"]);
 
         // The link and the version taken both have to survive a reload, or the next
         // background check either cannot ask or cannot tell what moved.
@@ -80,11 +81,11 @@ describe("tripOrigins", () => {
         expect(store.isShared("p2")).toBe(true);
 
         store.forget("p2");
-        expect(localStorage.getItem(TRIP_ORIGINS_KEY)).toBeNull();
+        expect(appStorage.get(TRIP_ORIGINS_KEY)).toBeNull();
     });
 
     it("survives unreadable storage and drops malformed entries rather than the map", async () => {
-        localStorage.setItem(
+        appStorage.set(
             TRIP_ORIGINS_KEY,
             JSON.stringify({ p1: { receivedAt: "2026-01-01T00:00:00.000Z" }, p2: 7, p3: { id: "x" } }),
         );
@@ -97,7 +98,7 @@ describe("tripOrigins", () => {
         // Marked but not watchable: an older mark that predates the stored link.
         expect(store.linkFor("p1")).toBeNull();
 
-        localStorage.setItem(TRIP_ORIGINS_KEY, "not json");
+        appStorage.set(TRIP_ORIGINS_KEY, "not json");
         expect((await freshStore()).isShared("p1")).toBe(false);
     });
 

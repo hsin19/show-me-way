@@ -5,24 +5,22 @@
 // keys it occupies and delegates removal back to it, so no key string is restated
 // here and nothing imports this back.
 //
-// The one thing it does know is the app's key prefix, for the hard reset. That
-// reset is scoped and never `localStorage.clear()`: production is a GitHub Pages
-// *project* site, so the origin is shared with every other project on the
-// account and a blanket clear would take their data too.
+// What the app holds comes from appStorage, so the hard reset is scoped by construction
+// and never `localStorage.clear()`, which on the shared origin would take every other
+// project's data too. The one raw access left is for the legacy keys below, which
+// earlier builds wrote without the namespace.
 
 import {
     clearWeatherCache,
     weatherCacheKeys,
 } from "$lib/infra/http/weather";
+import { appStorage } from "./app-storage";
 import { clearStorageCacheMemory } from "./storage-cache";
 import { yamlBackupKeys } from "./yaml-storage";
 
 // Re-exported so the panel has one import for the whole surface, while the
 // removal itself stays with the backup ring's owner.
 export { clearYamlBackups } from "./yaml-storage";
-
-/** Every key this app writes carries this prefix; the legacy lists below are the only exceptions, and nothing writes those any more. */
-const APP_KEY_PREFIX = "showmeway_";
 
 /** Written by 2026-06 builds and long since migrated into the YAML; the migration is gone, so this sweep is all that can still remove a stray copy. */
 const LEGACY_KEYS = ["todo_state", "packing_state", "ledger_expenses"];
@@ -43,9 +41,8 @@ export interface StorageSummary {
     other: CategoryStorageStats;
 }
 
-// UTF-16 code units, not UTF-8 bytes: that is how browsers bill the quota, and for
-// a Chinese itinerary the two differ by roughly half.
-function storedBytes(key: string): number {
+// Counted like appStorage.sizeOf, for the entries that live outside it.
+function legacyBytes(key: string): number {
     return (key.length + (localStorage.getItem(key) ?? "").length) * 2;
 }
 
@@ -57,41 +54,33 @@ export function formatBytes(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function isAppKey(key: string): boolean {
-    return (
-        key.startsWith(APP_KEY_PREFIX)
-        || LEGACY_KEYS.includes(key)
-        || LEGACY_KEY_PREFIXES.some(prefix => key.startsWith(prefix))
-    );
-}
-
 /** A snapshot: removing while walking the live index would skip entries. */
-function appKeys(): string[] {
+function legacyKeys(): string[] {
     const keys: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && isAppKey(key)) keys.push(key);
+        if (key && (LEGACY_KEYS.includes(key) || LEGACY_KEY_PREFIXES.some(prefix => key.startsWith(prefix)))) keys.push(key);
     }
     return keys;
 }
 
-function statsFor(keys: readonly string[]): CategoryStorageStats {
+function statsFor(names: readonly string[], legacy: readonly string[] = []): CategoryStorageStats {
     return {
-        keyCount: keys.length,
-        sizeBytes: keys.reduce((sum, key) => sum + storedBytes(key), 0),
+        keyCount: names.length + legacy.length,
+        sizeBytes: names.reduce((sum, name) => sum + appStorage.sizeOf(name), 0) + legacy.reduce((sum, key) => sum + legacyBytes(key), 0),
     };
 }
 
 /** localStorage usage of this app, grouped by what clearing each group costs. */
 export function getStorageSummary(): StorageSummary {
-    const apiCacheKeys = weatherCacheKeys();
-    const backupKeys = yamlBackupKeys();
-    const claimed = new Set([...apiCacheKeys, ...backupKeys]);
-    const otherKeys = appKeys().filter(key => !claimed.has(key));
+    const apiCacheNames = weatherCacheKeys();
+    const backupNames = yamlBackupKeys();
+    const claimed = new Set([...apiCacheNames, ...backupNames]);
+    const otherNames = appStorage.names().filter(name => !claimed.has(name));
 
-    const apiCache = statsFor(apiCacheKeys);
-    const backups = statsFor(backupKeys);
-    const other = statsFor(otherKeys);
+    const apiCache = statsFor(apiCacheNames);
+    const backups = statsFor(backupNames);
+    const other = statsFor(otherNames, legacyKeys());
     return {
         totalBytes: apiCache.sizeBytes + backups.sizeBytes + other.sizeBytes,
         apiCache,
@@ -111,6 +100,7 @@ export function clearApiCache(): number {
  * parts of it straight back.
  */
 export function clearAppLocalStorage(): void {
-    appKeys().forEach(key => localStorage.removeItem(key));
+    appStorage.names().forEach(name => appStorage.remove(name));
+    legacyKeys().forEach(key => localStorage.removeItem(key));
     clearStorageCacheMemory();
 }

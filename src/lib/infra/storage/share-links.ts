@@ -10,7 +10,9 @@
 // or deleting the ciphertext on hop, so nothing here may ever leak into the YAML that
 // gets exported, shared or sent to Gemini.
 
-export const SHARE_LINKS_KEY = "showmeway_share_links";
+import { appStorage } from "./app-storage";
+
+export const SHARE_LINKS_KEY = "share_links";
 
 export interface ShareLinkRecord {
     /** hop blob id — the half of `#h=<id>.<key>` hop knows. */
@@ -40,7 +42,7 @@ function isRecord(value: unknown): value is ShareLinkRecord {
 /** Unreadable or malformed storage yields {}; a malformed entry is dropped, not the map. */
 export function loadShareLinkMap(): ShareLinkMap {
     try {
-        const raw = localStorage.getItem(SHARE_LINKS_KEY);
+        const raw = appStorage.get(SHARE_LINKS_KEY);
         if (!raw) return {};
         const parsed: unknown = JSON.parse(raw);
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
@@ -57,10 +59,10 @@ export function loadShareLinkMap(): ShareLinkMap {
 /** Throws on a refused write (quota, blocked storage) so the caller can say the link was minted but not remembered. */
 export function saveShareLinkMap(map: ShareLinkMap): void {
     if (Object.keys(map).length === 0) {
-        localStorage.removeItem(SHARE_LINKS_KEY);
+        appStorage.remove(SHARE_LINKS_KEY);
         return;
     }
-    localStorage.setItem(SHARE_LINKS_KEY, JSON.stringify(map));
+    appStorage.set(SHARE_LINKS_KEY, JSON.stringify(map));
 }
 
 /**

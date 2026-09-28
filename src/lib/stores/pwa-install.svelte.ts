@@ -10,9 +10,10 @@
 // `beforeinstallprompt` can land while App 設定 is already open, and the button
 // has to appear (and later disappear) without a remount.
 
+import { appStorage } from "$lib/infra/storage/app-storage";
 import { showToast } from "./toast.svelte";
 
-export const PWA_INSTALL_DISMISSED_KEY = "showmeway_pwa_install_dismissed";
+export const PWA_INSTALL_DISMISSED_KEY = "pwa_install_dismissed";
 /** Don't raise it again for 7 days once the user dismissed or ignored the toast. */
 const DISMISS_COOL_OFF_MS = 7 * 24 * 60 * 60 * 1000;
 /** How long to wait for `beforeinstallprompt` before assuming it is never coming. */
@@ -63,7 +64,7 @@ export function isIosDevice(): boolean {
  */
 export function isInstallDismissedRecently(): boolean {
     if (typeof window === "undefined") return false;
-    const stamp = localStorage.getItem(PWA_INSTALL_DISMISSED_KEY);
+    const stamp = appStorage.get(PWA_INSTALL_DISMISSED_KEY);
     if (stamp === null) return false;
     const timestamp = Number.parseInt(stamp, 10);
     if (Number.isNaN(timestamp)) return false;
@@ -73,7 +74,7 @@ export function isInstallDismissedRecently(): boolean {
 
 export function markInstallDismissed(): void {
     if (typeof window === "undefined") return;
-    localStorage.setItem(PWA_INSTALL_DISMISSED_KEY, Date.now().toString());
+    appStorage.set(PWA_INSTALL_DISMISSED_KEY, Date.now().toString());
 }
 
 /** Whether a real install dialog can still be opened, i.e. whether to offer the button at all. */

@@ -5,6 +5,7 @@ import {
     validateYaml,
 } from "$lib/domain/trip";
 import { yamlFingerprint } from "$lib/domain/utils";
+import { appStorage } from "$lib/infra/storage/app-storage";
 import {
     ensureActiveProfileId,
     listProfiles,
@@ -24,10 +25,12 @@ import {
     describe,
     expect,
     it,
+    onTestFinished,
     vi,
 } from "vitest";
 import { gdriveSync } from "./gdrive.svelte";
 import { settingsDraft } from "./settings-draft.svelte";
+import { shareLinks } from "./share-link.svelte";
 import { tripOrigins } from "./trip-origin.svelte";
 import { TripStore } from "./trip.svelte";
 
@@ -322,6 +325,30 @@ describe("TripStore", () => {
             expect(calls.map(c => c.method)).toEqual(["PUT", "POST"]);
         });
 
+        // The owner's other devices find a link on the trip's Drive file, so only hop's own
+        // answer that it is dead may take it off there — never a failure to reach hop.
+        it.each([
+            { hop: "404 and no replacement", put: () => json({ error: "x" }, 404), post: () => Promise.reject(new TypeError("Failed to fetch")), drop: true, push: false },
+            { hop: "401 and no replacement", put: () => json({ error: "x" }, 401), post: () => Promise.reject(new TypeError("Failed to fetch")), drop: true, push: false },
+            { hop: "404 and a replacement", put: () => json({ error: "x" }, 404), post: () => json({ id: "efgh5678", editToken: "tok-efgh5678", expiresAt: 1 }, 201), drop: false, push: true },
+            { hop: "503", put: () => json({ error: "x" }, 503), post: () => Promise.reject(new TypeError("unused")), drop: false, push: false },
+            { hop: "unreachable", put: () => Promise.reject(new TypeError("Failed to fetch")), post: () => Promise.reject(new TypeError("unused")), drop: false, push: false },
+        ])("on an existing link hop answers $hop: drops it from Drive $drop, pushes a new one $push", async ({ put, post, drop, push }) => {
+            stubHop("abcd1234");
+            await store.shareCurrentTrip();
+            const pushSpy = vi.spyOn(gdriveSync, "pushShareLink").mockResolvedValue();
+            const dropSpy = vi.spyOn(gdriveSync, "dropDeadShareLink").mockResolvedValue();
+            onTestFinished(() => {
+                vi.restoreAllMocks();
+            });
+            vi.stubGlobal("fetch", vi.fn((_url: string, init?: RequestInit) => Promise.resolve(init?.method === "PUT" ? put() : post())));
+
+            await store.shareCurrentTrip();
+
+            expect(dropSpy.mock.calls).toEqual(drop ? [[expect.any(String), "abcd1234"]] : []);
+            expect(pushSpy).toHaveBeenCalledTimes(push ? 1 : 0);
+        });
+
         // Minting a fresh link here would split the audience across two ids, and the
         // inline fallback would hand over a URL different from the one already sent around.
         it("hands out nothing when an existing link cannot be updated because hop is unreachable", async () => {
@@ -391,7 +418,7 @@ todo:
         vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("offline"))));
         vi.stubGlobal("confirm", () => true);
         settingsDraft.yaml = null;
-        localStorage.setItem(USER_YAML_KEY, LOCAL_YAML);
+        appStorage.set(USER_YAML_KEY, LOCAL_YAML);
         profileId = ensureActiveProfileId();
         store = new TripStore();
         store.data = validateYaml(LOCAL_YAML);
@@ -408,7 +435,7 @@ todo:
             const handwritten = CLOUD_YAML.replace("  hotels: []\n", "  hotels: []\n  start: '2020-01-01'\n");
             const outcome = await store.landYaml(profileId, handwritten, { canonical: true });
             expect(outcome.kind).toBe("landed");
-            const stored = localStorage.getItem(USER_YAML_KEY);
+            const stored = appStorage.get(USER_YAML_KEY);
             expect(stored).toContain("雲端行程");
             expect(stored).not.toMatch(/^\s+start:/m);
             expect(outcome.kind === "landed" && outcome.yaml).toBe(stored);
@@ -420,21 +447,21 @@ todo:
             const asDownloaded = CLOUD_YAML.replace("  hotels: []\n", "  hotels: []\n  start: '2020-01-01'\n");
             const outcome = await store.landYaml(profileId, asDownloaded);
             expect(outcome.kind).toBe("landed");
-            expect(localStorage.getItem(USER_YAML_KEY)).toBe(asDownloaded);
+            expect(appStorage.get(USER_YAML_KEY)).toBe(asDownloaded);
         });
 
         it("writes nothing for YAML that does not validate", async () => {
             const outcome = await store.landYaml(profileId, BROKEN_YAML);
             expect(outcome.kind).toBe("invalid");
             expect(outcome.kind === "invalid" && outcome.yaml).toBe(BROKEN_YAML);
-            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+            expect(appStorage.get(USER_YAML_KEY)).toBe(LOCAL_YAML);
             expect(listYamlBackups()).toEqual([]);
         });
 
         it("refuses to land bytes meant for a trip that is no longer active", async () => {
             const outcome = await store.landYaml("a-profile-switched-away-from", CLOUD_YAML);
             expect(outcome.kind).toBe("aborted");
-            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+            expect(appStorage.get(USER_YAML_KEY)).toBe(LOCAL_YAML);
         });
     });
 
@@ -444,7 +471,7 @@ todo:
             vi.spyOn(gdriveSync, "sync").mockResolvedValue({ action: "pulled", yaml: CLOUD_YAML, commit });
             const outcome = await store.syncWithCloud(profileId, LOCAL_YAML);
             expect(outcome?.kind).toBe("landed");
-            expect(localStorage.getItem(USER_YAML_KEY)).toBe(CLOUD_YAML);
+            expect(appStorage.get(USER_YAML_KEY)).toBe(CLOUD_YAML);
             expect(commit).toHaveBeenCalledTimes(1);
         });
 
@@ -454,14 +481,14 @@ todo:
             const outcome = await store.syncWithCloud(profileId, LOCAL_YAML);
             expect(outcome?.kind).toBe("invalid");
             expect(commit).not.toHaveBeenCalled();
-            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+            expect(appStorage.get(USER_YAML_KEY)).toBe(LOCAL_YAML);
             expect(settingsDraft.yaml).toBe(BROKEN_YAML);
         });
 
         it("reports nothing to land when the sync pushed or raised a conflict", async () => {
             vi.spyOn(gdriveSync, "sync").mockResolvedValue({ action: "conflict" });
             expect(await store.syncWithCloud(profileId, LOCAL_YAML)).toBeNull();
-            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+            expect(appStorage.get(USER_YAML_KEY)).toBe(LOCAL_YAML);
         });
     });
 
@@ -470,7 +497,7 @@ todo:
             vi.spyOn(gdriveSync, "sync").mockResolvedValue({ action: "pulled", yaml: CLOUD_YAML, commit: vi.fn() });
             const outcome = await store.keepBothVersions(profileId, LOCAL_YAML);
             expect(outcome?.kind).toBe("landed");
-            const active = localStorage.getItem(USER_YAML_KEY) ?? "";
+            const active = appStorage.get(USER_YAML_KEY) ?? "";
             expect(active).toContain("本機行程（本機版）");
             expect(active).not.toContain("t-local");
             const parked = listProfiles().map(p => p.name);
@@ -482,7 +509,7 @@ todo:
             const outcome = await store.keepBothVersions(profileId, LOCAL_YAML);
             expect(outcome?.kind).toBe("invalid");
             expect(listProfiles()).toEqual([]);
-            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+            expect(appStorage.get(USER_YAML_KEY)).toBe(LOCAL_YAML);
         });
     });
 
@@ -491,7 +518,7 @@ todo:
             const spy = vi.spyOn(gdriveSync, "importCloudTripAsProfile").mockImplementation((_fileId, beforeCommit) => {
                 expect(beforeCommit?.()).toBe(true);
                 // What `createProfile` would now read out of storage carries the edit.
-                expect(localStorage.getItem(USER_YAML_KEY)).toContain("checked: true");
+                expect(appStorage.get(USER_YAML_KEY)).toContain("checked: true");
                 return Promise.resolve({ ok: true as const, yaml: CLOUD_YAML, profileId: "p-cloud" });
             });
             const item = store.data?.todo[0];
@@ -506,7 +533,7 @@ todo:
             const outcome = await store.loadCloudTrip("file-1", "雲端行程");
             expect(outcome).toEqual({ kind: "invalid", yaml: BROKEN_YAML, error: "壞了" });
             expect(settingsDraft.yaml).toBe(BROKEN_YAML);
-            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+            expect(appStorage.get(USER_YAML_KEY)).toBe(LOCAL_YAML);
         });
     });
 
@@ -514,7 +541,7 @@ todo:
         it("saves typed YAML in canonical form", async () => {
             const outcome = await store.saveFromEditor(profileId, CLOUD_YAML.replace("  hotels: []\n", "  hotels: []\n  departure: '2020-01-01T00:00:00'\n"));
             expect(outcome.kind).toBe("landed");
-            expect(localStorage.getItem(USER_YAML_KEY)).not.toMatch(/^\s+departure:/m);
+            expect(appStorage.get(USER_YAML_KEY)).not.toMatch(/^\s+departure:/m);
             expect(store.data?.trip.name).toBe("雲端行程");
         });
 
@@ -522,7 +549,7 @@ todo:
             const outcome = await store.saveFromEditor(profileId, BROKEN_YAML);
             expect(outcome.kind).toBe("invalid");
             expect(outcome.kind === "invalid" && outcome.yaml).toBe(BROKEN_YAML);
-            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+            expect(appStorage.get(USER_YAML_KEY)).toBe(LOCAL_YAML);
         });
 
         it("treats a pasted share link as a trip of its own and parks the current one", async () => {
@@ -530,7 +557,7 @@ todo:
             const link = `https://trip.hsin19.com/#s=${await encodeShareToken(CLOUD_YAML)}`;
             const outcome = await store.saveFromEditor(profileId, link);
             expect(outcome.kind).toBe("imported");
-            expect(localStorage.getItem(USER_YAML_KEY)).toContain("雲端行程");
+            expect(appStorage.get(USER_YAML_KEY)).toContain("雲端行程");
             expect(listProfiles().map(p => p.name)).toEqual(["本機行程"]);
             expect(store.data?.trip.name).toBe("雲端行程");
         });
@@ -539,30 +566,51 @@ todo:
     describe("restoreBackup", () => {
         it("puts a backed-up copy back and snapshots the one it replaces", async () => {
             backupCurrentYaml();
-            localStorage.setItem(USER_YAML_KEY, CLOUD_YAML);
+            appStorage.set(USER_YAML_KEY, CLOUD_YAML);
             const savedAt = listYamlBackups()[0]?.savedAt ?? "";
             const outcome = await store.restoreBackup(profileId, savedAt);
             expect(outcome?.kind).toBe("landed");
-            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+            expect(appStorage.get(USER_YAML_KEY)).toBe(LOCAL_YAML);
             expect(listYamlBackups()[0]?.yaml).toBe(CLOUD_YAML);
         });
 
         it("does nothing for an entry the ring no longer holds", async () => {
             expect(await store.restoreBackup(profileId, "2020-01-01T00:00:00.000Z")).toBeNull();
-            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+            expect(appStorage.get(USER_YAML_KEY)).toBe(LOCAL_YAML);
         });
     });
 
     describe("resetToDefault", () => {
         it("drops the active slot's YAML after backing it up", async () => {
             expect(await store.resetToDefault(profileId)).toBe(true);
-            expect(localStorage.getItem(USER_YAML_KEY)).toBeNull();
+            expect(appStorage.get(USER_YAML_KEY)).toBeNull();
             expect(listYamlBackups()[0]?.yaml).toBe(LOCAL_YAML);
         });
 
         it("refuses once the trip has switched", async () => {
             expect(await store.resetToDefault("a-profile-switched-away-from")).toBe(false);
-            expect(localStorage.getItem(USER_YAML_KEY)).toBe(LOCAL_YAML);
+            expect(appStorage.get(USER_YAML_KEY)).toBe(LOCAL_YAML);
+        });
+
+        // The slot outlives its trip, so a share link or origin left on it would reseal the
+        // bundled template to the old trip's recipients, or compare it against the sender's.
+        it("forgets the slot's share link and origin along with the trip", async () => {
+            const link = { id: "abcd1234", key: "a".repeat(22) };
+            shareLinks.adopt(profileId, { ...link, editToken: "tok", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", expiresAt: null });
+            tripOrigins.markShared(profileId, link, LOCAL_YAML);
+
+            expect(await store.resetToDefault(profileId)).toBe(true);
+
+            expect(shareLinks.forTrip(profileId)).toBeNull();
+            expect(tripOrigins.isShared(profileId)).toBe(false);
+        });
+
+        it("refuses while a share is still in flight, leaving the trip alone", async () => {
+            store.isSharing = true;
+
+            expect(await store.resetToDefault(profileId)).toBe(false);
+
+            expect(appStorage.get(USER_YAML_KEY)).toBe(LOCAL_YAML);
         });
     });
 });
@@ -610,7 +658,7 @@ days:
         stubWindowTimers();
         settingsDraft.yaml = null;
         received = serializeToYaml(validateYaml(RECEIVED_YAML));
-        localStorage.setItem(USER_YAML_KEY, received);
+        appStorage.set(USER_YAML_KEY, received);
         profileId = ensureActiveProfileId();
         store = new TripStore();
         store.data = validateYaml(received);
@@ -643,14 +691,14 @@ days:
         expect(store.sharedUpdate?.localChanged).toBe(false);
         expect(store.sharedUpdate?.yaml).toContain("抵達車站");
         // Offered, not applied: nothing is written until the user answers.
-        expect(localStorage.getItem(USER_YAML_KEY)).toBe(received);
+        expect(appStorage.get(USER_YAML_KEY)).toBe(received);
     });
 
     it("reports a divergence when both the sender and this device moved", async () => {
         const sendersEdit = received.replace("抵達機場", "抵達車站");
         await stubLinkPayload(sendersEdit);
         tripOrigins.markShared(profileId, LINK, received);
-        localStorage.setItem(USER_YAML_KEY, received.replace("抵達機場", "先去吃飯"));
+        appStorage.set(USER_YAML_KEY, received.replace("抵達機場", "先去吃飯"));
 
         await store.checkSharedTripForUpdates(() => {});
 
@@ -677,7 +725,7 @@ days:
         const outcome = await store.takeSharedUpdate();
 
         expect(outcome?.kind).toBe("landed");
-        expect(localStorage.getItem(USER_YAML_KEY)).toContain("抵達車站");
+        expect(appStorage.get(USER_YAML_KEY)).toContain("抵達車站");
         expect(tripOrigins.takenHash(profileId)).toBe(yamlFingerprint(serializeToYaml(validateYaml(sendersEdit))));
         expect(store.sharedUpdate).toBeNull();
         expect(listYamlBackups().length).toBe(1);
@@ -693,7 +741,7 @@ days:
         const outcome = await store.saveFromEditor(profileId, `#h=wxyz9876.${LINK.key}`);
 
         expect(outcome.kind).toBe("imported");
-        expect(localStorage.getItem(USER_YAML_KEY)).toContain("抵達車站");
+        expect(appStorage.get(USER_YAML_KEY)).toContain("抵達車站");
         expect(tripOrigins.takenHash(profileId)).toBe(yamlFingerprint(serializeToYaml(validateYaml(sendersEdit))));
         expect(tripOrigins.linkFor(profileId)).toEqual({ id: "wxyz9876", key: LINK.key });
 
@@ -709,7 +757,7 @@ days:
 
         store.keepLocalOverSharedUpdate();
 
-        expect(localStorage.getItem(USER_YAML_KEY)).toBe(received);
+        expect(appStorage.get(USER_YAML_KEY)).toBe(received);
         expect(store.sharedUpdate).toBeNull();
         // Settled rather than suppressed: the sender's copy counts as taken, so a later
         // check of that same version finds nothing and only their next change asks again.

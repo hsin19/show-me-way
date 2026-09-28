@@ -9,18 +9,14 @@
  * may travel back to hop.
  */
 
+import { hopBaseUrl } from "$lib/config";
 import { MAX_TOKEN_CHARS } from "$lib/domain/share";
 
-const DEFAULT_BASE_URL = "https://hop.hsin19.com";
-
-// Read per call, not at import: vitest stubs the env per test, and a blank
-// `VITE_HOP_BASE_URL=` in someone's .env must fall back rather than turn every
-// request into a same-origin `/api/v1/blobs` that 404s (the same trim-and-fall-back
-// `getGdriveClientId` does).
-function hopBaseUrl(): string {
-    const configured = import.meta.env.VITE_HOP_BASE_URL?.trim();
-    return configured ? configured.replace(/\/+$/, "") : DEFAULT_BASE_URL;
-}
+/**
+ * hop's maximum. A persistent link gets printed and pinned to a fridge months before a
+ * trip; hop's 90-day default was chosen for one-shot links. Every update restarts it.
+ */
+export const PERSISTENT_LINK_TTL_SECONDS = 365 * 86400;
 
 // The only fetch in the app that blocks first paint: opening a share link runs
 // before the itinerary loads, so a hung request is a blank screen rather than a

@@ -1,9 +1,11 @@
-// Leaf helpers for the localStorage-backed caches (`weather.ts`, the Drive user and
-// auto-sync flags), extracted after two near-identical copies drifted apart once. Deliberately NOT a generic SWR
+// Leaf helpers for the caches kept in appStorage (`weather.ts`, the Drive user),
+// extracted after two near-identical copies drifted apart once. Deliberately NOT a generic SWR
 // engine: the consumers' fetch and refresh shapes differ enough that
 // parameterising them would cost more than it saves (see tech-debt.md).
 
-// Mirrors localStorage so a failed write (quota, private mode) degrades to
+import { appStorage } from "./app-storage";
+
+// Mirrors the store so a failed write (quota, private mode) degrades to
 // per-session caching instead of a refetch on every foreground return.
 const memCache = new Map<string, unknown>();
 
@@ -25,7 +27,7 @@ export function readCachedJson<T>(key: string, isValid: (value: unknown) => valu
     }
     let cached: string | null;
     try {
-        cached = localStorage.getItem(key);
+        cached = appStorage.get(key);
     } catch (e) {
         // Blocked site data (Chrome's "block all cookies", some embedded webviews) throws
         // on every access, not just writes. Callers run this from module-scope field
@@ -51,7 +53,7 @@ export function readCachedJson<T>(key: string, isValid: (value: unknown) => valu
 export function writeCachedJson(key: string, value: unknown): void {
     memCache.set(key, value);
     try {
-        localStorage.setItem(key, JSON.stringify(value));
+        appStorage.set(key, JSON.stringify(value));
     } catch (e) {
         console.warn("Failed to cache data", e);
     }
@@ -59,24 +61,20 @@ export function writeCachedJson(key: string, value: unknown): void {
 
 /** A snapshot, so the caller can remove keys while walking the result. */
 export function cachedKeysWithPrefix(prefix: string): string[] {
-    const keys: string[] = [];
     try {
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key?.startsWith(prefix)) keys.push(key);
-        }
+        return appStorage.names().filter(name => name.startsWith(prefix));
     } catch (e) {
         console.warn("Failed to enumerate cached data", e);
+        return [];
     }
-    return keys;
 }
 
-/** Clears the mirror too — remove only the localStorage side and it keeps serving what storage no longer has. */
+/** Clears the mirror too — remove only the stored side and it keeps serving what storage no longer has. */
 export function removeCachedKeys(keys: readonly string[]): void {
     for (const key of keys) {
         memCache.delete(key);
         try {
-            localStorage.removeItem(key);
+            appStorage.remove(key);
         } catch (e) {
             console.warn("Failed to remove cached data", e);
         }

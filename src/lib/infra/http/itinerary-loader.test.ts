@@ -1,4 +1,5 @@
 import { validateYaml } from "$lib/domain/trip";
+import { appStorage } from "$lib/infra/storage/app-storage";
 import { USER_YAML_KEY } from "$lib/infra/storage/yaml-storage";
 import { createLocalStorageStub } from "$lib/testing/stubs";
 import {
@@ -131,7 +132,7 @@ describe("fetchItinerary — localStorage 優先於網路", () => {
 
     it("有使用者 YAML 時直接解析，完全不打網路", async () => {
         const mock = stubFetch({});
-        storage.setItem(USER_YAML_KEY, minimalYaml);
+        appStorage.set(USER_YAML_KEY, minimalYaml);
         const data = await fetchItinerary();
         expect(data.trip.name).toBe("測試行程");
         expect(mock).not.toHaveBeenCalled();
@@ -147,7 +148,7 @@ describe("fetchItinerary — localStorage 優先於網路", () => {
 
     it("使用者 YAML 驗證失敗時重擲 zh-TW 錯誤", async () => {
         stubFetch({});
-        storage.setItem(USER_YAML_KEY, "days: []");
+        appStorage.set(USER_YAML_KEY, "days: []");
         await expect(fetchItinerary()).rejects.toThrow("YAML 缺少必要的結構 (trip 或 days 區塊)");
     });
 
@@ -155,7 +156,7 @@ describe("fetchItinerary — localStorage 優先於網路", () => {
         const mock = stubFetch({
             [LOCAL_URL]: okYaml(minimalYaml),
         });
-        storage.setItem(USER_YAML_KEY, "");
+        appStorage.set(USER_YAML_KEY, "");
         const data = await fetchItinerary();
         expect(data.trip.name).toBe("測試行程");
         expect(mock).toHaveBeenCalled();

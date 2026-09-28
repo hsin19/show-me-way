@@ -10,6 +10,7 @@ import {
     it,
     vi,
 } from "vitest";
+import { appStorage } from "./app-storage";
 import {
     backupCurrentYaml,
     getYamlBackup,
@@ -40,10 +41,10 @@ describe("backupCurrentYaml / listYamlBackups / getYamlBackup", () => {
 
     it("snapshots newest-first and looks one up by timestamp", () => {
         vi.setSystemTime(new Date("2026-06-11T00:00:00Z"));
-        storage.setItem(USER_YAML_KEY, "trip: A");
+        appStorage.set(USER_YAML_KEY, "trip: A");
         backupCurrentYaml();
         vi.setSystemTime(new Date("2026-06-12T00:00:00Z"));
-        storage.setItem(USER_YAML_KEY, "trip: B");
+        appStorage.set(USER_YAML_KEY, "trip: B");
         backupCurrentYaml();
 
         const backups = listYamlBackups();
@@ -53,7 +54,7 @@ describe("backupCurrentYaml / listYamlBackups / getYamlBackup", () => {
     });
 
     it("skips a snapshot identical to the latest", () => {
-        storage.setItem(USER_YAML_KEY, "trip: same");
+        appStorage.set(USER_YAML_KEY, "trip: same");
         backupCurrentYaml();
         vi.setSystemTime(new Date("2026-06-12T00:00:00Z"));
         backupCurrentYaml(); // USER_YAML_KEY unchanged
@@ -63,7 +64,7 @@ describe("backupCurrentYaml / listYamlBackups / getYamlBackup", () => {
     it("keeps only the newest 5 (ring buffer)", () => {
         for (let i = 0; i < 7; i++) {
             vi.setSystemTime(new Date(2026, 5, 11, 0, i)); // distinct minutes
-            storage.setItem(USER_YAML_KEY, `trip: ${i}`);
+            appStorage.set(USER_YAML_KEY, `trip: ${i}`);
             backupCurrentYaml();
         }
         const backups = listYamlBackups();
@@ -73,7 +74,7 @@ describe("backupCurrentYaml / listYamlBackups / getYamlBackup", () => {
     });
 
     it("only warns (never throws) when the backup write fails", () => {
-        storage.setItem(USER_YAML_KEY, "trip: A");
+        appStorage.set(USER_YAML_KEY, "trip: A");
         storage.setItem = () => {
             throw new DOMException("QuotaExceededError");
         };
@@ -81,9 +82,9 @@ describe("backupCurrentYaml / listYamlBackups / getYamlBackup", () => {
     });
 
     it("treats a corrupt backups blob as empty", () => {
-        storage.setItem(YAML_BACKUPS_KEY, "{not json");
+        appStorage.set(YAML_BACKUPS_KEY, "{not json");
         expect(listYamlBackups()).toEqual([]);
-        storage.setItem(YAML_BACKUPS_KEY, JSON.stringify([{ savedAt: 1, yaml: null }, "x"]));
+        appStorage.set(YAML_BACKUPS_KEY, JSON.stringify([{ savedAt: 1, yaml: null }, "x"]));
         expect(listYamlBackups()).toEqual([]); // malformed entries filtered out
     });
 });

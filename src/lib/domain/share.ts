@@ -166,12 +166,13 @@ const SHORT_LINK_RE = /^([A-Za-z0-9_-]{4,32})\.([A-Za-z0-9_-]{22})$/;
  * lives on hop. Returns null when the id hop handed back does not fit the shape
  * `parseShareLink` accepts: such a link would be minted fine here and then
  * silently ignored on every receiving device, so the caller must fall back to the
- * inline link instead.
+ * inline link instead. `base` is for a caller with no page of its own to read the
+ * origin from.
  */
-export function buildShortShareUrl(id: string, key: string): string | null {
+export function buildShortShareUrl(id: string, key: string, base = shareUrlBase()): string | null {
     const fragment = `${id}.${key}`;
     if (!SHORT_LINK_RE.test(fragment)) return null;
-    return `${shareUrlBase()}#${SHORT_HASH_PARAM}=${fragment}`;
+    return `${base}#${SHORT_HASH_PARAM}=${fragment}`;
 }
 
 /**

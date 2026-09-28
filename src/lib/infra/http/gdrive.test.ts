@@ -1,4 +1,5 @@
 import { yamlFingerprint } from "$lib/domain/utils";
+import { appStorage } from "$lib/infra/storage/app-storage";
 import { createLocalStorageStub } from "$lib/testing/stubs";
 import {
     afterEach,
@@ -11,6 +12,7 @@ import {
 import {
     buildRebindRecord,
     clearCachedAccessToken,
+    clearDeadShareLink,
     clearGdriveUser,
     decideSyncAction,
     deleteCloudTrip,
@@ -22,7 +24,6 @@ import {
     GDRIVE_TRIPS_STORAGE,
     GDRIVE_USER_STORAGE,
     getCachedAccessToken,
-    getGdriveClientId,
     listCloudTrips,
     loadGdriveUser,
     loadTripSyncMap,
@@ -221,17 +222,11 @@ describe("gdrive module", () => {
     });
 
     describe("storage helpers", () => {
-        it("reads client ID from environment or fallback", () => {
-            const envId = (import.meta.env?.VITE_GOOGLE_CLIENT_ID)?.trim();
-            const expectedId = envId || "849908319136-che7nc9nag6ua5gd3fipk9evme4ngjde.apps.googleusercontent.com";
-            expect(getGdriveClientId()).toBe(expectedId);
-        });
-
         it("handles user profile save, load, clear", () => {
             expect(loadGdriveUser()).toBeNull();
             const user = { email: "user@example.com", name: "User Example", picture: "https://pic.jpg" };
             saveGdriveUser(user);
-            expect(JSON.parse(storage.getItem(GDRIVE_USER_STORAGE) ?? "{}")).toEqual(user);
+            expect(JSON.parse(appStorage.get(GDRIVE_USER_STORAGE) ?? "{}")).toEqual(user);
             expect(loadGdriveUser()).toEqual(user);
             clearGdriveUser();
             expect(loadGdriveUser()).toBeNull();
@@ -282,7 +277,7 @@ describe("gdrive module", () => {
         });
 
         it("drops records that name no Drive file", () => {
-            storage.setItem(
+            appStorage.set(
                 GDRIVE_TRIPS_STORAGE,
                 JSON.stringify({ good: { fileId: "f1" }, bad: { remoteMd5: "md5" } }),
             );
@@ -541,5 +536,45 @@ describe("gdrive module", () => {
             expect(meta?.md5Checksum).toBe("md5-abc-123");
             expect(meta?.contentHash).toBe("hash-abc-123");
         });
+    });
+});
+
+describe("clearDeadShareLink", () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    /** A Drive file carrying `shareLink` (or no link), answering any PATCH with success. */
+    function stubDrive(shareLink?: string) {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn((_url: string, init?: RequestInit) =>
+                Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve(init?.method === "PATCH" ? {} : { id: "file-1", name: "東京.yaml", appProperties: shareLink ? { shareLink, shareLinkAt: "" } : {} }),
+                })
+            ),
+        );
+    }
+
+    it("clears the properties while they still name the dead link", async () => {
+        stubDrive("abcd1234.key.tok");
+
+        await expect(clearDeadShareLink("token", "file-1", "abcd1234")).resolves.toBe(true);
+
+        const patch = fetchCall(1);
+        expect(patch.method).toBe("PATCH");
+        expect(JSON.parse(patch.body)).toEqual({ appProperties: { shareLink: null, shareLinkAt: null } });
+    });
+
+    // Another device may have minted a replacement since, and clearing that would lose a working link.
+    it("leaves a different link, or none, alone", async () => {
+        for (const shareLink of ["efgh5678.key.tok", undefined]) {
+            stubDrive(shareLink);
+            await expect(clearDeadShareLink("token", "file-1", "abcd1234")).resolves.toBe(false);
+            expect(fetchCall(0).method).toBe("GET");
+            expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+        }
     });
 });

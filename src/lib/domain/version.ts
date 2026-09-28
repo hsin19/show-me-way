@@ -1,6 +1,6 @@
-export const APP_VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
+import { REPO_URL } from "$lib/config";
 
-export const REPO_URL = "https://github.com/hsin19/show-me-way";
+export const APP_VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
 
 /**
  * GitHub commit page for this build, or null when there is no SHA to link

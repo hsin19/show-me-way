@@ -4,6 +4,7 @@ import {
     type TripData,
     validateYaml,
 } from "$lib/domain/trip";
+import { appStorage } from "$lib/infra/storage/app-storage";
 import { USER_YAML_KEY } from "$lib/infra/storage/yaml-storage";
 
 /**
@@ -44,7 +45,7 @@ export async function fetchDefaultYamlText(): Promise<string> {
 /** The trip to render: the user's saved YAML when there is one, otherwise the default itinerary. */
 export async function fetchItinerary(): Promise<TripData> {
     try {
-        const yamlContent = localStorage.getItem(USER_YAML_KEY) || await fetchDefaultYamlText();
+        const yamlContent = appStorage.get(USER_YAML_KEY) || await fetchDefaultYamlText();
         return validateYaml(yamlContent);
     } catch (error) {
         console.error("[itinerary-loader] Error parsing YAML itinerary:", error);

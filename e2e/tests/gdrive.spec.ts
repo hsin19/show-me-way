@@ -63,7 +63,8 @@ async function installFakeDrive(page: Page, initial: FakeFile[] = []): Promise<F
         md5Checksum: md5(f.content),
         trashed: !!f.trashed,
         appProperties: {
-            showmewayTripId: f.tripId ?? "seeded",
+            // 沒指定就不帶：真的 Drive 上，沒記 tripId 的檔案就是「看不出是哪趟」，不是某個佔位 id。
+            ...(f.tripId ? { showmewayTripId: f.tripId } : {}),
             // 真的算，不是寫死：假 Drive 每次被寫入都會重算，行為才跟真的 Drive 一致。
             contentHash: yamlFingerprint(f.content),
             ...(f.startDate ? { startDate: f.startDate } : {}),
@@ -245,7 +246,7 @@ test("重新綁定：登出再登入後靠 trip.id 認回雲端檔案，不是�
 
 test("按一下同步：雲端較新時先給下載按鈕，再按一次才真的換掉畫面上的行程", async ({ page }) => {
     const cloudYaml = yamlNamed("雲端版行程");
-    const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML }]);
+    const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML, tripId: "t-fixture" }]);
     await seedItinerary(page);
     await seedConnected(page, {
         // 上次同步時雙方一致；接著只有雲端動了。
@@ -275,7 +276,7 @@ test("按一下同步：雲端較新時先給下載按鈕，再按一次才真�
 });
 
 test("按一下上傳：本機與雲端都改過時停下來問，且兩側都不動", async ({ page }) => {
-    const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML }]);
+    const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML, tripId: "t-fixture" }]);
     await seedItinerary(page);
     await seedConnected(page, {
         // localHash 是舊的 → 本機也算動過，按鈕一開始就是「上傳」而不是「同步」。
@@ -301,7 +302,7 @@ test("按一下上傳：本機與雲端都改過時停下來問，且兩側都�
 });
 
 test("衝突時選擇保留本機：雲端內容被本機取代", async ({ page }) => {
-    const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML }]);
+    const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML, tripId: "t-fixture" }]);
     await seedItinerary(page);
     await seedConnected(page, {
         record: { fileId: CLOUD_FILE_ID, remoteMd5: md5Of(FIXTURE_YAML), localHash: "stale-fingerprint" },
@@ -321,7 +322,7 @@ test("衝突時選擇保留本機：雲端內容被本機取代", async ({ page 
 });
 
 test("衝突時兩份都留：雲端版成為這趟行程，本機版另存成新行程", async ({ page }) => {
-    const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML }]);
+    const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML, tripId: "t-fixture" }]);
     await seedItinerary(page);
     await seedConnected(page, {
         record: { fileId: CLOUD_FILE_ID, remoteMd5: md5Of(FIXTURE_YAML), localHash: "stale-fingerprint" },
@@ -413,6 +414,7 @@ test("分享連結下載：另一台裝置從雲端認回同一條連結", async
         id: CLOUD_FILE_ID,
         name: "測試行程",
         content: FIXTURE_YAML,
+        tripId: "t-fixture",
         props: { shareLink: SHARE_PROPERTY, shareLinkAt: "" },
     }]);
     await seedItinerary(page);
@@ -449,7 +451,7 @@ test("刪除雲端行程：確認後該列從清單消失", async ({ page }) => 
 });
 
 test("儲存完提示：連續操作只問一次，而且要按下去才上傳", async ({ page }) => {
-    const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML }]);
+    const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML, tripId: "t-fixture" }]);
     await seedItinerary(page);
     // 綁好雲端檔且兩邊一致，所以接下來的改動就是「還沒上傳的異動」。
     await seedConnected(page, { record: { fileId: CLOUD_FILE_ID, remoteMd5: md5Of(FIXTURE_YAML), localHash: yamlFingerprint(FIXTURE_YAML) } });
@@ -474,7 +476,7 @@ test("儲存完提示：連續操作只問一次，而且要按下去才上傳",
 
 test("背景檢查：一開啟就發現雲端有新版，按下載才換掉行程", async ({ page }) => {
     // 雲端檔在上次同步之後被另一台裝置改過。
-    const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: yamlNamed("雲端版行程") }]);
+    const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: yamlNamed("雲端版行程"), tripId: "t-fixture" }]);
     await seedItinerary(page);
     await seedConnected(page, { record: { fileId: CLOUD_FILE_ID, remoteMd5: md5Of(FIXTURE_YAML), localHash: yamlFingerprint(FIXTURE_YAML) } });
     await page.goto("/");
@@ -486,6 +488,57 @@ test("背景檢查：一開啟就發現雲端有新版，按下載才換掉行�
     await page.getByRole("button", { name: "下載" }).click();
 
     await expect(page.getByRole("heading", { name: "雲端版行程" })).toBeVisible();
+});
+
+test("背景檢查：token 過期時提示重新連線，連上後才說雲端有新版", async ({ page }) => {
+    await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: yamlNamed("雲端版行程"), tripId: "t-fixture" }]);
+    await seedItinerary(page);
+    await seedConnected(page, { expiredToken: true, record: { fileId: CLOUD_FILE_ID, remoteMd5: md5Of(FIXTURE_YAML), localHash: yamlFingerprint(FIXTURE_YAML) } });
+    await page.goto("/");
+
+    // 過期的 token 讓背景清單拿不到東西，所以此時還不可能知道雲端有新版。
+    await expect(page.getByText("Google 雲端登入已過期，無法檢查行程更新")).toBeVisible();
+    await expect(page.getByText("雲端有這趟行程的新版本")).toBeHidden();
+
+    await installGisStub(page);
+    await page.getByRole("button", { name: "重新連線", exact: true }).click();
+
+    await expect(page.getByText("雲端有這趟行程的新版本")).toBeVisible();
+});
+
+test("背景檢查：關掉過期提示後回到前景不再問，重新開啟才又問", async ({ page }) => {
+    await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML, tripId: "t-fixture" }]);
+    await seedItinerary(page);
+    await seedConnected(page, { expiredToken: true, record: { fileId: CLOUD_FILE_ID, remoteMd5: md5Of(FIXTURE_YAML), localHash: yamlFingerprint(FIXTURE_YAML) } });
+    await page.goto("/");
+
+    const notice = page.getByText("Google 雲端登入已過期，無法檢查行程更新");
+    await expect(notice).toBeVisible();
+    await page.getByRole("button", { name: "關閉通知" }).click();
+    await expect(notice).toBeHidden();
+
+    // 從別的 app 切回來：背景檢查照跑，但提示還在冷卻中。等這一輪清單失敗的 warn —— 提示在它之後
+    // 同步決定 —— 再當下判斷一次；`toBeHidden` 會重試，會等到一則又跳出來的提示自己到期而誤判通過。
+    const recheck = page.waitForEvent("console", message => message.text().includes("Refresh cloud files failed"));
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await recheck;
+    expect(await notice.isVisible()).toBe(false);
+
+    // 冷卻只存在記憶體：重新開啟就當沒這回事。
+    await page.reload();
+    await expect(notice).toBeVisible();
+});
+
+test("背景檢查：token 過期但行程沒綁雲端時不提示", async ({ page }) => {
+    await installFakeDrive(page);
+    await seedItinerary(page);
+    await seedConnected(page, { expiredToken: true });
+    await page.goto("/");
+
+    // 抽屜出現重新連線列，代表背景清單已經因過期失敗過 —— 提示若要出現早該出現了。
+    await page.getByRole("button", { name: "切換行程選單" }).click();
+    await expect(page.getByRole("button", { name: "雲端連線中斷，點此重新連線" })).toBeVisible();
+    await expect(page.getByText("Google 雲端登入已過期，無法檢查行程更新")).toBeHidden();
 });
 
 // 主畫面的「切換行程」抽屜：本機行程下方恆為單一雲端列 —— 清單、重新連線、或登入。

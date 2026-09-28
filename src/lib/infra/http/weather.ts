@@ -23,8 +23,8 @@ export interface DailyWeather {
 /** Forecast keyed by local date (YYYY-MM-DD, aggregated in the city's timezone). */
 export type DailyWeatherByDate = Record<string, DailyWeather>;
 
-const GEOCODE_CACHE_KEY = "showmeway_geocode_v1";
-const FORECAST_CACHE_KEY = "showmeway_weather";
+const GEOCODE_CACHE_KEY = "geocode_v1";
+const FORECAST_CACHE_KEY = "weather";
 // Source models refresh every ~3-6 hours, so refetching sooner buys nothing.
 export const FORECAST_TTL = 1000 * 60 * 60 * 3;
 const GEOCODE_TTL = 1000 * 60 * 60 * 24 * 30;

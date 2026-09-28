@@ -1,4 +1,5 @@
 import type { TripData } from "$lib/domain/trip";
+import { appStorage } from "$lib/infra/storage/app-storage";
 import { createLocalStorageStub } from "$lib/testing/stubs";
 import {
     afterEach,
@@ -42,7 +43,7 @@ describe("Gemini API key storage", () => {
         expect(loadGeminiApiKey()).toBeNull();
 
         saveGeminiApiKey("  AIza-test-key  ");
-        expect(localStorage.getItem(GEMINI_API_KEY_STORAGE)).toBe("AIza-test-key");
+        expect(appStorage.get(GEMINI_API_KEY_STORAGE)).toBe("AIza-test-key");
         expect(loadGeminiApiKey()).toBe("AIza-test-key");
 
         clearGeminiApiKey();
@@ -50,7 +51,7 @@ describe("Gemini API key storage", () => {
     });
 
     it("treats a blank stored value as no key", () => {
-        localStorage.setItem(GEMINI_API_KEY_STORAGE, "   ");
+        appStorage.set(GEMINI_API_KEY_STORAGE, "   ");
         expect(loadGeminiApiKey()).toBeNull();
     });
 });
@@ -59,7 +60,7 @@ describe("Gemini model storage", () => {
     it("saves and reads (trimmed) the chosen model", () => {
         expect(loadGeminiModel()).toBeNull();
         saveGeminiModel("  gemini-2.5-pro  ");
-        expect(localStorage.getItem(GEMINI_MODEL_STORAGE)).toBe("gemini-2.5-pro");
+        expect(appStorage.get(GEMINI_MODEL_STORAGE)).toBe("gemini-2.5-pro");
         expect(loadGeminiModel()).toBe("gemini-2.5-pro");
     });
 });

@@ -17,6 +17,7 @@ import {
     it,
     vi,
 } from "vitest";
+import { appStorage } from "./app-storage";
 import {
     ACTIVE_PROFILE_KEY,
     getActiveProfileId,
@@ -44,16 +45,13 @@ function trip(name: string, id?: string): TripData {
 
 /** Seeds an active trip the way one actually reaches storage. */
 function seedActive(name: string, id: string, profileId = "p-active"): void {
-    localStorage.setItem(USER_YAML_KEY, serializeToYaml(trip(name, id)));
-    localStorage.setItem(ACTIVE_PROFILE_KEY, profileId);
+    appStorage.set(USER_YAML_KEY, serializeToYaml(trip(name, id)));
+    appStorage.set(ACTIVE_PROFILE_KEY, profileId);
 }
 
 describe("importSharedTrip", () => {
-    let storage: ReturnType<typeof createLocalStorageStub>;
-
     beforeEach(() => {
-        storage = createLocalStorageStub();
-        vi.stubGlobal("localStorage", storage);
+        vi.stubGlobal("localStorage", createLocalStorageStub());
     });
 
     afterEach(() => {
@@ -69,7 +67,7 @@ describe("importSharedTrip", () => {
 
         expect(outcome.kind).toBe("imported");
         expect(ask).not.toHaveBeenCalled();
-        expect(tripIdFromYaml(storage.getItem(USER_YAML_KEY)!)).toBe("t-tokyo");
+        expect(tripIdFromYaml(appStorage.get(USER_YAML_KEY)!)).toBe("t-tokyo");
     });
 
     it("parks the current trip rather than overwriting it when the link is a different trip", () => {
@@ -87,12 +85,12 @@ describe("importSharedTrip", () => {
 
     it("writes nothing when the user declines the import", () => {
         seedActive("京都", "t-kyoto");
-        const before = storage.getItem(USER_YAML_KEY);
+        const before = appStorage.get(USER_YAML_KEY);
         vi.stubGlobal("confirm", vi.fn(() => false));
 
         expect(importSharedTrip(trip("東京", "t-tokyo")).kind).toBe("declined");
 
-        expect(storage.getItem(USER_YAML_KEY)).toBe(before);
+        expect(appStorage.get(USER_YAML_KEY)).toBe(before);
         expect(listProfiles()).toEqual([]);
     });
 
@@ -105,7 +103,7 @@ describe("importSharedTrip", () => {
         expect(outcome).toMatchObject({ kind: "overwritten", profileId: "p-active" });
         // Same slot and same id, so the binding still names the file this trip came from.
         expect(getActiveProfileId()).toBe("p-active");
-        expect(tripIdFromYaml(storage.getItem(USER_YAML_KEY)!)).toBe("t-tokyo");
+        expect(tripIdFromYaml(appStorage.get(USER_YAML_KEY)!)).toBe("t-tokyo");
         expect(listProfiles()).toEqual([]);
         // Recoverable: the copy it replaced went into the backup ring first.
         expect(listYamlBackups().length).toBe(1);
@@ -123,7 +121,7 @@ describe("importSharedTrip", () => {
 
         expect(outcome).toMatchObject({ kind: "overwritten", profileId: tokyoSlot });
         expect(getActiveProfileId()).toBe(tokyoSlot);
-        expect(tripIdFromYaml(storage.getItem(USER_YAML_KEY)!)).toBe("t-tokyo");
+        expect(tripIdFromYaml(appStorage.get(USER_YAML_KEY)!)).toBe("t-tokyo");
     });
 
     it("gives a copy its own identity when the user keeps both", () => {
@@ -135,7 +133,7 @@ describe("importSharedTrip", () => {
         const outcome = importSharedTrip(trip("東京改", "t-tokyo"));
 
         expect(outcome.kind).toBe("imported");
-        expect(tripIdFromYaml(storage.getItem(USER_YAML_KEY)!)).not.toBe("t-tokyo");
+        expect(tripIdFromYaml(appStorage.get(USER_YAML_KEY)!)).not.toBe("t-tokyo");
         expect(listProfiles().length).toBe(1);
     });
 
@@ -143,7 +141,7 @@ describe("importSharedTrip", () => {
     // common case — and an overwrite prompt for identical bytes only teaches dismissal.
     it("asks nothing and writes nothing when the link carries the version already held", () => {
         seedActive("東京", "t-tokyo");
-        const before = storage.getItem(USER_YAML_KEY);
+        const before = appStorage.get(USER_YAML_KEY);
         const ask = vi.fn(() => true);
         vi.stubGlobal("confirm", ask);
 
@@ -151,7 +149,7 @@ describe("importSharedTrip", () => {
 
         expect(outcome).toEqual({ kind: "unchanged", profileId: "p-active" });
         expect(ask).not.toHaveBeenCalled();
-        expect(storage.getItem(USER_YAML_KEY)).toBe(before);
+        expect(appStorage.get(USER_YAML_KEY)).toBe(before);
         expect(listYamlBackups()).toEqual([]);
     });
 
@@ -166,17 +164,17 @@ describe("importSharedTrip", () => {
 
         expect(outcome).toEqual({ kind: "unchanged", profileId: tokyoSlot });
         expect(getActiveProfileId()).toBe(tokyoSlot);
-        expect(tripIdFromYaml(storage.getItem(USER_YAML_KEY)!)).toBe("t-tokyo");
+        expect(tripIdFromYaml(appStorage.get(USER_YAML_KEY)!)).toBe("t-tokyo");
     });
 
     it("writes nothing when the user declines both the overwrite and the copy", () => {
         seedActive("東京", "t-tokyo");
-        const before = storage.getItem(USER_YAML_KEY);
+        const before = appStorage.get(USER_YAML_KEY);
         vi.stubGlobal("confirm", vi.fn(() => false));
 
         expect(importSharedTrip(trip("東京改", "t-tokyo")).kind).toBe("declined");
 
-        expect(storage.getItem(USER_YAML_KEY)).toBe(before);
+        expect(appStorage.get(USER_YAML_KEY)).toBe(before);
         expect(listProfiles()).toEqual([]);
     });
 
@@ -186,7 +184,7 @@ describe("importSharedTrip", () => {
         const outcome = importSharedTrip(trip("東京", "t-tokyo"));
 
         if (outcome.kind === "declined" || outcome.kind === "unchanged") throw new Error("expected a write");
-        expect(outcome.yaml).toBe(storage.getItem(USER_YAML_KEY));
+        expect(outcome.yaml).toBe(appStorage.get(USER_YAML_KEY));
         expect(outcome.yaml).toContain("$schema");
     });
 });

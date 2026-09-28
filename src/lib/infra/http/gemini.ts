@@ -6,9 +6,10 @@ import {
     splitDayDate,
     toLocalIsoDate,
 } from "$lib/domain/utils";
+import { appStorage } from "$lib/infra/storage/app-storage";
 
-export const GEMINI_API_KEY_STORAGE = "showmeway_gemini_api_key";
-export const GEMINI_MODEL_STORAGE = "showmeway_gemini_model";
+export const GEMINI_API_KEY_STORAGE = "gemini_api_key";
+export const GEMINI_MODEL_STORAGE = "gemini_model";
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
@@ -37,7 +38,7 @@ export function clearGeminiModelsMemory(): void {
 // storage) rather than throwing into the UI — same policy as weather.ts.
 export function loadGeminiApiKey(): string | null {
     try {
-        const key = localStorage.getItem(GEMINI_API_KEY_STORAGE);
+        const key = appStorage.get(GEMINI_API_KEY_STORAGE);
         return key && key.trim() ? key.trim() : null;
     } catch (e) {
         console.warn("Failed to read Gemini API key", e);
@@ -47,7 +48,7 @@ export function loadGeminiApiKey(): string | null {
 
 export function saveGeminiApiKey(key: string): void {
     try {
-        localStorage.setItem(GEMINI_API_KEY_STORAGE, key.trim());
+        appStorage.set(GEMINI_API_KEY_STORAGE, key.trim());
         clearGeminiModelsMemory();
     } catch (e) {
         console.warn("Failed to save Gemini API key", e);
@@ -56,7 +57,7 @@ export function saveGeminiApiKey(key: string): void {
 
 export function clearGeminiApiKey(): void {
     try {
-        localStorage.removeItem(GEMINI_API_KEY_STORAGE);
+        appStorage.remove(GEMINI_API_KEY_STORAGE);
         clearGeminiModelsMemory();
     } catch (e) {
         console.warn("Failed to clear Gemini API key", e);
@@ -65,7 +66,7 @@ export function clearGeminiApiKey(): void {
 
 export function loadGeminiModel(): string | null {
     try {
-        const model = localStorage.getItem(GEMINI_MODEL_STORAGE);
+        const model = appStorage.get(GEMINI_MODEL_STORAGE);
         return model && model.trim() ? model.trim() : null;
     } catch (e) {
         console.warn("Failed to read Gemini model", e);
@@ -75,7 +76,7 @@ export function loadGeminiModel(): string | null {
 
 export function saveGeminiModel(model: string): void {
     try {
-        localStorage.setItem(GEMINI_MODEL_STORAGE, model.trim());
+        appStorage.set(GEMINI_MODEL_STORAGE, model.trim());
     } catch (e) {
         console.warn("Failed to save Gemini model", e);
     }

@@ -7,6 +7,7 @@ import {
     it,
     vi,
 } from "vitest";
+import { appStorage } from "./app-storage";
 import {
     clearStorageCacheMemory,
     isFresh,
@@ -76,15 +77,15 @@ describe("readCachedJson / writeCachedJson", () => {
     });
 
     it("treats corrupt JSON as a miss and drops it", () => {
-        storage.setItem("k", "{not json");
+        appStorage.set("k", "{not json");
         expect(readCachedJson("k", isEntry)).toBeNull();
-        expect(storage.getItem("k")).toBeNull();
+        expect(appStorage.get("k")).toBeNull();
     });
 
     it("treats a shape that fails validation as a miss and drops it", () => {
-        storage.setItem("k", JSON.stringify({ n: "nope" }));
+        appStorage.set("k", JSON.stringify({ n: "nope" }));
         expect(readCachedJson("k", isEntry)).toBeNull();
-        expect(storage.getItem("k")).toBeNull();
+        expect(appStorage.get("k")).toBeNull();
     });
 
     it("returns null for an absent key", () => {
@@ -102,7 +103,7 @@ describe("readCachedJson / writeCachedJson", () => {
     });
 
     it("survives a removeItem that throws while dropping a corrupt entry", () => {
-        storage.setItem("k", "{not json");
+        appStorage.set("k", "{not json");
         storage.removeItem = () => {
             throw new DOMException("SecurityError");
         };

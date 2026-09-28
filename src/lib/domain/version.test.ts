@@ -1,3 +1,4 @@
+import { REPO_URL } from "$lib/config";
 import {
     describe,
     expect,
@@ -6,7 +7,6 @@ import {
 import {
     APP_VERSION,
     formatBuildDate,
-    REPO_URL,
     versionCommitUrl,
 } from "./version";
 

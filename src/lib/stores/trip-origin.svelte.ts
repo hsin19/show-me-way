@@ -20,8 +20,9 @@
 // on screen and the badge has to appear without a remount.
 
 import { yamlFingerprint } from "$lib/domain/utils";
+import { appStorage } from "$lib/infra/storage/app-storage";
 
-export const TRIP_ORIGINS_KEY = "showmeway_trip_origins";
+export const TRIP_ORIGINS_KEY = "trip_origins";
 
 /** What a slot remembers about the link its trip came from. */
 export interface TripOrigin {
@@ -55,7 +56,7 @@ function isOrigin(value: unknown): value is TripOrigin {
 /** Unreadable or malformed storage yields {}; a malformed entry is dropped, not the map. */
 function loadOrigins(): TripOriginMap {
     try {
-        const raw = localStorage.getItem(TRIP_ORIGINS_KEY);
+        const raw = appStorage.get(TRIP_ORIGINS_KEY);
         if (!raw) return {};
         const parsed: unknown = JSON.parse(raw);
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
@@ -131,8 +132,8 @@ class TripOriginStore {
     private write(next: TripOriginMap): void {
         this.origins = next;
         try {
-            if (Object.keys(next).length === 0) localStorage.removeItem(TRIP_ORIGINS_KEY);
-            else localStorage.setItem(TRIP_ORIGINS_KEY, JSON.stringify(next));
+            if (Object.keys(next).length === 0) appStorage.remove(TRIP_ORIGINS_KEY);
+            else appStorage.set(TRIP_ORIGINS_KEY, JSON.stringify(next));
         } catch (err) {
             console.error("Failed to record trip origin:", err);
         }

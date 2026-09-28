@@ -16,6 +16,7 @@ import {
 import {
     createHopBlob,
     deleteHopBlob,
+    PERSISTENT_LINK_TTL_SECONDS,
     updateHopBlob,
 } from "$lib/infra/http/hop";
 import {
@@ -25,12 +26,6 @@ import {
     type ShareLinkRecord,
 } from "$lib/infra/storage/share-links";
 
-/**
- * hop's maximum. A persistent link gets printed and pinned to a fridge months before a
- * trip; hop's 90-day default was chosen for one-shot links. Every update restarts it.
- */
-const PERSISTENT_LINK_TTL_SECONDS = 365 * 86400;
-
 type PublishOutcome =
     /** First link for this trip. */
     | { kind: "created"; url: string; }
@@ -38,8 +33,12 @@ type PublishOutcome =
     | { kind: "updated"; url: string; }
     /** The old link had expired or been revoked, so a new one was minted — the old QR is dead. */
     | { kind: "recreated"; url: string; }
-    /** No crypto, or hop unreachable with nothing to update: the inline `#s=` link, which reaches no server. */
-    | { kind: "inline"; url: string; }
+    /**
+     * No crypto, or hop unreachable with nothing to update: the inline `#s=` link, which
+     * reaches no server. `deadLinkId` names a link hop refused on the way here when no
+     * replacement could be minted — the trip's Drive file still offers it to other devices.
+     */
+    | { kind: "inline"; url: string; deadLinkId?: string; }
     /**
      * A link exists but hop could not be reached to update it. Nothing was minted: a
      * fresh link here would fork the audience across two ids, and the inline fallback
@@ -101,6 +100,7 @@ class ShareLinkStore {
 
         const existing = this.forTrip(profileId);
         let recreated = false;
+        let deadLinkId: string | undefined;
         if (existing) {
             const payload = await resealShareToken(yaml, existing.key);
             const updated = await updateHopBlob(existing.id, existing.editToken, payload, PERSISTENT_LINK_TTL_SECONDS);
@@ -112,6 +112,8 @@ class ShareLinkStore {
                 }
             } else if (updated.reason === "network") {
                 return { kind: "unreachable" };
+            } else {
+                deadLinkId = existing.id;
             }
             // gone / unauthorized: that id will never take our updates again. Forget it and
             // mint a new one — telling the user, since their printed QR just died.
@@ -122,7 +124,7 @@ class ShareLinkStore {
         const sealed = await sealShareToken(yaml);
         const created = await createHopBlob(sealed.payload, PERSISTENT_LINK_TTL_SECONDS);
         const url = created.ok ? buildShortShareUrl(created.id, sealed.key) : null;
-        if (!created.ok || !url) return { kind: "inline", url: await buildShareUrl(yaml) };
+        if (!created.ok || !url) return { kind: "inline", url: await buildShareUrl(yaml), ...(deadLinkId ? { deadLinkId } : {}) };
 
         const now = new Date().toISOString();
         // A link without an editToken can be minted but never updated: hop always returns
@@ -148,7 +150,7 @@ class ShareLinkStore {
         return "revoked";
     }
 
-    /** Drop the record without touching hop — for a deleted profile, whose blob is left to expire. */
+    /** Drop the record without touching hop — for a slot whose trip is gone, deleted or reset; the blob is left to expire. */
     forget(profileId: string) {
         if (this.forTrip(profileId)) this.remember(profileId, null);
     }

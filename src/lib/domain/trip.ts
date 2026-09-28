@@ -1,3 +1,4 @@
+import { SCHEMA_URL } from "$lib/config";
 import {
     dump as dumpYaml,
     loadAll as loadYamlDocuments,
@@ -74,10 +75,7 @@ export function genTripId(): string {
     return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// Absolute URL, not a relative one: an exported or shared YAML has to resolve
-// the schema from wherever it is opened. GitHub raw rather than the deployed
-// site, so the line survives a hosting move and follows `main` without a deploy.
-const SCHEMA_LINE = "# yaml-language-server: $schema=https://raw.githubusercontent.com/hsin19/show-me-way/main/schema/showmeway-schema.json\n";
+const SCHEMA_LINE = `# yaml-language-server: $schema=${SCHEMA_URL}\n`;
 
 let runtimeIdSeq = 0;
 

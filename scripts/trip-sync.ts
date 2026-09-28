@@ -1,8 +1,15 @@
-import { validateYaml } from "$lib/domain/trip";
+import { SITE_URL } from "$lib/config";
+import { buildShortShareUrl } from "$lib/domain/share";
+import { resealShareToken } from "$lib/domain/share-crypto";
+import {
+    serializeToYaml,
+    validateYaml,
+} from "$lib/domain/trip";
 import { yamlFingerprint } from "$lib/domain/utils";
 import {
     agreedRecord,
     buildRebindRecord,
+    clearDeadShareLink,
     type CloudSyncPlan,
     type CloudTripFile,
     fetchCloudTrip,
@@ -19,9 +26,14 @@ import {
     type TripSyncRecord,
 } from "$lib/infra/http/gdrive";
 import {
+    PERSISTENT_LINK_TTL_SECONDS,
+    updateHopBlob,
+} from "$lib/infra/http/hop";
+import {
     tripIdFromYaml,
     tripNameFromYaml,
 } from "$lib/infra/storage/profiles";
+import type { ShareLinkRecord } from "$lib/infra/storage/share-links";
 import { spawn } from "node:child_process";
 import {
     createHash,
@@ -61,6 +73,14 @@ import { parseArgs } from "node:util";
  * backs with `.trip-sync/localstorage` — so a rule changed in the app reaches this tool
  * without a second edit. Like the app it transfers only on an explicit checkout, pull or
  * push. The `$lib` imports resolve through `resolve-hooks.ts`, which the script preloads.
+ *
+ * A push also puts the new version behind the trip's share link, unless `--no-share` says
+ * not to: pushing is the owner's say-so that the version is ready, and holding the link
+ * back would only leave recipients on the older one. The link's id, key and editToken come
+ * from the Drive file's properties and stay in memory; the URL is printed for the owner,
+ * the way the app hands it over after sharing. It never mints a link: one hop no longer
+ * accepts was most likely revoked on another device, and a replacement would be a new URL
+ * to hand out all over again.
  *
  * The client id and secret come from `.env` (gitignored). The names carry no `VITE_` prefix
  * on purpose — Vite reads the same file, and only prefixed values get inlined into the
@@ -555,15 +575,48 @@ async function push(): Promise<void> {
     if (forced) plan = await planCloudSync(token, record, yaml, "local");
     if (plan.decision !== "push") return report(tripId, plan, "push");
 
-    // No share link: this machine never holds one, and undefined leaves the file's own in place.
+    // Undefined leaves the file's share-link properties in place: new ciphertext changes nothing they hold.
     const { file, record: pushed } = await plan.push(undefined);
     saveRecord(tripId, pushed);
     if (!plan.remoteFile) console.log(`已在雲端建立新檔「${file.name}」`);
     else console.log(`已上傳到雲端「${file.name}」${forced ? "（以本機版本為準；Drive 的版本記錄還留著舊版）" : ""}`);
+    const link = plan.remoteFile?.shareLink;
+    if (!link) return;
     // The app marks a link stale only for an edit made on that device, never for a version it
-    // pulled, and this tool does not upload to hop, so nothing else would tell the owner that
-    // recipients still see the version before this push.
-    if (plan.remoteFile?.shareLink) console.log("這趟行程有分享連結，收件人還看不到這次的修改：手機載入新版後，到「工具 → 行程管理」按「更新分享連結」（或按行程頁的分享鈕，更新的是同一條連結）");
+    // pulled, so skipping the update here would leave nothing to remind the owner.
+    if (flags["no-share"]) console.log(`沒有更新分享連結（--no-share），連結上還是舊版本。${RESHARE_HINT}`);
+    else await refreshShareLink(token, file.id, link, yaml);
+}
+
+const RESHARE_HINT = "要更新時，手機載入新版後到「工具 → 行程管理」按「更新分享連結」";
+
+/** Replaces the ciphertext behind `link` with `yaml`, keeping its id and key, so the URL already handed out shows this version. */
+async function refreshShareLink(token: string, fileId: string, link: ShareLinkRecord, yaml: string): Promise<void> {
+    // A later push finds nothing to send and never gets here, so the message has to say the retry is the phone's.
+    const failed = (reason: string) => {
+        console.error(`雲端已經更新，但分享連結沒更新（重跑 push 不會再試）：${reason}`);
+        process.exitCode = 1;
+    };
+    let payload: string;
+    try {
+        // The form the app shares, not the working copy's bytes.
+        payload = await resealShareToken(serializeToYaml(validateYaml(yaml)), link.key);
+    } catch {
+        // A malformed key in the file's properties; the push itself has already landed.
+        return failed("Drive 上記的連結資料不完整，要分享得回手機重新產生一條");
+    }
+    const updated = await updateHopBlob(link.id, link.editToken, payload, PERSISTENT_LINK_TTL_SECONDS);
+    if (!updated.ok) {
+        if (updated.reason === "network") return failed(`連不到 hop。${RESHARE_HINT}`);
+        // hop's own answer, not a failure to reach it, so the link is dead for good. Where the
+        // app would mint a replacement this leaves that to the phone (see the module comment),
+        // but it does take the dead one off Drive, so later pushes stop failing here — until a
+        // device that still holds it pushes it back, which only its next share can cure.
+        const dropped = await clearDeadShareLink(token, fileId, link.id).catch(() => false);
+        return failed(`hop 回報這條連結已經失效${dropped ? "，已從雲端拿掉" : ""}，要分享得回手機重新產生一條`);
+    }
+    const url = buildShortShareUrl(link.id, link.key, SITE_URL);
+    console.log(url ? `分享連結已更新：${url}` : "分享連結已更新");
 }
 
 const USAGE = `用法：pnpm run trip:sync <指令> [選項]
@@ -575,18 +628,21 @@ const USAGE = `用法：pnpm run trip:sync <指令> [選項]
                              （名稱可以只打開頭或關鍵字，tripId 可以只打前 4 碼）
   status                     比較目前行程和雲端，不傳任何東西
   pull [--force]             用雲端版本更新本機
-  push [--force]             把本機版本上傳到雲端（先過 validateYaml）
+  push [--force] [--no-share]
+                             把本機版本上傳到雲端（先過 validateYaml），有分享連結就一起更新
 
 選項：
   --force                    pull：捨棄本機的修改、改用雲端版本（會先備份）
                              push：兩邊都改過時以本機為準（只用來解衝突）
+  --no-share                 push 時不更新分享連結
   -h, --help                 顯示這份說明`;
 
 const CLI_OPTIONS = {
     allowPositionals: true,
     options: {
-        force: { type: "boolean", default: false },
-        help: { type: "boolean", short: "h" },
+        "force": { type: "boolean", default: false },
+        "no-share": { type: "boolean", default: false },
+        "help": { type: "boolean", short: "h" },
     },
 } as const;
 
@@ -618,13 +674,13 @@ function describeError(error: unknown): string {
     return cause && !error.message.includes(cause) ? `${error.message}（${cause}）` : error.message;
 }
 
-const COMMANDS: Record<string, { run: (arg: string) => Promise<void>; takesArg?: boolean; takesForce?: boolean; }> = {
+const COMMANDS: Record<string, { run: (arg: string) => Promise<void>; takesArg?: boolean; takesForce?: boolean; takesNoShare?: boolean; }> = {
     login: { run: login },
     list: { run: list },
     checkout: { run: checkout, takesArg: true },
     status: { run: status },
     pull: { run: pull, takesForce: true },
-    push: { run: push, takesForce: true },
+    push: { run: push, takesForce: true, takesNoShare: true },
 };
 
 const { positionals, values: flags } = parseCli();
@@ -641,6 +697,7 @@ if (!command) usageError(name ? `沒有「${name}」這個指令` : "少了指�
 if (command.takesArg && (args.length !== 1 || !args[0]?.trim())) usageError(`${name} 要接一個行程名或 tripId（名稱有空白就加引號）`);
 if (!command.takesArg && args.length > 0) usageError(`${name} 不接參數`);
 if (flags.force && !command.takesForce) usageError("--force 只能用在 pull / push");
+if (flags["no-share"] && !command.takesNoShare) usageError("--no-share 只能用在 push");
 // Node opens the localStorage file on first access and fails outright if its directory is
 // missing. chmod rather than mkdir's mode, which applies only to a directory it creates:
 // this one holds the refresh token and, in localStorage, a live access token.

@@ -20,6 +20,7 @@
 // - `checkOnly` transfers nothing in either direction — a clean trip whose Drive file is
 //   gone decides `push`, and a button labelled 比對 may not re-create a deleted file.
 
+import { googleClientId } from "$lib/config";
 import {
     serializeToYaml,
     type TripData,
@@ -30,6 +31,7 @@ import {
     agreedRecord,
     buildRebindRecord,
     clearCachedAccessToken,
+    clearDeadShareLink,
     clearGdriveUser,
     type CloudTripFile,
     decideSyncAction,
@@ -37,7 +39,6 @@ import {
     fetchCloudTrip,
     fetchGoogleUserInfo,
     getCachedAccessToken,
-    getGdriveClientId,
     type GoogleAuthPrompt,
     type GoogleUser,
     listCloudTrips,
@@ -169,7 +170,7 @@ class GDriveSyncState {
      */
     private pendingTransfer = $state<{ tripId: string; direction: "pull" | "push"; } | null>(null);
 
-    clientId = $derived<string>(getGdriveClientId());
+    clientId = $derived<string>(googleClientId());
     isConnected = $derived<boolean>(!!this.user);
 
     // Write operations only, so a background list refresh cannot clear it out from under a
@@ -260,6 +261,22 @@ class GDriveSyncState {
             await updateCloudShareLink(token, fileId, shareLinks.forTrip(tripId));
         } catch (err) {
             console.warn("Failed to publish the share link to Drive:", err);
+        }
+    }
+
+    /**
+     * Takes a link hop refused off the bound Drive file, if the file still carries it — see
+     * `clearDeadShareLink`. Best effort and silent: a miss leaves the dead link on Drive
+     * until the next share that reaches hop finds it again, since no sync push clears it.
+     * Unlike `pushShareLink` it runs during a sync: that push leaves these properties alone.
+     */
+    async dropDeadShareLink(tripId: string, linkId: string): Promise<void> {
+        const fileId = this.cloudFileId(tripId);
+        if (!this.isConnected || !fileId) return;
+        try {
+            await clearDeadShareLink(await this.getValidToken("cache-only"), fileId, linkId);
+        } catch (err) {
+            console.warn("Failed to drop the dead share link from Drive:", err);
         }
     }
 
@@ -383,6 +400,15 @@ class GDriveSyncState {
                 : { kind: "upload", overwrite: false };
         }
         return { kind: "check" };
+    }
+
+    /**
+     * Signed in, but holding no usable token — the state every background path stops at,
+     * since only a tap may reach GIS. Read at call time, not reactive: the cache is
+     * localStorage and expires on the clock.
+     */
+    needsReconnect(): boolean {
+        return this.isConnected && !getCachedAccessToken();
     }
 
     private async getValidToken(mode: TokenMode = "interactive"): Promise<string> {

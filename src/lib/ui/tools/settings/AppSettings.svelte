@@ -1,8 +1,8 @@
 <script lang="ts">
+import { REPO_URL } from "$lib/config";
 import {
     APP_VERSION,
     formatBuildDate,
-    REPO_URL,
     versionCommitUrl,
 } from "$lib/domain/version";
 import {

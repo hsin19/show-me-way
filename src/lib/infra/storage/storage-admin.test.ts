@@ -76,11 +76,11 @@ describe("getStorageSummary", () => {
 describe("clearApiCache", () => {
     it("removes cached responses and purges the in-memory mirror", () => {
         storage.setItem("showmeway_user_yaml", "keep me");
-        writeCachedJson("showmeway_weather_tokyo", { n: 1 } satisfies Entry);
+        writeCachedJson("weather_tokyo", { n: 1 } satisfies Entry);
 
         expect(clearApiCache()).toBe(1);
         expect(storage.getItem("showmeway_weather_tokyo")).toBeNull();
-        expect(readCachedJson("showmeway_weather_tokyo", isEntry)).toBeNull();
+        expect(readCachedJson("weather_tokyo", isEntry)).toBeNull();
         expect(storage.getItem("showmeway_user_yaml")).toBe("keep me");
     });
 
@@ -133,9 +133,9 @@ describe("clearAppLocalStorage", () => {
     });
 
     it("purges the in-memory cache mirror too", () => {
-        writeCachedJson("showmeway_weather_tokyo", { n: 1 } satisfies Entry);
+        writeCachedJson("weather_tokyo", { n: 1 } satisfies Entry);
         clearAppLocalStorage();
-        expect(readCachedJson("showmeway_weather_tokyo", isEntry)).toBeNull();
+        expect(readCachedJson("weather_tokyo", isEntry)).toBeNull();
     });
 });
 

@@ -1,4 +1,5 @@
 import { yamlFingerprint } from "$lib/domain/utils";
+import { appStorage } from "$lib/infra/storage/app-storage";
 import { createLocalStorageStub } from "$lib/testing/stubs";
 // The sync executor: `decideSyncAction` decides, this layer carries the decision out
 // against Drive and the record store. `gdrive.test.ts` covers the decision truth table;
@@ -545,7 +546,7 @@ describe("rebinding after the local state is lost", () => {
 
     /** The state a sign-out and back in leaves: the trip is still here, the binding is not. */
     function seedUnboundTrip(yaml: string = YAML_ID) {
-        localStorage.setItem(USER_YAML_KEY, yaml);
+        appStorage.set(USER_YAML_KEY, yaml);
         ensureActiveProfileId();
     }
 
@@ -642,7 +643,7 @@ describe("rebinding after the local state is lost", () => {
 
     it("leaves a trip that is already bound alone", async () => {
         seedUnboundTrip();
-        localStorage.setItem(gdrive.GDRIVE_TRIPS_STORAGE, JSON.stringify({ [TRIP]: { fileId: "file-old", remoteMd5: "md5-old" } }));
+        appStorage.set(gdrive.GDRIVE_TRIPS_STORAGE, JSON.stringify({ [TRIP]: { fileId: "file-old", remoteMd5: "md5-old" } }));
         await loadSync();
         stubList([{ id: "file-1", name: "東京.yaml", tripId: "t-tokyo", contentHash: yamlFingerprint(YAML_ID) }]);
 
@@ -846,7 +847,7 @@ describe("importCloudTripAsProfile", () => {
     it("parks the outgoing trip, adopts the file under the new profile, and reports its id", async () => {
         await loadSync();
         const outgoingId = ensureActiveProfileId();
-        localStorage.setItem(USER_YAML_KEY, YAML_B);
+        appStorage.set(USER_YAML_KEY, YAML_B);
         createDriveStub({
             meta: { body: { id: "file-9", name: "東京.yaml", md5Checksum: "md5-9" } },
             download: VALID_DOWNLOAD,
@@ -880,7 +881,7 @@ describe("importCloudTripAsProfile", () => {
         // stale copy that is still in storage would lose them with nothing left to undo.
         await loadSync();
         const outgoingId = ensureActiveProfileId();
-        localStorage.setItem(USER_YAML_KEY, YAML_B);
+        appStorage.set(USER_YAML_KEY, YAML_B);
         createDriveStub({
             meta: { body: { id: "file-9", name: "東京.yaml", md5Checksum: "md5-9" } },
             download: VALID_DOWNLOAD,
@@ -889,7 +890,7 @@ describe("importCloudTripAsProfile", () => {
         expect(await sync.importCloudTripAsProfile("file-9", () => false)).toBeNull();
 
         expect(getActiveProfileId()).toBe(outgoingId);
-        expect(localStorage.getItem(USER_YAML_KEY)).toBe(YAML_B);
+        expect(appStorage.get(USER_YAML_KEY)).toBe(YAML_B);
         expect(listProfiles()).toEqual([]);
     });
 
@@ -897,7 +898,7 @@ describe("importCloudTripAsProfile", () => {
         // Reachable when the file's appProperty is missing or stale, or when a rebind pass
         // was skipped. Two local trips sharing one id would fight over a single Drive file.
         const held = "trip:\n  name: 東京\n  id: t-tokyo\n  hotels: []\ndays:\n  - date: '2026-10-01'\n    title: Day1\n    timeline: []\n";
-        localStorage.setItem(USER_YAML_KEY, held);
+        appStorage.set(USER_YAML_KEY, held);
         ensureActiveProfileId();
         await loadSync();
         createDriveStub({
@@ -917,7 +918,7 @@ describe("importCloudTripAsProfile", () => {
     it("runs beforeCommit before createProfile snapshots the outgoing trip", async () => {
         await loadSync();
         ensureActiveProfileId();
-        localStorage.setItem(USER_YAML_KEY, "trip:\n  name: 舊版本待更新\ndays: []\n");
+        appStorage.set(USER_YAML_KEY, "trip:\n  name: 舊版本待更新\ndays: []\n");
         createDriveStub({
             meta: { body: { id: "file-2", name: "東京.yaml", md5Checksum: "md5-2" } },
             download: VALID_DOWNLOAD,
@@ -927,7 +928,7 @@ describe("importCloudTripAsProfile", () => {
         const result = await sync.importCloudTripAsProfile("file-2", () => {
             // Simulates a caller flushing its own in-memory edits (e.g. App.svelte's
             // `saveTripData(tripData)`) right before the outgoing trip is parked.
-            localStorage.setItem(USER_YAML_KEY, YAML_B);
+            appStorage.set(USER_YAML_KEY, YAML_B);
             return true;
         });
 
