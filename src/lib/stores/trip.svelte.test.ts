@@ -33,6 +33,7 @@ import { gdriveSync } from "./gdrive.svelte";
 import { settingsDraft } from "./settings-draft.svelte";
 import { shareLinks } from "./share-link.svelte";
 import {
+    clearToastByKey,
     runToastAction,
     toast,
 } from "./toast.svelte";
@@ -641,12 +642,33 @@ todo:
                 vi.useRealTimers();
             });
             shareLinks.adopt(profileId, { id: "own00001", key: "k".repeat(22), editToken: "tok", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", expiresAt: null });
+            await store.load();
             store.toggleChecklistItem("todo", store.data!.todo[0]!._id!);
 
             await store.saveFromEditor(profileId, appStorage.get(USER_YAML_KEY)!);
             vi.advanceTimersByTime(12_000);
 
             expect(toast.items.at(-1)?.message).toBe("行程有改動，分享連結還是舊版本");
+            shareLinks.forget(profileId);
+        });
+
+        // The link is compared on content, like the Drive side: an edit undone is no longer one.
+        it("does not call the share link stale after an edit is undone", async () => {
+            vi.useFakeTimers();
+            onTestFinished(() => {
+                vi.useRealTimers();
+            });
+            shareLinks.adopt(profileId, { id: "own00002", key: "k".repeat(22), editToken: "tok", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", expiresAt: null });
+            await store.load();
+            // Toasts are module state; an earlier test may have left this very prompt up.
+            clearToastByKey("publish-pending");
+            const itemId = store.data!.todo[0]!._id!;
+            store.toggleChecklistItem("todo", itemId);
+            store.toggleChecklistItem("todo", itemId);
+
+            vi.advanceTimersByTime(12_000);
+
+            expect(toast.items.map(item => item.message)).not.toContain("行程有改動，分享連結還是舊版本");
             shareLinks.forget(profileId);
         });
 

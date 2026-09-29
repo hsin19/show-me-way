@@ -679,6 +679,17 @@ describe("serializeToYaml 與 round-trip", () => {
         }
     });
 
+    // 同步記錄比的是 bytes：勾了又取消的項目，存出來要跟從沒勾過的一模一樣。
+    it("未勾選是預設值：沒寫 checked 與 checked: false 存出來相同", () => {
+        const unwritten = serializeToYaml(validateYaml(timelineYaml(" []") + "\ntodo:\n  - text: '換錢'"));
+        const toggled = validateYaml(unwritten);
+        toggled.todo[0]!.checked = true;
+        toggled.todo[0]!.checked = false;
+
+        expect(serializeToYaml(toggled)).toBe(unwritten);
+        expect(unwritten).not.toContain("checked");
+    });
+
     it("status / confirmation / alternatives / stops 經 round-trip 不遺失", () => {
         const data = validateYaml(serializeToYaml(validateYaml(richYaml)));
         const ev = data.days[0]!.timeline[0]!;

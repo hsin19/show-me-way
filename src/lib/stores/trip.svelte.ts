@@ -60,7 +60,7 @@ import {
     writeActiveTrip,
     type Written,
 } from "$lib/services/save-trip";
-import { SvelteSet } from "svelte/reactivity";
+import { SvelteMap } from "svelte/reactivity";
 import {
     gdriveSync,
     type SyncOptions,
@@ -173,12 +173,14 @@ export class TripStore {
 
     private publishTimer: ReturnType<typeof setTimeout> | null = null;
     /**
-     * Slots whose share link is older than the trip in them. In memory on purpose: unlike
-     * the Drive side, which compares fingerprints the sync record persists, nothing records
-     * what was last sent to hop — so a reload forgets, and the prompt under-offers rather
-     * than claiming a staleness it cannot prove.
+     * Per slot, the fingerprint of what its share link is taken to carry: what this device last
+     * published, or else what the slot held when first loaded this session or last received
+     * from elsewhere — a pulled or taken version is its sender's to put behind the link. A
+     * link is stale while the slot's bytes differ, so an edit undone is no longer one. In
+     * memory on purpose: nothing records what was last sent to hop, so a reload forgets, and
+     * the prompt under-offers rather than claiming a staleness it cannot prove.
      */
-    private staleShareLinks = new SvelteSet<string>();
+    private linkBaselines = new SvelteMap<string, string>();
     /**
      * The update a received share link is offering, once a background check has fetched and
      * decrypted it. Null whenever there is nothing to decide.
@@ -240,6 +242,8 @@ export class TripStore {
             weatherStore.loadTrip(data.days, data.trip.city);
 
             migrateGdriveSyncState();
+            const profileId = ensureActiveProfileId();
+            if (!this.linkBaselines.has(profileId)) this.linkCarriesStored(profileId);
         } catch (err) {
             console.error("Failed to load trip data:", err);
             // Drop the previous trip too: with it still here, the tools tab keeps rendering it and the
@@ -421,7 +425,7 @@ export class TripStore {
             // inline fallback that followed a link hop refused does take that one off.
             if (outcome.kind !== "inline") void gdriveSync.pushShareLink(profileId);
             else if (outcome.deadLinkId) void gdriveSync.dropDeadShareLink(profileId, outcome.deadLinkId);
-            this.staleShareLinks.delete(profileId);
+            this.linkBaselines.set(profileId, yamlFingerprint(yaml));
             const copyMsg = outcome.kind === "inline"
                 ? "分享連結已複製！網址較長，可用短網址服務縮短"
                 : outcome.kind === "updated"
@@ -467,7 +471,6 @@ export class TripStore {
         // A deliberate save is fresh intent, so it outranks a dismissal that was about the
         // edits before it.
         if (explicit) this.publishPromptDeclined = false;
-        if (shareLinks.forTrip(profileId)) this.staleShareLinks.add(profileId);
         if (this.publishTimer !== null) clearTimeout(this.publishTimer);
         this.publishTimer = setTimeout(() => {
             this.publishTimer = null;
@@ -745,7 +748,7 @@ export class TripStore {
         // would put two persistent toasts on screen asking opposite things.
         if (gdriveSync.remoteStatusFor(profileId, yaml)) return;
         const drive = gdriveSync.hasUnpushedEdits(profileId, yaml);
-        const share = this.staleShareLinks.has(profileId) && !!shareLinks.forTrip(profileId);
+        const share = this.isLinkStale(profileId, yaml);
         if (!drive && !share) return;
         showToast({
             message: drive && share
@@ -780,7 +783,20 @@ export class TripStore {
             // across the round trip.
             if (!this.data || !isActiveProfile(profileId)) return;
         }
-        if (this.staleShareLinks.has(profileId)) await this.republishShareLink(profileId);
+        const current = this.storedYaml();
+        if (current !== null && this.isLinkStale(profileId, current)) await this.republishShareLink(profileId);
+    }
+
+    /** Whether `profileId`'s share link carries something other than `yaml`, the bytes the slot holds. */
+    private isLinkStale(profileId: string, yaml: string): boolean {
+        const baseline = this.linkBaselines.get(profileId);
+        return !!shareLinks.forTrip(profileId) && baseline !== undefined && baseline !== yamlFingerprint(yaml);
+    }
+
+    /** Take what the active slot now holds as what `profileId`'s link carries. */
+    private linkCarriesStored(profileId: string) {
+        const stored = this.storedYaml();
+        if (stored !== null) this.linkBaselines.set(profileId, yamlFingerprint(stored));
     }
 
     /**
@@ -792,12 +808,13 @@ export class TripStore {
         if (!this.data || this.isSharing || !shareLinks.forTrip(profileId)) return;
         this.isSharing = true;
         try {
-            const outcome = await shareLinks.publish(profileId, serializeToYaml(this.data));
+            const yaml = serializeToYaml(this.data);
+            const outcome = await shareLinks.publish(profileId, yaml);
             if (outcome.kind === "unreachable") {
                 showToast("目前無法更新分享連結，請稍後再試一次（原本的連結仍然有效）");
                 return;
             }
-            this.staleShareLinks.delete(profileId);
+            this.linkBaselines.set(profileId, yamlFingerprint(yaml));
             if (outcome.kind !== "inline") void gdriveSync.pushShareLink(profileId);
             else if (outcome.deadLinkId) void gdriveSync.dropDeadShareLink(profileId, outcome.deadLinkId);
             if (outcome.kind === "inline") {
@@ -890,7 +907,7 @@ export class TripStore {
     private forgetSlot(profileId: string) {
         gdriveSync.unbindTrip(profileId);
         shareLinks.forget(profileId);
-        this.staleShareLinks.delete(profileId);
+        this.linkBaselines.delete(profileId);
         tripOrigins.forget(profileId);
         if (this.sharedUpdate?.profileId === profileId) this.clearSharedUpdate();
     }
@@ -916,6 +933,7 @@ export class TripStore {
         // The bytes just downloaded, not the cached listing's checksum: a stale entry would
         // record an agreement matching no version and report a conflict nobody caused. Not
         // what was stored — a file this app did not write should read as a local edit.
+        if (outcome.kind === "replaced" || outcome.kind === "added" || outcome.kind === "unchanged") this.linkCarriesStored(outcome.profileId);
         if (outcome.kind === "added" && !outcome.copy) {
             gdriveSync.adoptCloudTrip(outcome.profileId, fileId, pulled.yaml, pulled.md5, pulled.shareLink);
             // The listing may predate this version of the file, and a file this app did not
@@ -978,6 +996,8 @@ export class TripStore {
         if (!this.guardActive(profileId)) return { kind: "aborted" };
         const written = this.replaceActiveTrip(parsed);
         if (!written) return { kind: "aborted" };
+        // A version received from elsewhere, not an edit made here.
+        this.linkCarriesStored(profileId);
         await this.load();
         return { kind: "landed", yaml: written.yaml };
     }
@@ -1071,6 +1091,8 @@ export class TripStore {
     private landSharedTrip(yaml: string, link: ShareLink): PlaceOutcome {
         const credentials = link.kind === "short" ? { id: link.id, key: link.key } : null;
         const outcome = this.place(yaml, askAboutLink);
+        // Received, not edited here: like a pull, it is its sender's to put behind a link.
+        if (outcome.kind === "replaced" || outcome.kind === "added" || outcome.kind === "unchanged") this.linkCarriesStored(outcome.profileId);
         if (outcome.kind === "replaced") {
             // The reopened link is now the version this slot has taken. Without this the
             // next background check would find the very bytes just landed "newer" than what

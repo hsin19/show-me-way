@@ -503,6 +503,23 @@ test("刪除雲端行程：確認後該列從清單消失", async ({ page }) => 
     expect(drive.list()).toHaveLength(0);
 });
 
+// 同步記錄比的是 bytes：勾了又取消，行程內容其實沒變，就不該變成「本機有改動」。
+test("勾選待辦又取消：內容回到原樣，雲端按鈕維持同步而不是上傳", async ({ page }) => {
+    await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML, tripId: "t-fixture" }]);
+    await seedItinerary(page);
+    await seedConnected(page, { record: { fileId: CLOUD_FILE_ID, remoteMd5: md5Of(FIXTURE_YAML), localHash: yamlFingerprint(FIXTURE_YAML) } });
+    await page.goto("/");
+
+    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
+    const todo = page.getByRole("checkbox", { name: /測試待辦項目/ });
+    await todo.check();
+    await todo.uncheck();
+
+    expect(await page.evaluate(() => localStorage.getItem("showmeway_user_yaml"))).toBe(FIXTURE_YAML);
+    await openTripManagement(page);
+    await expect(page.getByRole("button", { name: "同步行程 (比對本地與雲端內容差異)" })).toBeVisible();
+});
+
 test("儲存完提示：連續操作只問一次，而且要按下去才上傳", async ({ page }) => {
     const drive = await installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "測試行程.yaml", content: FIXTURE_YAML, tripId: "t-fixture" }]);
     await seedItinerary(page);

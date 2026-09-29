@@ -275,6 +275,9 @@ export function serializeToYaml(data: TripData): string {
     }
     for (const item of [...clean.todo, ...clean.packing]) {
         delete item._id;
+        // Unchecked is the default, and an item ticked and unticked again must be the same
+        // bytes as one never ticked — the sync record compares bytes, not meaning.
+        if (!item.checked) delete item.checked;
     }
 
     const body = dumpYaml(clean, {
