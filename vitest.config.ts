@@ -22,8 +22,28 @@ export default defineConfig({
     plugins: [svelte({ dynamicCompileOptions: () => ({ generate: "client" }) })],
     ssr: { resolve: { conditions: ["browser", "node", "import", "module", "default"] } },
     test: {
-        include: ["src/**/*.test.ts"],
-        environment: "node",
+        projects: [
+            {
+                extends: true,
+                test: { name: "unit", include: ["src/**/*.test.ts"], exclude: ["src/app-tests/**"], environment: "node" },
+            },
+            {
+                // The whole App mounted into happy-dom and driven through the DOM, with
+                // the network stubbed at `fetch` (src/app-tests/harness.ts). What
+                // needs layout, real CSS, WebKit or a service worker stays in Playwright.
+                extends: true,
+                resolve: {
+                    alias: { "virtual:pwa-register": fileURLToPath(new URL("./src/app-tests/pwa-register.ts", import.meta.url)) },
+                    conditions: ["browser"],
+                },
+                test: {
+                    name: "app",
+                    include: ["src/app-tests/**/*.test.ts"],
+                    environment: "happy-dom",
+                    environmentOptions: { happyDOM: { url: "http://localhost:8046/" } },
+                },
+            },
+        ],
         coverage: {
             provider: "v8",
             // `lcovonly`, not `lcov`: the latter also writes a few hundred HTML files
