@@ -1,29 +1,34 @@
-# Only `src/lib/**/*.ts` is measured: `vitest.config.ts` runs in a node
-# environment with no component-test layer, so every `.svelte` file is covered by
-# Playwright instead and is deliberately absent from the report rather than
-# sitting in it at 0%.
+# What is measured is `vitest.config.ts`'s coverage glob: every `src/**` module and
+# component, reached by the unit tests and by the `app` project that renders the whole
+# App in happy-dom. Playwright's runs are not measured, so what only e2e reaches
+# (layout, theme tokens, the built PWA) shows as uncovered.
 coverage:
   status:
     project:
       default:
         target: auto
         threshold: 1%
+    # Reported, never red: most work lands as a direct push to main, where a small
+    # diff's percentage swings on a handful of lines -- and lines only Playwright
+    # reaches (layout, theme) count as uncovered here. The project status above is
+    # the one that guards the trend.
     patch:
       default:
         target: auto
+        informational: true
 
-# `require_changes: true` because most PRs here move no covered line at all: a
-# Dependabot bump touches only the lockfile, and a UI change touches only
-# `.svelte` files, which are not in the report. An empty comment on a PR that
+# `require_changes: true` because many PRs here move no covered line at all: a
+# Dependabot bump touches only the lockfile. An empty comment on a PR that
 # auto-merges is pure noise -- the status check still runs either way.
 comment:
   layout: 'condensed_header, files'
   require_changes: true
 
-# Redundant with the include glob in `vitest.config.ts` and kept as the second
-# half of that decision: should the glob ever be widened to `src/**`, this is
-# what still keeps components out of the number instead of burying it at 0%.
+# Redundant with the exclude list in `vitest.config.ts` and kept as the second half
+# of it: should that list ever drop an entry, this still keeps test scaffolding and
+# the mount entry out of the number.
 ignore:
-  - 'src/**/*.svelte'
   - 'src/main.ts'
+  - 'src/app-tests/**'
+  - 'src/lib/testing/**'
   - 'e2e/**'

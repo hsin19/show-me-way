@@ -40,7 +40,9 @@ export default defineConfig({
                     name: "app",
                     include: ["src/app-tests/**/*.test.ts"],
                     environment: "happy-dom",
-                    environmentOptions: { happyDOM: { url: "http://localhost:8046/" } },
+                    // Reduced motion as in playwright.config.ts: outros take 0ms, so a toast
+                    // replaced through its dedupeKey never shares the DOM with its successor.
+                    environmentOptions: { happyDOM: { url: "http://localhost:8046/", settings: { device: { prefersReducedMotion: "reduce" } } } },
                 },
             },
         ],
@@ -50,12 +52,11 @@ export default defineConfig({
             // that neither CI nor `pnpm run check` reads. Pass `--coverage.reporter=html`
             // when you actually want to browse it.
             reporter: ["text-summary", "lcovonly"],
-            // Only what this layer can actually reach. `environment: "node"` means
-            // there is no component-test layer at all, so including `.svelte` (or
-            // `App.svelte`'s helpers) would report every one of them at 0% and bury
-            // the number this is here to track -- Playwright is their coverage.
-            include: ["src/lib/**/*.ts"],
-            exclude: ["src/lib/**/*.test.ts", "src/lib/testing/**"],
+            // Components count now that the `app` project renders them. `main.ts` stays
+            // out: it only mounts into index.html, which no test loads, so it would sit
+            // at 0% for a reason no test could fix. Playwright's runs are not measured.
+            include: ["src/**/*.{ts,svelte}"],
+            exclude: ["src/**/*.test.ts", "src/**/*.d.ts", "src/main.ts", "src/lib/testing/**", "src/app-tests/**"],
         },
     },
 });

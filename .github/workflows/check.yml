@@ -73,7 +73,7 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm run knip:ci
 
-      - name: Unit tests
+      - name: Unit and app tests
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm run test:ci
 
