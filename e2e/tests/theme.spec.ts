@@ -10,6 +10,15 @@ import {
 // script deliberately duplicates readThemePref/resolveTheme from
 // src/lib/stores/theme.svelte.ts (a module script would run too late and flash), so
 // these tests exist mainly to keep the two copies agreeing.
+//
+// All of them need a real browser. The app tests mount App.svelte alone, so neither
+// the boot script nor main.ts's initTheme() runs there, and happy-dom loads no CSS:
+// - 淺色, 深色 and 跟隨系統: the theme resolved at load and the computed accent; 淺色
+//   also both theme-color metas, 跟隨系統 an OS switch mid-session;
+// - the unset default: the theme resolved at load with nothing stored;
+// - the settings round trip: the computed accent, and a reload that re-runs the boot path;
+// - WCAG AA and the scrim: computed CSS tokens.
+// That App 設定 survives a load error is src/app-tests/theme.test.ts.
 
 const THEME_KEY = "showmeway_theme";
 
@@ -105,21 +114,6 @@ test("設定頁：切換主題並在重新載入後保留", async ({ page }) => 
 
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-});
-
-test("設定頁：載入失敗時仍可到達（主題與行程資料無關）", async ({ page }) => {
-    await page.addInitScript(
-        ([key, value]) => window.localStorage.setItem(key, value),
-        [
-            "showmeway_user_yaml",
-            "這不是有效的 YAML: [",
-        ] as const,
-    );
-    await page.goto("/");
-
-    await page.locator("nav").getByRole("button", { name: "工具", exact: true }).click();
-    await page.getByRole("button", { name: "App 設定", exact: true }).click();
-    await expect(page.getByRole("heading", { level: 3, name: "外觀" })).toBeVisible();
 });
 
 // Three of these were below AA when the light palette was first written (accent

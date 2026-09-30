@@ -13,7 +13,11 @@ test.use({ viewport: { width: 390, height: 844 } });
 // builds its own trip around the current date instead.
 //
 // The opposite branch — a trip that is not currently running lands on the day-0
-// overview — is already covered by smoke.spec.ts with the far-future fixture.
+// overview — is covered by src/app-tests/smoke.test.ts with the far-future fixture.
+//
+// Neither test has an app-test counterpart: each ends on layout happy-dom does not
+// compute (the chip scrolled into view; the title ellipsed on the switcher's row),
+// and there every rect is zero, so those checks would pass without testing anything.
 function build(eventTitle = "") {
     // Today per Asia/Taipei, matching playwright.config.ts's timezoneId, so the
     // fixture and the app agree on which day is today. The offsets are then
@@ -73,7 +77,7 @@ test("開啟時自動定位到今天：面板、今天標記與 chip 進入視�
 // Mid-trip the overview capsule stops showing a countdown and starts showing the
 // current/next event, whose title is arbitrarily long. It must ellipse rather
 // than wrap: wrapping pushes the 切換行程 switcher onto a second row. Only
-// reachable with a real "today", hence this suite rather than smoke.spec.ts.
+// reachable with a real "today", hence this suite rather than the far-future smoke tests.
 test("行程進行中：總覽膠囊截斷過長的事件標題，不擠掉切換行程", async ({ page }) => {
     const { yaml } = build("聖母百花大教堂前往領主廣場沿途散步順道逛皮件小店與中央市場");
     await stubMissingLocalItinerary(page);
