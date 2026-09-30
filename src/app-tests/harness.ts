@@ -27,7 +27,7 @@ await import("../App.svelte");
 const ORIGIN = "http://localhost:8046";
 // A Vite glob rather than `node:fs`: the src tsconfig has no node types. The personal
 // itinerary is left out, so the fallback chain always lands on the bundled template.
-const PUBLIC_FILES: Record<string, string> = import.meta.glob(["/public/**/*.{yaml,json,html}", "!/public/itinerary.local.yaml"], { query: "?raw", import: "default", eager: true });
+const PUBLIC_FILES: Record<string, string> = import.meta.glob(["/public/**/*.{yaml,json}", "!/public/itinerary.local.yaml"], { query: "?raw", import: "default", eager: true });
 
 // The spec marks `animation.finished` handled when `cancel()` rejects it, so a browser
 // stays quiet when svelte cancels an outro; happy-dom does not, and every cancelled

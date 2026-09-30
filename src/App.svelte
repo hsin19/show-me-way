@@ -5,11 +5,13 @@ import {
     initServiceWorkerUpdates,
 } from "$lib/infra/pwa/sw-update";
 import { initPwaInstallPrompt } from "$lib/stores/pwa-install.svelte";
+import { route } from "$lib/stores/route.svelte";
 import { tripStore } from "$lib/stores/trip.svelte";
 import { weatherStore } from "$lib/stores/weather.svelte";
 import ChatPanel from "$lib/ui/ai/ChatPanel.svelte";
 import EnlargedCardOverlay from "$lib/ui/itinerary/EnlargedCardOverlay.svelte";
 import ItineraryStrip from "$lib/ui/itinerary/ItineraryStrip.svelte";
+import PrivacyPolicy, { PRIVACY_TITLE } from "$lib/ui/privacy/PrivacyPolicy.svelte";
 import type { EnlargedCard } from "$lib/ui/shared/enlarge";
 import Toast from "$lib/ui/shared/Toast.svelte";
 import Checklist from "$lib/ui/tools/Checklist.svelte";
@@ -56,8 +58,10 @@ function handleWindowKeydown(e: KeyboardEvent) {
     if (e.key === "Escape" && enlargedCard) enlargedCard = null;
 }
 
+// The one writer of the title: a second effect in the page would be overwritten the
+// moment the trip finishes loading.
 $effect(() => {
-    document.title = tripStore.data?.trip.name ?? "下面一way";
+    document.title = route.privacy ? PRIVACY_TITLE : tripStore.data?.trip.name ?? "下面一way";
 });
 
 let lastSyncedDate = "";
@@ -105,7 +109,7 @@ let staleWeatherHours = $derived.by(() => {
 });
 </script>
 
-<svelte:window onkeydown={handleWindowKeydown} />
+<svelte:window onkeydown={handleWindowKeydown} onpopstate={route.refresh} />
 <svelte:document onvisibilitychange={handleVisibilityChange} />
 
 <!-- Fixed-height app shell: the window itself never scrolls; the header and nav
@@ -118,7 +122,9 @@ let staleWeatherHours = $derived.by(() => {
     <!-- Every branch below owns its own scrolling: the itinerary strip scrolls
          per day, the other tabs scroll as a whole. -->
     <main class="flex-1 min-h-0 w-full">
-        {#if tripStore.isLoading}
+        {#if route.privacy}
+            <PrivacyPolicy onBack={() => route.closePrivacy()} />
+        {:else if tripStore.isLoading}
             <div class="h-full flex flex-col items-center justify-center gap-3 pt-[var(--safe-top)]">
                 <Loader2 class="animate-spin text-accent" size={36} />
                 <!-- A scanned QR spends its whole network wait on this line, so it
@@ -223,32 +229,35 @@ let staleWeatherHours = $derived.by(() => {
         {/if}
     </main>
 
-    <!-- A flow child, not position:fixed: the shell above never scrolls. -->
-    <nav class="shrink-0 h-[calc(64px+var(--safe-bottom))] bg-bg-main/90 backdrop-blur-2xl border-t border-line z-[100]">
-        <div class="max-w-3xl mx-auto w-full h-full flex justify-around items-center pb-[var(--safe-bottom)]">
-            <button
-                onclick={() => (activeTab = "itinerary")}
-                class="flex flex-col items-center justify-center flex-1 h-full transition-colors cursor-pointer {activeTab === 'itinerary' ? 'text-accent' : 'text-text-muted'}"
-            >
-                <Calendar size={20} />
-                <span class="text-[10px] font-semibold mt-1">行程</span>
-            </button>
-            <button
-                onclick={() => (activeTab = "tools")}
-                class="flex flex-col items-center justify-center flex-1 h-full transition-colors cursor-pointer {activeTab === 'tools' ? 'text-accent' : 'text-text-muted'}"
-            >
-                <LayoutGrid size={20} />
-                <span class="text-[10px] font-semibold mt-1">工具</span>
-            </button>
-            <button
-                onclick={() => (activeTab = "ai")}
-                class="flex flex-col items-center justify-center flex-1 h-full transition-colors cursor-pointer {activeTab === 'ai' ? 'text-accent' : 'text-text-muted'}"
-            >
-                <Sparkles size={20} />
-                <span class="text-[10px] font-semibold mt-1">AI</span>
-            </button>
-        </div>
-    </nav>
+    <!-- A flow child, not position:fixed: the shell above never scrolls. The privacy page
+         is reached from a link rather than a tab, so it takes the whole screen. -->
+    {#if !route.privacy}
+        <nav class="shrink-0 h-[calc(64px+var(--safe-bottom))] bg-bg-main/90 backdrop-blur-2xl border-t border-line z-[100]">
+            <div class="max-w-3xl mx-auto w-full h-full flex justify-around items-center pb-[var(--safe-bottom)]">
+                <button
+                    onclick={() => (activeTab = "itinerary")}
+                    class="flex flex-col items-center justify-center flex-1 h-full transition-colors cursor-pointer {activeTab === 'itinerary' ? 'text-accent' : 'text-text-muted'}"
+                >
+                    <Calendar size={20} />
+                    <span class="text-[10px] font-semibold mt-1">行程</span>
+                </button>
+                <button
+                    onclick={() => (activeTab = "tools")}
+                    class="flex flex-col items-center justify-center flex-1 h-full transition-colors cursor-pointer {activeTab === 'tools' ? 'text-accent' : 'text-text-muted'}"
+                >
+                    <LayoutGrid size={20} />
+                    <span class="text-[10px] font-semibold mt-1">工具</span>
+                </button>
+                <button
+                    onclick={() => (activeTab = "ai")}
+                    class="flex flex-col items-center justify-center flex-1 h-full transition-colors cursor-pointer {activeTab === 'ai' ? 'text-accent' : 'text-text-muted'}"
+                >
+                    <Sparkles size={20} />
+                    <span class="text-[10px] font-semibold mt-1">AI</span>
+                </button>
+            </div>
+        </nav>
+    {/if}
 
     <!-- Reads the toast service directly, so it takes no props. -->
     <Toast />

@@ -473,7 +473,7 @@ function discardDraft() {
     </div>
 
     <!-- The editor's share-link sniffing, the clear-to-default behaviour, and where the
-         data goes. That last line, the share toasts and public/privacy.html are the
+         data goes. That last line, the share toasts and PrivacyPolicy.svelte are the
          places that say the itinerary leaves the device — keep them agreeing with what
          sync and the short link actually upload. -->
     <div class="text-[10px] text-text-muted leading-normal bg-well p-3 rounded-lg border border-line-faint">

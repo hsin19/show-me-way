@@ -7,9 +7,13 @@ import {
     fileURLToPath,
     URL,
 } from "node:url";
+import type { Component } from "svelte";
+import type { render as renderToString } from "svelte/server";
 import {
+    createServer,
     defineConfig,
     type Plugin,
+    type ResolvedConfig,
 } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
@@ -59,6 +63,59 @@ function reloadOnItineraryEdit(): Plugin {
     };
 }
 
+// Cloudflare Pages and GitHub Pages both answer /privacy with a file named privacy.html,
+// so the build writes one: index.html with the policy's own <title> and its text in a
+// <noscript>. The app still boots from it and renders the route on the client; the text
+// is for readers that run no script — a link checker, a crawler, the review of the Google
+// consent screen's privacy link — which would otherwise get an empty app shell.
+//
+// The text is rendered by a throwaway Vite server built from this same config, so the
+// aliases and Svelte settings are the app's own. PrivacyPolicy.svelte therefore has to
+// render without a browser, and the build fails rather than ship a page without its text.
+function prerenderPrivacyPage(): Plugin {
+    let resolved: ResolvedConfig;
+    return {
+        name: "showmeway:prerender-privacy",
+        // The nested server below is a `serve`, so the plugin cannot start itself again.
+        apply: "build",
+        // After vite:build-html has put the finished index.html into the bundle.
+        enforce: "post",
+        configResolved(config) {
+            resolved = config;
+        },
+        async generateBundle(_options, bundle) {
+            const shell = bundle["index.html"];
+            if (shell?.type !== "asset") throw new Error("prerender-privacy: index.html is not in the bundle");
+            const server = await createServer({
+                root: resolved.root,
+                configFile: resolved.configFile,
+                mode: resolved.mode,
+                server: { middlewareMode: true, watch: null, hmr: false },
+                appType: "custom",
+                logLevel: "silent",
+            });
+            try {
+                // Both through the server's loader: rendered by a second copy of svelte's
+                // internals, the page fails on a context it never received.
+                const page = await server.ssrLoadModule("/src/lib/ui/privacy/PrivacyPolicy.svelte") as {
+                    default: Component<{ onBack: () => void; }>;
+                    PRIVACY_TITLE: string;
+                };
+                const { render } = await server.ssrLoadModule("svelte/server") as { render: typeof renderToString; };
+                const { body } = render(page.default, { props: { onBack: () => {} } });
+
+                const source = typeof shell.source === "string" ? shell.source : new TextDecoder().decode(shell.source);
+                const titled = source.replace(/<title>[^<]*<\/title>/, () => `<title>${page.PRIVACY_TITLE}</title>`);
+                const html = titled.replace('<div id="app"></div>', () => `<div id="app"></div>\n        <noscript>${body}</noscript>`);
+                if (titled === source || html === titled) throw new Error('prerender-privacy: index.html no longer has a <title> and a <div id="app">');
+                this.emitFile({ type: "asset", fileName: "privacy.html", source: html });
+            } finally {
+                await server.close();
+            }
+        },
+    };
+}
+
 const appVersion = resolveGitSha();
 const buildTime = new Date().toISOString();
 
@@ -99,6 +156,7 @@ export default defineConfig({
         reloadOnItineraryEdit(),
         svelte(),
         tailwindcss(),
+        prerenderPrivacyPage(),
         VitePWA({
             // "prompt": the new service worker waits until the user accepts the
             // in-app update banner, instead of taking over a page in active use.
