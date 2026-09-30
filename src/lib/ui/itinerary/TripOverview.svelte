@@ -129,7 +129,7 @@ let langConfig = $derived(getLanguageConfig(trip.lang));
             <button
                 type="button"
                 onclick={toggleSwitcher}
-                class="inline-flex items-center gap-1.5 bg-tint-1 border border-card-border hover:border-accent/40 text-text-primary hover:text-accent text-xs font-bold px-3.5 py-2 rounded-full transition cursor-pointer active:scale-95 shrink-0"
+                class="inline-flex items-center gap-1.5 min-h-[44px] bg-tint-1 border border-card-border hover:border-accent/40 text-text-primary hover:text-accent text-xs font-bold px-3.5 py-2 rounded-full transition cursor-pointer active:scale-95 shrink-0"
                 aria-expanded={isSwitcherOpen}
                 aria-label="切換行程選單"
             >

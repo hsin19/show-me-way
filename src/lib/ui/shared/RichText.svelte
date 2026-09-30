@@ -5,7 +5,7 @@ import {
 } from "$lib/domain/markdown";
 
 interface Props {
-    /** Inline Markdown, per `lib/markdown.ts`. Undefined renders nothing — these fields are optional at the gate. */
+    /** Inline Markdown, per `domain/markdown.ts`. Undefined renders nothing — these fields are optional at the gate. */
     text: string | undefined;
 }
 

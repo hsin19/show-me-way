@@ -117,7 +117,7 @@ export default defineConfig(
     },
     {
         files: ["src/**/*.{ts,svelte}"],
-        ignores: ["src/lib/infra/storage/app-storage.ts", "src/lib/infra/storage/storage-admin.ts", "src/**/*.test.ts", "src/lib/testing/**", "src/app-tests/**"],
+        ignores: ["src/lib/infra/storage/app-storage.ts", "src/**/*.test.ts", "src/lib/testing/**", "src/app-tests/**"],
         rules: {
             "no-restricted-globals": ["error", { name: "localStorage", message: "Go through appStorage ($lib/infra/storage/app-storage), which owns the key namespace." }],
             "no-restricted-properties": [

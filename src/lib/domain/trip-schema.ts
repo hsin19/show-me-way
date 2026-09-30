@@ -10,15 +10,17 @@ import * as v from "valibot";
  * Only the *shape* lives here. What the app derives from that shape -- sorting
  * and numbering `days`, gap-filling, minting `trip.id`, `start`/`end`/
  * `departure` -- and the cross-field checks (duplicate dates, date span) stay in
- * `trip.ts`, where the invariants are documented.
+ * `trip.ts`, where the invariants are documented. A derived field is left out of
+ * the schema altogether: an object schema strips the keys it does not list, so
+ * an old file that still writes one loads with the value recomputed.
  *
  * `v.description` doubles as the field's documentation: the editor shows it on
  * hover and the itinerary-yaml-builder skill reads the generated schema instead
  * of a hand-kept field table, so write it for an author, not a maintainer.
- * `v.metadata` carries editor-only hints (`deprecated`, `readOnly`, `maxLength`,
- * `enum`) that the app deliberately does not enforce -- a title over the length
- * hint wraps, it does not fail to load -- and the generator spreads them into
- * the JSON Schema verbatim.
+ * `v.metadata` carries editor-only hints (`readOnly`, `maxLength`, `enum`) that
+ * the app deliberately does not enforce -- a title over the length hint wraps,
+ * it does not fail to load -- and the generator spreads them into the JSON
+ * Schema verbatim.
  */
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -33,11 +35,6 @@ function text(description: string) {
 
 function isoDate(description: string) {
     return v.pipe(v.string(), v.regex(ISO_DATE_PATTERN), v.description(description));
-}
-
-/** A field `normalizeTripData` overwrites: accepted so old files keep loading, flagged so the editor stops people writing it. */
-function deprecated<TSchema extends v.GenericSchema>(schema: TSchema, description: string) {
-    return v.optional(v.pipe(schema, v.description(`[已過時 / Deprecated] ${description}`), v.metadata({ deprecated: true })));
 }
 
 const confirmationSchema = v.pipe(
@@ -111,15 +108,12 @@ const timelineEventSchema = v.object({
 });
 
 const daySchema = v.object({
-    day: deprecated(v.pipe(v.number(), v.integer()), "不需填寫。App 會依 date 排序後自動編號。"),
     date: isoDate("當天日期 (YYYY-MM-DD)"),
     title: v.pipe(
         v.string(),
         v.description("當日行程大標題/主題，例如: 抵達 · 新宿、京都一日遊。建議 14 個全形字以內 (約 23 個半形字)：在 390px 寬的手機上，日程卡大標題超過就會折成兩行；總覽日期清單則會在 15 個全形字處截字。"),
         v.metadata({ maxLength: 24 }),
     ),
-    // `normalizeTripData` migrates a legacy `region` into `title` before parsing, so this entry exists for the editor's sake only.
-    region: deprecated(v.string(), "舊版區域屬性，請改用 title"),
     pace: v.optional(v.pipe(
         v.string(),
         v.description("今日行程節奏描述 (選填，預設為「自由安排行程」)，例如: 慢活、需要早起。建議 15 個全形字以內 (約 27 個半形字)。"),
@@ -142,9 +136,6 @@ const tripSchema = v.object({
         v.description("[自動產生 / 請勿手動編輯] App 產生的行程識別碼，會跟著分享連結與雲端備份走，用來認出「同一趟行程」。手動修改或刪除會讓這趟行程與它的雲端檔案失去關聯。"),
         v.metadata({ readOnly: true }),
     )),
-    start: deprecated(v.string(), "不需填寫。App 會自動取 days 中最早的 date 作為出發日期。"),
-    end: deprecated(v.string(), "不需填寫。App 會自動取 days 中最晚的 date 作為回程日期。"),
-    departure: deprecated(v.string(), "不需填寫。App 會自動以第一天的第一個行程時間作為首頁倒數計時的目標。"),
     // Any string loads -- `language.ts` falls back to English for a code it does not know -- so the enum is an editor hint, not a gate.
     lang: v.optional(v.pipe(
         v.string(),

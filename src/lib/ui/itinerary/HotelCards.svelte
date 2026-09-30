@@ -92,7 +92,7 @@ function showAddressForDriver(hotel: HotelInfo) {
 
             <button
                 onclick={() => showAddressForDriver(hotel)}
-                class="w-full bg-accent text-accent-contrast font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition active:scale-[0.98] cursor-pointer"
+                class="w-full min-h-[44px] bg-accent text-accent-contrast font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition active:scale-[0.98] cursor-pointer"
             >
                 <Maximize2 size={12} aria-hidden="true" />
                 全螢幕放大給司機看

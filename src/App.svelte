@@ -179,7 +179,7 @@ let staleWeatherHours = $derived.by(() => {
                         <p class="text-text-primary text-sm font-semibold mb-4">{tripStore.loadError}</p>
                         <button
                             onclick={() => openTools("settings")}
-                            class="bg-accent text-accent-contrast font-bold py-2.5 px-6 rounded-xl text-xs transition active:scale-[0.98] cursor-pointer"
+                            class="min-h-[44px] bg-accent text-accent-contrast font-bold py-2.5 px-6 rounded-xl text-xs transition active:scale-[0.98] cursor-pointer"
                         >
                             開啟設定並貼上 YAML
                         </button>

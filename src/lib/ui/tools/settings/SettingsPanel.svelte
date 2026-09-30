@@ -1,5 +1,4 @@
 <script lang="ts">
-import { REPO_URL } from "$lib/config";
 import { buildShortShareUrl } from "$lib/domain/share";
 import { formatBackupTime } from "$lib/domain/utils";
 import { fetchDefaultYamlText } from "$lib/infra/http/itinerary-loader";
@@ -100,7 +99,7 @@ function markDraft() {
     settingsDraft.yaml = yamlInput;
 }
 
-// ensureActiveProfileId, matching persistTripData: this id keys the trip's Drive binding
+// ensureActiveProfileId, matching writeActiveTrip: this id keys the trip's Drive binding
 // and merge base, so a `?? "default"` fallback here would bind a second trip to the
 // first one's cloud file. A plain const, not `$derived`: it mints the id on first call,
 // and a reactive computation has no business writing storage. Switching profiles
@@ -327,7 +326,7 @@ function discardDraft() {
             onclick={handleCloudAction}
             aria-label={cloudButton.label}
             title={cloudButton.label}
-            class="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer disabled:opacity-40"
+            class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer disabled:opacity-40"
         >
             <cloudButton.icon size={18} class={cloudButton.iconClass} aria-hidden="true" />
         </button>
@@ -340,15 +339,11 @@ function discardDraft() {
              side, and every path that could transfer checks `conflictFor` first — including
              the publish prompt — so nothing decides this but a tap here. -->
         <VersionChoiceStrip
-            message={activeConflict.kind === "both-changed"
-            ? `「${activeConflict.fileName}」在雲端和這台裝置上都改過，請選擇要保留哪一份。`
-            : `「${activeConflict.fileName}」的雲端版本比這台裝置新，請選擇要載入雲端版本，或保留這台裝置的內容。`}
+            message={`「${activeConflict.fileName}」在雲端和這台裝置上都改過，請選擇要保留哪一份。`}
             takeRemote={{
                 label: "採用雲端版本",
                 confirmLabel: "採用雲端",
-                confirmMessage: activeConflict.kind === "both-changed"
-                    ? `確定改用雲端的「${activeConflict.fileName}」嗎？本機尚未同步的修改會被取代，還原前會先存一份備份。`
-                    : `確定載入雲端的「${activeConflict.fileName}」嗎？載入前會先存一份備份。`,
+                confirmMessage: `確定改用雲端的「${activeConflict.fileName}」嗎？本機尚未同步的修改會被取代，還原前會先存一份備份。`,
                 run: () => void takeCloudVersion(),
             }}
             keepLocal={{
@@ -357,14 +352,12 @@ function discardDraft() {
                 confirmMessage: `確定以本機版本覆蓋雲端的「${activeConflict.fileName}」嗎？其他裝置寫入雲端的修改會被取代。`,
                 run: () => void keepLocalVersion(),
             }}
-            keepBoth={activeConflict.kind === "both-changed"
-            ? {
+            keepBoth={{
                 label: "兩份都留（本機版另存為新行程）",
                 confirmLabel: "兩份都留",
                 confirmMessage: `確定兩份都留嗎？這台裝置的版本會另存成一個新行程，雲端的「${activeConflict.fileName}」則成為這趟行程的內容。`,
                 run: () => void keepBothVersions(),
-            }
-            : undefined}
+            }}
             disabled={gdriveSync.isSyncing}
         />
     </div>
@@ -424,13 +417,13 @@ function discardDraft() {
             <div class="flex gap-2 -mb-1.5">
                 <button
                     onclick={selectAll}
-                    class="text-[11px] font-bold text-accent min-h-[44px] flex items-center hover:underline cursor-pointer"
+                    class="text-[11px] font-bold text-accent min-w-[44px] min-h-[44px] flex items-center justify-center hover:underline cursor-pointer"
                 >
                     全選
                 </button>
                 <button
                     onclick={() => copyToClipboard(yamlInput, "已複製編輯器中的 YAML")}
-                    class="text-[11px] font-bold text-text-muted min-h-[44px] flex items-center gap-1 hover:text-accent cursor-pointer"
+                    class="text-[11px] font-bold text-text-muted min-w-[44px] min-h-[44px] flex items-center justify-center gap-1 hover:text-accent cursor-pointer"
                 >
                     <Copy size={12} aria-hidden="true" /> 複製
                 </button>
@@ -491,12 +484,6 @@ function discardDraft() {
             <li>貼上 YAML 行程內容，或他人的分享連結，按「儲存並解析」即可匯入；原本的行程會留在下方的備份紀錄。</li>
             <li>要回到預設的 <a href="./itinerary.yaml" target="_blank" rel="noopener noreferrer" class="text-accent underline hover:text-text-primary transition">itinerary.yaml</a>，用最下方的「回復預設行程」。</li>
             <li>行程存在這台裝置上。產生分享連結時，行程會先在瀏覽器加密，只有密文上傳到短連結服務；連線 Google 雲端硬碟後，同步會把整份行程複製到你自己的 Drive。</li>
-            <li>
-                可用此指令安裝行程小幫手 Skill：
-                <div class="bg-well-deep border border-line rounded px-2 py-1 mt-1 font-mono text-[10px] select-all break-all text-text-primary">
-                    npx skills add {REPO_URL} --skill itinerary-yaml-builder
-                </div>
-            </li>
         </ul>
     </div>
 

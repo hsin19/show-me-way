@@ -25,7 +25,6 @@ import {
     listCloudTrips,
     loadGdriveUser,
     loadTripSyncMap,
-    migrateGdriveSyncState,
     saveGdriveUser,
     saveTripSyncMap,
     setCachedAccessToken,
@@ -67,44 +66,6 @@ describe("gdrive module", () => {
             expect(loadGdriveUser()).toEqual(user);
             clearGdriveUser();
             expect(loadGdriveUser()).toBeNull();
-        });
-
-        it("folds the earlier per-concern maps into one record and removes them", () => {
-            storage.setItem("showmeway_gdrive_file_map", JSON.stringify({ "p-1": "file-1", "p-2": "file-2" }));
-            storage.setItem("showmeway_gdrive_md5_map", JSON.stringify({ "p-1": "md5-1" }));
-            storage.setItem("showmeway_gdrive_dirty_map", JSON.stringify({ "p-2": true }));
-            storage.setItem("showmeway_gdrive_mod_p-1", "1750000000000");
-
-            migrateGdriveSyncState();
-
-            expect(loadTripSyncMap()).toEqual({
-                "p-1": { fileId: "file-1", remoteMd5: "md5-1" },
-                // No md5 recorded under the old scheme: absent, which decideSyncAction
-                // reads as "assume local changed" rather than inventing an agreement.
-                "p-2": { fileId: "file-2", remoteMd5: undefined },
-            });
-            expect(storage.getItem("showmeway_gdrive_file_map")).toBeNull();
-            expect(storage.getItem("showmeway_gdrive_md5_map")).toBeNull();
-            expect(storage.getItem("showmeway_gdrive_dirty_map")).toBeNull();
-            expect(storage.getItem("showmeway_gdrive_mod_p-1")).toBeNull();
-        });
-
-        it("drops the retired automatic-sync flag", () => {
-            storage.setItem("showmeway_gdrive_auto_sync", "true");
-
-            migrateGdriveSyncState();
-
-            expect(storage.getItem("showmeway_gdrive_auto_sync")).toBeNull();
-        });
-
-        it("is safe to run on every load and never overwrites a newer record", () => {
-            saveTripSyncMap({ "p-1": { fileId: "file-new", remoteMd5: "md5-new", localHash: "h" } });
-            storage.setItem("showmeway_gdrive_file_map", JSON.stringify({ "p-1": "file-old" }));
-
-            migrateGdriveSyncState();
-            migrateGdriveSyncState();
-
-            expect(loadTripSyncMap()["p-1"]).toEqual({ fileId: "file-new", remoteMd5: "md5-new", localHash: "h" });
         });
 
         it("round-trips the per-trip sync record", () => {

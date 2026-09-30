@@ -46,13 +46,12 @@ describe("getStorageSummary", () => {
         storage.setItem("showmeway_yaml_backups", '[{"id":1}]');
         storage.setItem("showmeway_user_yaml", "title: test trip");
         storage.setItem("showmeway_gemini_api_key", "test-key");
-        storage.setItem("exchange_rate_JPY", "0.21");
 
         const summary = getStorageSummary();
         expect(summary.apiCache.keyCount).toBe(2);
         expect(summary.backups.keyCount).toBe(1);
-        // itinerary YAML + Gemini key + a manual rate left by the removed 記帳 page
-        expect(summary.other.keyCount).toBe(3);
+        // itinerary YAML + Gemini key
+        expect(summary.other.keyCount).toBe(2);
         expect(summary.totalBytes).toBe(
             summary.apiCache.sizeBytes + summary.backups.sizeBytes + summary.other.sizeBytes,
         );
@@ -111,13 +110,11 @@ describe("clearYamlBackups", () => {
 });
 
 describe("clearAppLocalStorage", () => {
-    it("removes every key this app owns, including legacy and unprefixed ones", () => {
+    it("removes every key this app owns", () => {
         storage.setItem("showmeway_user_yaml", "my trip");
         storage.setItem("showmeway_profiles", "[]");
         storage.setItem("showmeway_theme", "dark");
         storage.setItem("showmeway_weather_tokyo", "data");
-        storage.setItem("exchange_rate_JPY", "0.21");
-        storage.setItem("ledger_expenses", "[]");
 
         clearAppLocalStorage();
         expect(storage.length).toBe(0);

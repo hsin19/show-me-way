@@ -7,8 +7,7 @@
 //
 // What the app holds comes from appStorage, so the hard reset is scoped by construction
 // and never `localStorage.clear()`, which on the shared origin would take every other
-// project's data too. The one raw access left is for the legacy keys below, which
-// earlier builds wrote without the namespace.
+// project's data too.
 
 import {
     clearWeatherCache,
@@ -21,11 +20,6 @@ import { yamlBackupKeys } from "./yaml-storage";
 // Re-exported so the panel has one import for the whole surface, while the
 // removal itself stays with the backup ring's owner.
 export { clearYamlBackups } from "./yaml-storage";
-
-/** Written by 2026-06 builds and long since migrated into the YAML; the migration is gone, so this sweep is all that can still remove a stray copy. */
-const LEGACY_KEYS = ["todo_state", "packing_state", "ledger_expenses"];
-/** The removed 記帳 page's manual exchange rate, `exchange_rate_<currency>`; swept so a reset leaves nothing of it behind. */
-const LEGACY_KEY_PREFIXES = ["exchange_rate_"];
 
 interface CategoryStorageStats {
     keyCount: number;
@@ -41,11 +35,6 @@ export interface StorageSummary {
     other: CategoryStorageStats;
 }
 
-// Counted like appStorage.sizeOf, for the entries that live outside it.
-function legacyBytes(key: string): number {
-    return (key.length + (localStorage.getItem(key) ?? "").length) * 2;
-}
-
 /** Renders a `StorageSummary` byte count for display, e.g. in App 設定. */
 export function formatBytes(bytes: number): string {
     if (bytes <= 0) return "0 B";
@@ -54,20 +43,10 @@ export function formatBytes(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** A snapshot: removing while walking the live index would skip entries. */
-function legacyKeys(): string[] {
-    const keys: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && (LEGACY_KEYS.includes(key) || LEGACY_KEY_PREFIXES.some(prefix => key.startsWith(prefix)))) keys.push(key);
-    }
-    return keys;
-}
-
-function statsFor(names: readonly string[], legacy: readonly string[] = []): CategoryStorageStats {
+function statsFor(names: readonly string[]): CategoryStorageStats {
     return {
-        keyCount: names.length + legacy.length,
-        sizeBytes: names.reduce((sum, name) => sum + appStorage.sizeOf(name), 0) + legacy.reduce((sum, key) => sum + legacyBytes(key), 0),
+        keyCount: names.length,
+        sizeBytes: names.reduce((sum, name) => sum + appStorage.sizeOf(name), 0),
     };
 }
 
@@ -80,7 +59,7 @@ export function getStorageSummary(): StorageSummary {
 
     const apiCache = statsFor(apiCacheNames);
     const backups = statsFor(backupNames);
-    const other = statsFor(otherNames, legacyKeys());
+    const other = statsFor(otherNames);
     return {
         totalBytes: apiCache.sizeBytes + backups.sizeBytes + other.sizeBytes,
         apiCache,
@@ -101,6 +80,5 @@ export function clearApiCache(): number {
  */
 export function clearAppLocalStorage(): void {
     appStorage.names().forEach(name => appStorage.remove(name));
-    legacyKeys().forEach(key => localStorage.removeItem(key));
     clearStorageCacheMemory();
 }

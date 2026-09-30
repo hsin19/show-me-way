@@ -7,11 +7,11 @@ description: Turn freeform trip notes (scattered Traditional Chinese text, jotte
 
 Convert messy trip notes into a schema-valid `public/itinerary.local.yaml` for the ShowMeWay PWA.
 
-**The field reference is `schema/showmeway-schema.json` — read it before writing.** It is generated from `src/lib/domain/trip-schema.ts`, the very definition the app validates with, so it is never stale: every field's type, whether it is required, its allowed values, and a `description` written for authors. Three markers matter: `deprecated: true` is a field the app computes and strips on save (never write it), `readOnly: true` is `trip.id` (copy verbatim when updating, leave out when creating), and `additionalProperties: false` on every object means a key the schema does not list is a typo the app will silently drop — do not invent fields.
+**The field reference is `schema/showmeway-schema.json` — read it before writing.** It is generated from `src/lib/domain/trip-schema.ts`, the very definition the app validates with, so it is never stale: every field's type, whether it is required, its allowed values, and a `description` written for authors. Two markers matter: `readOnly: true` is `trip.id` (copy verbatim when updating, leave out when creating), and `additionalProperties: false` on every object means a key the schema does not list is a typo the app will silently drop — do not invent fields.
 
 ## Workflow
 
-1. **Ask for the output path first.** Inquire where the user wants to save the generated YAML file. Suggest `public/itinerary.local.yaml` as the default destination, but allow them to specify a custom target path (e.g. in `Downloads/` or another local path). If `public/itinerary.local.yaml` is a symlink, `pnpm run trip:sync checkout` made it: it is the working copy of the trip checked out there, so use it only to edit that trip, write to its target in place rather than replacing the file, and draft a new trip at another path.
+1. **Ask for the output path first.** Inquire where the user wants to save the generated YAML file. Suggest `public/itinerary.local.yaml` as the default destination, but allow another path. If `public/itinerary.local.yaml` is a symlink, `pnpm run trip:sync checkout` made it: it is the working copy of the trip checked out there, so use it only to edit that trip, write to its target in place rather than replacing the file, and draft a new trip at another path.
 2. **Read existing data if applicable.** If the target output file already exists, read it. Decide with the user whether you are **merging** into the current trip or **replacing** it. Never silently discard existing days/hotels.
 3. **Extract structured facts from the notes.** Pull out: trip name, hotels, and a per-day timeline (each day carries its own `date`). Trip start/end dates and the countdown target are derived from those dates — do not record them separately. Ask the user only for missing fields that are *required* (see below) and cannot be inferred. Don't over-ask — infer sensible values for optional fields.
 4. **Normalize.** Apply the conventions below (dates, ids, event `type`, time ranges, `localName`/`mapLink`).
@@ -72,18 +72,17 @@ Rules that matter when authoring:
 - Write to the chosen target file path.
 - **Line 1 must be the schema modeline**, preserving whatever the file already uses. The repo default is:
   `# yaml-language-server: $schema=https://raw.githubusercontent.com/hsin19/show-me-way/main/schema/showmeway-schema.json`
-- YAML style follows 2-space indentation and single quotes for strings. If the output path is inside the repository, format it using `pnpm exec dprint fmt <path>` after writing (or `pnpm run format`).
+- YAML style follows `public/itinerary.yaml`: 2-space indentation, single quotes only where a string needs them. `public/itinerary*.yaml` is outside dprint, so match that file by hand rather than running a formatter.
 
 ## Verification
 
-Before reporting done, run the bundled validator (self-contained — `uv` installs its
-deps from the inline PEP 723 block, no project setup needed) on the generated target file:
+Before reporting done, run the app's own validator on the generated target file:
 
 ```bash
-uv run .agents/skills/itinerary-yaml-builder/scripts/validate_itinerary.py <path_to_generated_yaml>
+pnpm run trip:validate <path_to_generated_yaml>
 ```
 
-The script validates against `showmeway-schema.json` (either loaded locally, via the modeline `$schema` URL, or the deployed site fallback) and reports the exact path of any violation; it exits non-zero on failure.
+It loads the file the way the app does, so a pass means the app opens it, and it lists every key the schema would drop on save: the app drops a typo like `mapLnk` without a word, so this is where you see one. It exits non-zero on failure; with no path it checks `public/itinerary.yaml` and `public/itinerary.local.yaml`.
 
 Then also confirm by eye:
 

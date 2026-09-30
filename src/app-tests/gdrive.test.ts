@@ -464,7 +464,7 @@ test("儲存完提示：連續操作只問一次，而且要按下去才上傳",
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
     onTestFinished(() => void vi.useRealTimers());
 
-    // 三次 persistTripData：勾一個待辦、取消、再勾回來。每一次都重新起算安靜期，所以隔著
+    // 三次 persist：勾一個待辦、取消、再勾回來。每一次都重新起算安靜期，所以隔著
     // 快滿的安靜期再動一次，提示也不該出現。
     await user.click(navTab("工具"));
     const todo = await screen.findByRole<HTMLInputElement>("checkbox", { name: /測試待辦項目/ });

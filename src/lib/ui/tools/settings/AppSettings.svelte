@@ -25,6 +25,7 @@ import {
     isStandaloneMode,
     promptPwaInstall,
 } from "$lib/stores/pwa-install.svelte";
+import { shareLinks } from "$lib/stores/share-link.svelte";
 import {
     setThemePref,
     theme,
@@ -97,6 +98,9 @@ function handleClearKey() {
 let storageSummary = $state(getStorageSummary());
 // A single slot, so opening one confirmation closes any other.
 let confirming = $state<"backups" | "reset" | "apiKey" | null>(null);
+// A reset forgets every link's update credential without revoking it, so the confirm has to
+// say the links outlive it. Keyed on there being any, not always: most people have none.
+let hasShareLinks = $derived(Object.keys(shareLinks.links).length > 0);
 
 function refreshSummary() {
     storageSummary = getStorageSummary();
@@ -207,7 +211,7 @@ function handleFullReset() {
                     <button
                         type="button"
                         onclick={() => gdriveSync.disconnect()}
-                        class="text-xs font-bold px-3 py-1.5 rounded-lg bg-tint-1 border border-card-border text-text-secondary hover:text-danger hover:bg-danger/10 transition cursor-pointer flex items-center gap-1 shrink-0"
+                        class="min-h-[44px] text-xs font-bold px-3 py-1.5 rounded-lg bg-tint-1 border border-card-border text-text-secondary hover:text-danger hover:bg-danger/10 transition cursor-pointer flex items-center gap-1 shrink-0"
                     >
                         <LogOut size={13} aria-hidden="true" /> 登出
                     </button>
@@ -216,7 +220,7 @@ function handleFullReset() {
                         type="button"
                         disabled={gdriveSync.isConnecting}
                         onclick={() => void gdriveSync.connect()}
-                        class="text-xs font-bold px-3.5 py-1.5 rounded-lg bg-accent text-accent-contrast transition active:scale-[0.98] cursor-pointer flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                        class="min-h-[44px] text-xs font-bold px-3.5 py-1.5 rounded-lg bg-accent text-accent-contrast transition active:scale-[0.98] cursor-pointer flex items-center gap-1.5 shrink-0 disabled:opacity-50"
                     >
                         {#if gdriveSync.isConnecting}
                             <RefreshCw size={13} class="animate-spin" aria-hidden="true" />
@@ -269,12 +273,12 @@ function handleFullReset() {
                     autocomplete="off"
                     aria-label="Gemini API 金鑰"
                     placeholder="貼上 API 金鑰…"
-                    class="flex-1 min-w-0 bg-well-deep border border-card-border rounded-xl px-3 py-2 text-xs text-text-primary outline-none focus:border-accent transition"
+                    class="flex-1 min-w-0 min-h-[44px] bg-well-deep border border-card-border rounded-xl px-3 py-2 text-xs text-text-primary outline-none focus:border-accent transition"
                 />
                 <button
                     type="submit"
                     disabled={!keyInput.trim() || keyInput.trim() === apiKey}
-                    class="bg-accent text-accent-contrast font-bold px-3 py-2 rounded-xl text-xs transition active:scale-[0.98] cursor-pointer disabled:opacity-40 shrink-0"
+                    class="min-h-[44px] bg-accent text-accent-contrast font-bold px-3 py-2 rounded-xl text-xs transition active:scale-[0.98] cursor-pointer disabled:opacity-40 shrink-0"
                 >
                     儲存
                 </button>
@@ -284,7 +288,7 @@ function handleFullReset() {
                         onclick={() => (confirming = "apiKey")}
                         aria-label="清除 API 金鑰"
                         title="清除 API 金鑰"
-                        class="bg-tint-1 border border-card-border hover:bg-danger/10 hover:border-danger/40 text-text-secondary hover:text-danger font-bold p-2 rounded-xl transition active:scale-[0.98] cursor-pointer flex items-center justify-center shrink-0"
+                        class="min-w-[44px] min-h-[44px] bg-tint-1 border border-card-border hover:bg-danger/10 hover:border-danger/40 text-text-secondary hover:text-danger font-bold rounded-xl transition active:scale-[0.98] cursor-pointer flex items-center justify-center shrink-0"
                     >
                         <Trash2 size={16} aria-hidden="true" />
                     </button>
@@ -317,7 +321,7 @@ function handleFullReset() {
                 href="https://aistudio.google.com/app/apikey"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="inline-flex items-center gap-1 text-accent hover:underline font-medium"
+                class="inline-flex items-center gap-1 min-h-[44px] text-accent hover:underline font-medium"
             >
                 <span>取得免費金鑰</span>
                 <ExternalLink size={11} aria-hidden="true" />
@@ -351,7 +355,7 @@ function handleFullReset() {
                 onclick={onclear}
                 disabled={stats.keyCount === 0}
                 class="
-                    -my-2 -mr-1 px-2 min-h-[44px] flex items-center text-[11px] font-bold underline
+                    -my-2 -mr-1 px-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-[11px] font-bold underline
                     text-accent hover:text-accent/80 cursor-pointer
                     disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed
                 "
@@ -403,7 +407,7 @@ function handleFullReset() {
     <div class="mt-2">
         {#if confirming === "reset"}
             <ConfirmBar
-                message="將清除本 App 的行程、備份與所有設定，且無法復原。確定重置？"
+                message={`將清除本 App 的行程、備份與所有設定，且無法復原。${hasShareLinks ? "已建立的分享連結不會失效，但這台裝置之後無法再更新或撤銷它們（最長一年後自動失效）。" : ""}確定重置？`}
                 confirmLabel="確定重置"
                 onconfirm={handleFullReset}
                 oncancel={() => (confirming = null)}
@@ -456,7 +460,7 @@ function handleFullReset() {
                 type="button"
                 onclick={() => void promptPwaInstall()}
                 class="
-                    w-full py-2.5 px-4 rounded-xl bg-accent text-accent-contrast
+                    w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-accent text-accent-contrast
                     text-xs font-bold transition duration-200 cursor-pointer
                     flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98]
                 "
@@ -505,7 +509,7 @@ function handleFullReset() {
             rel="noopener noreferrer"
             class="
                 text-xs text-text-muted hover:text-text-primary transition-colors
-                inline-flex items-center gap-1
+                inline-flex items-center gap-1 min-h-[44px]
             "
         >
             隱私權政策

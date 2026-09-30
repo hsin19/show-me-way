@@ -20,7 +20,7 @@ import type { MetadataAction } from "valibot";
 const OUTPUT = resolve(import.meta.dirname, "../schema/showmeway-schema.json");
 
 const { $schema, ...converted } = toJsonSchema(itinerarySchema, {
-    // Editor-only hints (`deprecated`, `readOnly`, `maxLength`, `enum`) the app does not enforce.
+    // Editor-only hints (`readOnly`, `maxLength`, `enum`) the app does not enforce.
     overrideAction: ({ valibotAction, jsonSchema }) => valibotAction.type === "metadata" ? { ...jsonSchema, ...(valibotAction as MetadataAction<unknown, Record<string, unknown>>).metadata } : jsonSchema,
     // The app strips an unknown key on save, so the editor is the only place a typo like `mapLnk` can be seen.
     overrideSchema: ({ valibotSchema, jsonSchema }) => {

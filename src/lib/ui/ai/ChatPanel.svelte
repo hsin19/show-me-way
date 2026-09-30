@@ -13,6 +13,7 @@ import { createModelPicker } from "$lib/stores/gemini-models.svelte";
 import ConfirmBar from "$lib/ui/shared/ConfirmBar.svelte";
 import { edgeFade } from "$lib/ui/shared/edge-fade";
 import Check from "@lucide/svelte/icons/check";
+import ChevronDown from "@lucide/svelte/icons/chevron-down";
 import KeyRound from "@lucide/svelte/icons/key-round";
 import Loader2 from "@lucide/svelte/icons/loader-2";
 import RefreshCw from "@lucide/svelte/icons/refresh-cw";
@@ -219,7 +220,7 @@ function applyEdit(message: UiMessage) {
                         type="button"
                         onclick={() => modelPicker.retry()}
                         disabled={modelPicker.loading}
-                        class="w-full bg-tint-1 border border-card-border text-text-secondary hover:bg-tint-2 font-bold py-2.5 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer disabled:opacity-40 flex items-center justify-center gap-2"
+                        class="w-full min-h-[44px] bg-tint-1 border border-card-border text-text-secondary hover:bg-tint-2 font-bold py-2.5 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer disabled:opacity-40 flex items-center justify-center gap-2"
                     >
                         {#if modelPicker.loading}
                             <Loader2 size={16} class="animate-spin" aria-hidden="true" />
@@ -237,26 +238,32 @@ function applyEdit(message: UiMessage) {
                 <Sparkles size={20} class="text-accent shrink-0" aria-hidden="true" /><span class="truncate">AI 行程小幫手</span>
             </h2>
             <div class="flex items-center gap-2 shrink-0">
-                <select
-                    bind:value={modelPicker.selected}
-                    disabled={modelPicker.loading}
-                    aria-label="選擇 AI 模型"
-                    class="max-w-[9rem] bg-well-deep border border-card-border rounded-lg px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent transition cursor-pointer disabled:opacity-50"
-                >
-                    {#if modelPicker.list.length === 0}
-                        <option value={modelPicker.selected}>{modelPicker.selected || (modelPicker.loading ? "載入模型中…" : "自動選擇")}</option>
-                    {:else}
-                        {#each modelPicker.list as m (m.id)}
-                            <option value={m.id}>{m.displayName}</option>
-                        {/each}
-                    {/if}
-                </select>
+                <!-- appearance-none because WebKit ignores min-height and vertical padding on a
+                     native select: on the installed iOS PWA it stayed 20px tall. The chevron
+                     the native control would draw is drawn here instead. -->
+                <div class="relative max-w-[9rem]">
+                    <select
+                        bind:value={modelPicker.selected}
+                        disabled={modelPicker.loading}
+                        aria-label="選擇 AI 模型"
+                        class="appearance-none w-full min-h-[44px] bg-well-deep border border-card-border rounded-lg pl-2 pr-7 py-1.5 text-xs text-text-primary outline-none focus:border-accent transition cursor-pointer disabled:opacity-50"
+                    >
+                        {#if modelPicker.list.length === 0}
+                            <option value={modelPicker.selected}>{modelPicker.selected || (modelPicker.loading ? "載入模型中…" : "自動選擇")}</option>
+                        {:else}
+                            {#each modelPicker.list as m (m.id)}
+                                <option value={m.id}>{m.displayName}</option>
+                            {/each}
+                        {/if}
+                    </select>
+                    <ChevronDown size={14} class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden="true" />
+                </div>
                 {#if onOpenAppSettings}
                     <button
                         onclick={onOpenAppSettings}
                         aria-label="前往 App 設定管理 AI 金鑰"
                         title="前往 App 設定管理 AI 金鑰"
-                        class="text-text-muted hover:text-accent transition cursor-pointer flex items-center justify-center p-1 rounded-lg shrink-0"
+                        class="text-text-muted hover:text-accent transition cursor-pointer flex items-center justify-center min-w-[44px] min-h-[44px] rounded-lg shrink-0"
                     >
                         <Settings size={18} aria-hidden="true" />
                     </button>
@@ -315,7 +322,7 @@ function applyEdit(message: UiMessage) {
                                 {:else}
                                     <button
                                         onclick={() => applyEdit(message)}
-                                        class="w-full bg-accent text-accent-contrast font-bold py-2.5 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer"
+                                        class="w-full min-h-[44px] bg-accent text-accent-contrast font-bold py-2.5 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer"
                                     >
                                         套用變更
                                     </button>
@@ -372,7 +379,7 @@ function applyEdit(message: UiMessage) {
                                 type="button"
                                 disabled={isSending}
                                 onclick={() => triggerSend(p.text)}
-                                class="flex-none min-h-[36px] px-3 py-1.5 rounded-xl bg-tint-1 border border-card-border text-xs font-bold text-text-secondary hover:text-accent hover:bg-tint-2 transition duration-200 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                                class="flex-none min-h-[44px] px-3 py-1.5 rounded-xl bg-tint-1 border border-card-border text-xs font-bold text-text-secondary hover:text-accent hover:bg-tint-2 transition duration-200 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                             >
                                 <span>{p.icon}</span>
                                 <span>{p.label}</span>
@@ -392,13 +399,13 @@ function applyEdit(message: UiMessage) {
                         enterkeyhint="enter"
                         placeholder="詢問或用說的編輯行程…（Enter 換行）"
                         disabled={isSending}
-                        class="flex-1 min-w-0 resize-none bg-well-deep border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent transition disabled:opacity-50"
+                        class="flex-1 min-w-0 min-h-[44px] resize-none bg-well-deep border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent transition disabled:opacity-50"
                     ></textarea>
                     <button
                         type="submit"
                         aria-label="送出"
                         disabled={!input.trim() || isSending}
-                        class="flex-shrink-0 bg-accent text-accent-contrast rounded-xl p-2.5 transition active:scale-[0.96] cursor-pointer disabled:opacity-40"
+                        class="flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center bg-accent text-accent-contrast rounded-xl transition active:scale-[0.96] cursor-pointer disabled:opacity-40"
                     >
                         <Send size={18} class="stroke-[2.5]" aria-hidden="true" />
                     </button>

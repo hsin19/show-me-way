@@ -52,7 +52,7 @@ function jump(dir: 1 | -1) {
 </script>
 
 <details class="group">
-    <summary class="text-xs text-text-secondary cursor-pointer select-none hover:text-text-primary transition flex items-center gap-2">
+    <summary class="min-h-[44px] text-xs text-text-secondary cursor-pointer select-none hover:text-text-primary transition flex items-center gap-2">
         查看變更
         <span class="font-mono text-[11px]">
             <span class="text-positive">+{stats.added}</span>
@@ -70,14 +70,14 @@ function jump(dir: 1 | -1) {
                 <button
                     onclick={() => jump(-1)}
                     aria-label="上一處變更"
-                    class="p-1 rounded-md bg-well-deep border border-card-border text-text-secondary hover:text-accent hover:border-accent transition cursor-pointer"
+                    class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md bg-well-deep border border-card-border text-text-secondary hover:text-accent hover:border-accent transition cursor-pointer"
                 >
                     <ChevronUp size={14} aria-hidden="true" />
                 </button>
                 <button
                     onclick={() => jump(1)}
                     aria-label="下一處變更"
-                    class="p-1 rounded-md bg-well-deep border border-card-border text-text-secondary hover:text-accent hover:border-accent transition cursor-pointer"
+                    class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md bg-well-deep border border-card-border text-text-secondary hover:text-accent hover:border-accent transition cursor-pointer"
                 >
                     <ChevronDown size={14} aria-hidden="true" />
                 </button>

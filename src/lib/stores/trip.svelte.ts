@@ -28,7 +28,6 @@ import {
     insertAtClamped,
     yamlFingerprint,
 } from "$lib/domain/utils";
-import { migrateGdriveSyncState } from "$lib/infra/http/gdrive";
 import {
     fetchDefaultYamlText,
     fetchItinerary,
@@ -241,7 +240,6 @@ export class TripStore {
             this.profiles = listProfiles();
             weatherStore.loadTrip(data.days, data.trip.city);
 
-            migrateGdriveSyncState();
             const profileId = ensureActiveProfileId();
             if (!this.linkBaselines.has(profileId)) this.linkCarriesStored(profileId);
         } catch (err) {
@@ -427,12 +425,12 @@ export class TripStore {
             else if (outcome.deadLinkId) void gdriveSync.dropDeadShareLink(profileId, outcome.deadLinkId);
             this.linkBaselines.set(profileId, yamlFingerprint(yaml));
             const copyMsg = outcome.kind === "inline"
-                ? "分享連結已複製！網址較長，可用短網址服務縮短"
+                ? "分享連結已複製！這條網址含完整行程且較長，請直接傳送，不要貼到線上縮網址服務"
                 : outcome.kind === "updated"
                 ? `分享連結已更新並複製！${UPLOADED_NOTE}，原本的連結與 QR code 會顯示新版本`
                 : outcome.kind === "recreated"
                 ? `原本的分享連結已失效，已建立新連結並複製！${UPLOADED_NOTE}`
-                : `分享連結已複製！${UPLOADED_NOTE}，可直接做成 QR code，之後再按一次就會更新同一條連結`;
+                : `分享連結已複製！${UPLOADED_NOTE}，要做成 QR code 請用離線工具（別貼到線上產生器），之後再按一次就會更新同一條連結`;
             await shareOrCopyToClipboard({ url: outcome.url }, outcome.url, copyMsg, outcome.kind === "inline" ? undefined : UPLOADED_NOTE);
         } catch (err) {
             console.error("Failed to build share link:", err);

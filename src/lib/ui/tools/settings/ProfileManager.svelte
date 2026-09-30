@@ -224,12 +224,17 @@ async function handleDeleteCloud(fileId: string) {
             {#each sortedProfiles as profile (profile.id)}
                 {#if confirmingDeleteProfileId === profile.id}
                     {@const cloudCopy = gdriveSync.cloudCopyFor(profile.id, parkedProfileYaml(profile.id) ?? "")}
+                    <!-- Deleting only forgets the link's update credential (TripStore.forgetSlot); the
+                         ciphertext stays behind, so say so or the delete reads like a revoke. -->
+                    {@const linkNote = shareLinks.forTrip(profile.id)
+                    ? "分享連結不會因此失效，拿到連結的人仍可開啟最後一版（最長一年）；要先撤銷，請切換到這個行程，在「行程管理」撤銷。"
+                    : ""}
                     <ConfirmBar
-                        message={cloudCopy === "kept"
+                        message={(cloudCopy === "kept"
                         ? `要從本機刪除「${profile.name}」嗎？Google Drive 仍保留一份，之後可從雲端再載入。`
                         : cloudCopy === "behind"
                         ? `要刪除行程「${profile.name}」嗎？本機有尚未上傳雲端的修改，刪除後將遺失且無法復原。`
-                        : `要刪除行程「${profile.name}」嗎？此動作無法復原。`}
+                        : `要刪除行程「${profile.name}」嗎？此動作無法復原。`) + linkNote}
                         confirmLabel="確定刪除"
                         variant={cloudCopy === "kept" ? "warning" : "danger"}
                         onconfirm={() => {

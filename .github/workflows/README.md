@@ -3,9 +3,9 @@
 ## Architecture
 
 ```
-check.yml   workflow_call → check: format · lint · typecheck · knip · unit tests
+check.yml   workflow_call → check: format · schema · lint · typecheck · knip · unit + app tests
                                    · build → Codecov upload
-                          → e2e:   Playwright smoke (parallel with check)
+                          → e2e:   Playwright, chromium + webkit (parallel with check)
 pr.yml      pull_request  → check.yml → auto-merge (Dependabot)
 deploy.yml  push to main  → check.yml → build (BASE_PATH) → deploy to GitHub Pages
 ```
@@ -13,7 +13,9 @@ deploy.yml  push to main  → check.yml → build (BASE_PATH) → deploy to GitH
 `check.yml` is a reusable (`workflow_call`) workflow holding the single definition of
 "did this tree pass" — everything `pnpm run check` covers locally, e2e included,
 which is the equivalence to preserve when adding anything: a check belongs in
-both or in neither. Both other workflows call it, so a PR and a `main` push are
+both or in neither. (Knip is the one deliberate difference: CI runs `knip:ci` —
+no fixing and no dependency checks, the reasons are in `knip.jsonc`.)
+Both other workflows call it, so a PR and a `main` push are
 held to the same bar and the list cannot drift between them. `check` runs each
 check as its own step, rather than chaining them into one command — so the
 failing step names itself in the Actions UI, and the steps are conditioned to
@@ -72,8 +74,9 @@ peer-dependency skew) is left for a human; there is no auto-repair job.
 The `test:ci` step writes two reports — `coverage/lcov.info` and
 `test-report.junit.xml` (test results) — and both are uploaded through
 `codecov/codecov-action@v7`. Thresholds, PR comment and the ignore list live in
-`codecov.yml`; the measured scope — `src/lib/**/*.ts` only, because there is no
-component-test layer — is set in `vitest.config.ts`.
+`codecov.yml`; the measured scope — every `src/**/*.{ts,svelte}` module, reached by
+the unit tests and by the `app` project that renders the whole App in happy-dom — is
+set in `vitest.config.ts`.
 
 Both uploads live in `check.yml`, so every caller gets them: a PR uploads its own
 reports through `pr.yml`, and the `main` baseline those are diffed against is the

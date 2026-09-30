@@ -16,21 +16,6 @@
           "description": "[自動產生 / 請勿手動編輯] App 產生的行程識別碼，會跟著分享連結與雲端備份走，用來認出「同一趟行程」。手動修改或刪除會讓這趟行程與它的雲端檔案失去關聯。",
           "readOnly": true
         },
-        "start": {
-          "type": "string",
-          "description": "[已過時 / Deprecated] 不需填寫。App 會自動取 days 中最早的 date 作為出發日期。",
-          "deprecated": true
-        },
-        "end": {
-          "type": "string",
-          "description": "[已過時 / Deprecated] 不需填寫。App 會自動取 days 中最晚的 date 作為回程日期。",
-          "deprecated": true
-        },
-        "departure": {
-          "type": "string",
-          "description": "[已過時 / Deprecated] 不需填寫。App 會自動以第一天的第一個行程時間作為首頁倒數計時的目標。",
-          "deprecated": true
-        },
         "lang": {
           "type": "string",
           "description": "目的地語言代碼，決定放大給計程車司機看的卡片標題語言 (ko=韓文, ja=日文, en=英文)。未設定或不支援時預設為英文 (en)。",
@@ -127,11 +112,6 @@
       "items": {
         "type": "object",
         "properties": {
-          "day": {
-            "type": "integer",
-            "description": "[已過時 / Deprecated] 不需填寫。App 會依 date 排序後自動編號。",
-            "deprecated": true
-          },
           "date": {
             "type": "string",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
@@ -141,11 +121,6 @@
             "type": "string",
             "description": "當日行程大標題/主題，例如: 抵達 · 新宿、京都一日遊。建議 14 個全形字以內 (約 23 個半形字)：在 390px 寬的手機上，日程卡大標題超過就會折成兩行；總覽日期清單則會在 15 個全形字處截字。",
             "maxLength": 24
-          },
-          "region": {
-            "type": "string",
-            "description": "[已過時 / Deprecated] 舊版區域屬性，請改用 title",
-            "deprecated": true
           },
           "pace": {
             "type": "string",

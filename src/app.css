@@ -215,11 +215,16 @@ body {
     }
 }
 
-/* Low specificity on purpose, so a component can override it. */
-:where(a, button, input, select, textarea, [role="button"], [role="checkbox"], [tabindex]):focus-visible {
-    outline: 2px solid var(--color-accent);
-    outline-offset: 2px;
-    border-radius: 6px;
+/* Inside `@layer base` so Tailwind's utilities can override it, which is what "a
+   component can override it" needs: un-layered, this rule outranks every utility, so
+   the fields that draw their own focus state (`outline-none focus:border-accent`)
+   got a ring on top and a squashed radius. The outline follows the element's own
+   border-radius, so it needs none of its own. */
+@layer base {
+    :where(a, button, input, select, textarea, [role="button"], [role="checkbox"], [tabindex]):focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -152,49 +152,6 @@ export function saveTripSyncMap(map: TripSyncMap): void {
     }
 }
 
-/** Keys the earlier sync schemes wrote, before the one record per trip. */
-const LEGACY_KEY_PREFIXES = ["gdrive_mod_"];
-const LEGACY_FILE_MAP_KEY = "gdrive_file_map";
-const LEGACY_MD5_MAP_KEY = "gdrive_md5_map";
-const LEGACY_DIRTY_MAP_KEY = "gdrive_dirty_map";
-/** The opt-in that background pushes needed. Every transfer is a tap now, so the flag decides nothing. */
-const RETIRED_AUTO_SYNC_KEY = "gdrive_auto_sync";
-
-/**
- * Folds the earlier per-concern maps into the single record map and removes them, and
- * drops the keys of schemes that no longer exist. Idempotent, so it is safe to call on
- * every load.
- *
- * The dirty flags are dropped rather than carried: a record with no `localHash` already
- * means "assume local changed", which is the same conclusion and one fewer thing to keep
- * in step.
- */
-export function migrateGdriveSyncState(): void {
-    try {
-        const rawFiles = appStorage.get(LEGACY_FILE_MAP_KEY);
-        if (rawFiles) {
-            const files: unknown = JSON.parse(rawFiles);
-            const md5s: unknown = JSON.parse(appStorage.get(LEGACY_MD5_MAP_KEY) ?? "{}");
-            if (files && typeof files === "object" && !Array.isArray(files)) {
-                const map = loadTripSyncMap();
-                for (const [tripId, fileId] of Object.entries(files as Record<string, unknown>)) {
-                    if (typeof fileId !== "string" || map[tripId]) continue;
-                    const md5 = (md5s as Record<string, unknown>)?.[tripId];
-                    map[tripId] = { fileId, remoteMd5: typeof md5 === "string" ? md5 : undefined };
-                }
-                saveTripSyncMap(map);
-            }
-        }
-        [LEGACY_FILE_MAP_KEY, LEGACY_MD5_MAP_KEY, LEGACY_DIRTY_MAP_KEY, RETIRED_AUTO_SYNC_KEY].forEach(key => appStorage.remove(key));
-
-        appStorage.names()
-            .filter(name => LEGACY_KEY_PREFIXES.some(prefix => name.startsWith(prefix)))
-            .forEach(name => appStorage.remove(name));
-    } catch (e) {
-        console.warn("Failed to migrate Google Drive sync state", e);
-    }
-}
-
 /**
  * Throws on a non-ok Drive response, dropping the cached token when Google rejected it.
  *

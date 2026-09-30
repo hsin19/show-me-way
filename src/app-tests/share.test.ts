@@ -12,6 +12,7 @@ import {
 import {
     type AppPage,
     createPage,
+    navTab,
     openTripManagement,
     status,
 } from "./harness";
@@ -252,7 +253,7 @@ test("分享行程按鈕：連結裡的版本和本機一樣時不問也不寫�
 });
 
 // 上面每一個測試走的都是 inline fallback：harness 擋掉所有非本機來源的請求，
-// 所以 hop 連不上、buildBestShareUrl 退回 #s=。以下的短連結（#h=<id>.<key>）測試
+// 所以 hop 連不上、分享退回 #s=。以下的短連結（#h=<id>.<key>）測試
 // 改成在 test 內用 page.route 掛上 hop 的假伺服器（後掛的 route 優先於 harness 的擋法）。
 
 /** `sent` 是 hop 收到的每一個請求：方法、網址、header、內容各一行。 */
@@ -464,4 +465,33 @@ test("短連結匯入：密文無法解密時提示內容無效並清除網址�
     await waitFor(() => expect(status().textContent).toContain("分享連結內容無效"));
     // 重新整理不會讓它變得可解密，所以這條連結留著沒有意義。
     expect(page.url()).not.toContain("#h=");
+});
+
+// 刪行程與重置只是讓這台裝置忘記更新憑證，密文還留在 hop、拿到連結的人照樣打得開 ——
+// 確認框不說，刪除讀起來就像撤銷。沒有分享連結的行程維持原本的確認文字（profiles.test.ts）。
+test("有分享連結的行程：刪除與重置的確認框說明連結不會失效", async () => {
+    const page = createPage();
+    const hop: HopStore = { uploaded: "", puts: [], sent: [] };
+    await shareOwnTripShort(page, hop);
+
+    // 新增行程之後，有連結的「測試行程」被停放成列表裡的一列
+    await openTripManagement(page.user);
+    const expander = () => screen.getByRole("button", { name: /目前行程/ });
+    await page.user.click(expander());
+    await page.user.click(screen.getByRole("button", { name: "新增行程" }));
+    await waitFor(() => expect(status().textContent).toContain("已建立新行程"));
+    await screen.findByRole("heading", { name: "行程管理" });
+    await page.user.click(navTab("行程"));
+    await screen.findByRole("heading", { level: 2, name: "下面一way-我的探索之旅" });
+    await page.user.click(navTab("工具"));
+    await waitFor(() => expect(expander().getAttribute("aria-expanded")).toBe("false"));
+    await page.user.click(expander());
+
+    await page.user.click(await screen.findByRole("button", { name: "刪除行程 測試行程" }));
+    screen.getByText(/要刪除行程「測試行程」嗎？此動作無法復原。分享連結不會因此失效，拿到連結的人仍可開啟最後一版/);
+    await page.user.click(screen.getByRole("button", { name: "取消" }));
+
+    await page.user.click(screen.getByRole("button", { name: "App 設定" }));
+    await page.user.click(screen.getByRole("button", { name: "重置全部本機資料" }));
+    screen.getByText(/且無法復原。已建立的分享連結不會失效，但這台裝置之後無法再更新或撤銷它們/);
 });

@@ -129,7 +129,7 @@ test("未儲存草稿：切換分頁後再回來仍保留編輯內容", async ()
 });
 
 // 這幾個 affordance 曾經在一次無關的改寫中被順手刪掉（複製鈕、手機輸入屬性、
-// 預設行程與 Skill 安裝說明），而型別、lint、單元測試全都不會察覺。
+// 預設行程說明），而型別、lint、單元測試全都不會察覺。
 test("編輯器：複製鈕可用，且保留手機輸入必要屬性與說明", async () => {
     const page = await launchOnSettings();
 
@@ -145,9 +145,8 @@ test("編輯器：複製鈕可用，且保留手機輸入必要屬性與說明",
     await waitFor(() => expect(status().textContent).toContain("已複製編輯器中的 YAML"));
     expect(page.copiedText()).toBe(EDITED_YAML);
 
-    // 說明卡：回復預設的入口、資料出境、以及產生 YAML 的 Skill 從哪來。入口是相對
-    // 路徑：正式站在 /show-me-way/ 底下，開頭的 / 只在正式站 404。
+    // 說明卡：回復預設的入口與資料出境。入口是相對路徑：正式站在 /show-me-way/ 底下，
+    // 開頭的 / 只在正式站 404。
     expect(screen.getByRole("link", { name: "itinerary.yaml" }).getAttribute("href")).toBe("./itinerary.yaml");
     screen.getByText(/同步會把整份行程複製到你自己的 Drive/);
-    screen.getByText(/npx skills add .*itinerary-yaml-builder/);
 });

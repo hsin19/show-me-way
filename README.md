@@ -11,7 +11,7 @@
 - **乘車助手**：飯店外文地址全螢幕放大給司機看，標題依 `trip.lang` 切成當地語言。
 - **出發倒數**：依班機時間顯示倒數，旅程中／結束自動切換狀態。
 - **雲端同步與備份**：可選擇連線 Google 雲端硬碟，一鍵備份與跨裝置同步行程。同步的是完整行程，存放在你自己的 Drive。上傳與下載都不會自己發生：行程改完會提醒你同步，開啟時發現雲端或分享連結有新版本也只是詢問，按下去才會傳。
-- **離線可用**：以 PWA 安裝到主畫面，行程存於裝置的 localStorage。資料只在你主動操作時離開裝置：連線雲端硬碟同步、使用 AI 助手，或產生分享連結（行程先在瀏覽器加密，只有密文上傳到短連結服務，金鑰留在連結的 `#` 片段裡）。
+- **離線可用**：以 PWA 安裝到主畫面，行程存於裝置的 localStorage。行程資料只在你主動操作時離開裝置：連線雲端硬碟同步、使用 AI 助手（每次都會附上整份行程），或產生分享連結（行程先在瀏覽器加密，只有密文上傳到短連結服務，金鑰留在連結的 `#` 片段裡）。自動發生的只有兩種查詢：行程填了城市時向 Open-Meteo 查天氣（只送城市名稱與座標），以及已連線雲端硬碟或匯入過分享連結時查有沒有新版本（只查詢、不上傳）。詳見[隱私權政策](./public/privacy.html)。
 - **可更新的分享連結**：每趟行程一條加密短連結，再按一次分享就以同一把金鑰更新同一條連結的密文，印成 QR code 也不會過時；可在行程管理隨時撤銷。連結本身（短代碼、金鑰、更新憑證）會跟著雲端同步存在你自己 Drive 檔案的屬性上，所以換一台裝置也是更新同一條連結；那份資料不進行程內容，收到連結的人看不到。收到別人分享的行程時，短代碼與金鑰會留在你的裝置上，所以對方之後更新，這邊會主動問你要不要跟著更新。
 
 ## 技術
@@ -38,32 +38,19 @@ pnpm check     # 完整檢查鏈（format、lint、型別、單元測試、build
 
 編輯 YAML 時，檔案頂部已指向 [`showmeway-schema.json`](./schema/showmeway-schema.json)，在 VS Code（搭配 YAML 擴充套件）中可獲得欄位自動補全與驗證。完整欄位定義請見該 schema。
 
-## 自行部署
-
-雲端同步用的 Google OAuth client id 從 `VITE_GOOGLE_CLIENT_ID` 讀取，設定方式見 [`.env.example`](./.env.example)。
-
-**fork 或換網域一定要自己申請一組**：沒設定時會退回程式碼裡內建的 id，而那個 id 綁定本專案的 authorized JavaScript origins，所以在別的來源登入會直接失敗，而且錯誤訊息看不出原因。
-
-`BASE_PATH`（GitHub Pages 專案站的子路徑）與 `VITE_GIT_SHA`（顯示在「關於」的版本）由 `vite.config.ts` 從 shell 讀取、不吃 `.env`，要在 build 指令上帶入 —— `.github/workflows/deploy.yml` 就是這樣做的。
-
 最小範例：
 
 ```yaml
 trip:
   name: '我的探索之旅'
-  start: '2026-10-01' # YYYY-MM-DD
-  end: '2026-10-03'
-  departure: '2026-10-01T08:00:00+08:00' # 班機起飛（ISO 8601，用於倒數）
   hotels:
     - name: '極簡設計精選飯店'
-      station: '新宿站步行 3 分鐘'
       address: '東京都新宿區西新宿 1-1-1' # 外文地址，供司機觀看
       checkIn: '2026-10-01'
       checkOut: '2026-10-03'
 
 days:
-  - day: 1
-    date: '2026-10-01'
+  - date: '2026-10-01' # YYYY-MM-DD
     title: '經典商圈漫步'
     pace: '輕鬆漫遊'
     timeline:
@@ -71,6 +58,17 @@ days:
         title: '✈️ 前往目的地'
         type: 'booked' # booked | must-go | standard | option
         desc: '出發！'
+  - date: '2026-10-03' # 中間跳過的日期會自動補成自由活動
+    title: '返程'
+    timeline: []
 ```
 
-`todo`、`packing` 等其餘區塊為選填，詳見 schema。
+天數、行程的起訖日與出發倒數都由 `days[].date` 和第一天的第一個事件自動推算，不用填；存檔時手寫的這些欄位會被丟掉。`todo`、`packing` 等其餘區塊為選填，詳見 schema。
+
+## 自行部署
+
+雲端同步用的 Google OAuth client id 從 `VITE_GOOGLE_CLIENT_ID` 讀取，設定方式見 [`.env.example`](./.env.example)。
+
+**fork 或換網域一定要自己申請一組**：沒設定時會退回程式碼裡內建的 id，而那個 id 綁定本專案的 authorized JavaScript origins，所以在別的來源登入會直接失敗，而且錯誤訊息看不出原因。
+
+`BASE_PATH`（GitHub Pages 專案站的子路徑）與 `VITE_GIT_SHA`（顯示在「關於」的版本）由 `vite.config.ts` 從 shell 讀取、不吃 `.env`，要在 build 指令上帶入 —— `.github/workflows/deploy.yml` 就是這樣做的。

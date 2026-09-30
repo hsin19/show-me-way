@@ -1,7 +1,7 @@
 // Leaf helpers for the caches kept in appStorage (`weather.ts`, the Drive user),
 // extracted after two near-identical copies drifted apart once. Deliberately NOT a generic SWR
 // engine: the consumers' fetch and refresh shapes differ enough that
-// parameterising them would cost more than it saves (see tech-debt.md).
+// parameterising them would cost more than it saves.
 
 import { appStorage } from "./app-storage";
 
@@ -9,7 +9,7 @@ import { appStorage } from "./app-storage";
 // per-session caching instead of a refetch on every foreground return.
 const memCache = new Map<string, unknown>();
 
-/** Test-only: without this, a cached value leaks into the next case. */
+/** Drops the in-memory mirror: a full reset calls it so nothing is served that storage no longer holds, and tests call it so a cached value does not leak into the next case. */
 export function clearStorageCacheMemory(): void {
     memCache.clear();
 }

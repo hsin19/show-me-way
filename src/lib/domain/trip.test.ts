@@ -16,13 +16,9 @@ function tripYaml(hotelsYaml: string): string {
     return [
         "trip:",
         "  name: '測試行程'",
-        "  start: '2026-06-11'",
-        "  end: '2026-06-12'",
-        "  departure: '2026-06-11T08:00:00+08:00'",
         `  hotels:${hotelsYaml}`,
         "days:",
-        "  - day: 1",
-        "    date: '2026-06-11'",
+        "  - date: '2026-06-11'",
         "    title: '市區'",
         "    pace: '輕鬆'",
         "    timeline: []",
@@ -108,13 +104,9 @@ function timelineYaml(body: string): string {
     return [
         "trip:",
         "  name: '測試行程'",
-        "  start: '2026-06-11'",
-        "  end: '2026-06-12'",
-        "  departure: '2026-06-11T08:00:00+08:00'",
         `  hotels:${validHotel}`,
         "days:",
-        "  - day: 1",
-        "    date: '2026-06-11'",
+        "  - date: '2026-06-11'",
         "    title: '市區'",
         "    pace: '輕鬆'",
         `    timeline:${body}`,
@@ -185,16 +177,12 @@ describe("validateYaml — confirmation 形狀", () => {
 const validTripBlock = [
     "trip:",
     "  name: '測試行程'",
-    "  start: '2026-06-11'",
-    "  end: '2026-06-12'",
-    "  departure: '2026-06-11T08:00:00+08:00'",
     `  hotels:${validHotel}`,
 ].join("\n");
 
 const validDaysBlock = [
     "days:",
-    "  - day: 1",
-    "    date: '2026-06-11'",
+    "  - date: '2026-06-11'",
     "    title: '市區'",
     "    pace: '輕鬆'",
     "    timeline: []",
@@ -224,8 +212,27 @@ describe("validateYaml — 結構與其餘 zh-TW 驗證", () => {
     });
 
     it("拒絕含多份文件的 YAML", () => {
-        expect(() => validateYaml(`${validTripBlock}\ndays:\n  - day: 1\n---\ntrip: {}`))
+        expect(() => validateYaml(`${validTripBlock}\ndays:\n  - date: '2026-06-11'\n---\ntrip: {}`))
             .toThrow("YAML 只能包含一份行程");
+    });
+
+    it("YAML 語法錯誤用繁中說明位置與修法，原始錯誤留在 cause", () => {
+        // 值裡有「: 」是手寫最常見的失誤
+        const colon = `${validTripBlock}\ndays:\n  - date: '2027-01-01'\n    title: 京都: 一日遊\n`;
+        expect(() => validateYaml(colon)).toThrow(/^YAML 語法錯誤（第 \d+ 行）：.*整段文字請用引號包起來/);
+        expect(() => validateYaml(colon)).toThrow("京都: 一日遊");
+        expect(() => validateYaml("trip:\n\tname: t\n")).toThrow("YAML 語法錯誤（第 2 行）：縮排不能使用 Tab");
+
+        try {
+            validateYaml(colon);
+        } catch (e) {
+            expect((e as Error).cause).toMatchObject({ name: "YAMLException" });
+        }
+    });
+
+    it("沒有對照說明的 YAML 語法錯誤，保留原始原因在繁中前綴之後", () => {
+        expect(() => validateYaml("trip: {a: 1"))
+            .toThrow(/^YAML 語法錯誤（第 1 行）：unexpected end of the stream within a flow collection/);
     });
 
     it("拒絕空的 days 列表", () => {
@@ -240,30 +247,10 @@ describe("validateYaml — 結構與其餘 zh-TW 驗證", () => {
             .toThrow("days 第 1 項必須是物件 (不可為空白列表項)");
     });
 
-    it("支援舊版 region 並自動遷移為 title，序列化時刪除 region", () => {
-        const legacyYaml = [
-            validTripBlock,
-            "days:",
-            "  - day: 1",
-            "    date: '2026-06-11'",
-            "    region: '舊版區域'",
-            "    pace: '輕鬆'",
-            "    timeline: []",
-        ].join("\n");
-        const parsed = validateYaml(legacyYaml);
-        expect(parsed.days[0]?.title).toBe("舊版區域");
-        expect((parsed.days[0] as unknown as { region?: string; }).region).toBeUndefined();
-
-        const serialized = serializeToYaml(parsed);
-        expect(serialized).toContain("title: 舊版區域");
-        expect(serialized).not.toContain("region:");
-    });
-
     it("拒絕缺少 timeline 列表的 day", () => {
         const dayWithoutTimeline = [
             "days:",
-            "  - day: 1",
-            "    date: '2026-06-11'",
+            "  - date: '2026-06-11'",
             "    title: '市區'",
             "    pace: '輕鬆'",
         ].join("\n");
@@ -358,7 +345,6 @@ describe("validateYaml — 結構與其餘 zh-TW 驗證", () => {
         const unorderedYaml = [
             "trip:",
             "  name: '自動推算測試'",
-            "  departure: '2026-10-01T08:00:00+08:00'",
             `  hotels:${validHotel}`,
             "days:",
             "  - date: '2026-10-03'",
@@ -644,7 +630,7 @@ describe("serializeToYaml 與 round-trip", () => {
     });
 
     // storage 只存 canonical：存過一次的 bytes 再存一次必須完全相同，否則每次 pull 或切換都會讀成本機有改動。
-    it("canonical 是定點：補上的空白日、舊版 region、手排的欄位順序再存一次都不變", () => {
+    it("canonical 是定點：補上的空白日、手排的欄位順序再存一次都不變", () => {
         const sources = [
             richYaml,
             // 06-12 沒寫，會補一天空白日。
@@ -664,7 +650,6 @@ describe("serializeToYaml 與 round-trip", () => {
                 "days:",
                 "  - timeline: []",
                 "    title: '手排順序'",
-                "    region: '舊版區域'",
                 "    date: '2026-06-11'",
                 "trip:",
                 "  hotels: []",
@@ -762,6 +747,26 @@ describe("validateYaml — schema 補上的形狀檢查", () => {
         expect((data.trip as unknown as { notes?: string; }).notes).toBeUndefined();
         expect((data.days[0] as unknown as { mapLnk?: string; }).mapLnk).toBeUndefined();
         expect(serializeToYaml(data)).not.toMatch(/notes|mapLnk/);
+    });
+
+    it("舊檔裡手寫的 day / start / end / departure 不採用：以日期推算的值為準，存檔時不再出現", () => {
+        const stale = [
+            "trip:",
+            "  name: '舊檔'",
+            "  start: '1999-01-01'",
+            "  end: '1999-01-02'",
+            "  departure: '1999-01-01T09:00:00+08:00'",
+            "  hotels: []",
+            "days:",
+            "  - day: 7",
+            "    date: '2026-06-11'",
+            "    title: '市區'",
+            "    timeline: []",
+        ].join("\n");
+        const data = validateYaml(stale);
+        expect(data.trip).toMatchObject({ start: "2026-06-11", end: "2026-06-11", departure: "2026-06-11T00:00:00" });
+        expect(data.days[0]?.day).toBe(1);
+        expect(serializeToYaml(data)).not.toMatch(/^\s*(?:start|end|departure|day):/m);
     });
 
     it("欄位值留空 (YAML 的 null) 一律視為未填：選填欄位過關，必填欄位回報缺少", () => {

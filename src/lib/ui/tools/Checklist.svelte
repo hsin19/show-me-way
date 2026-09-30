@@ -36,18 +36,20 @@ function submitNew(e: SubmitEvent) {
     </h3>
     <ul class="space-y-1">
         {#each items as item (item._id ?? item.text)}
-            <li class="flex items-start gap-3 py-3 border-b border-line last:border-b-0 group">
+            <li class="flex items-start gap-3 border-b border-line last:border-b-0 group">
                 <!-- A real <input> inside a <label>, not a <button role="checkbox">:
                      item text can contain links, and an <a> nested in a <button> is
                      invalid HTML. The label is what keeps the whole row a tap target
                      while a link inside it still works — do not shrink it back to
-                     the 20px box.
+                     the 20px box. The row's vertical padding sits on the label, not
+                     the <li>: padding out there is dead space no tap reaches, and it
+                     left a one-line row 28px tall.
 
                      The handler reverts the DOM to `item.checked` before calling up.
                      The box is the one piece of state the browser owns, so a toggle
                      the parent declines would otherwise stay ticked with nothing left
                      to re-render it. -->
-                <label class="flex items-start gap-3 flex-1 min-w-0 cursor-pointer">
+                <label class="flex items-start gap-3 flex-1 min-w-0 py-3 cursor-pointer">
                     <span class="relative flex-shrink-0 mt-0.5">
                         <input
                             type="checkbox"
@@ -77,7 +79,7 @@ function submitNew(e: SubmitEvent) {
                 <button
                     onclick={() => onDelete(item._id!)}
                     aria-label="刪除項目"
-                    class="text-text-muted hover:text-danger min-w-[44px] min-h-[44px] -m-2.5 flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition cursor-pointer"
+                    class="text-text-muted hover:text-danger min-w-[44px] min-h-[44px] -mx-2.5 flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-100 transition cursor-pointer"
                 >
                     <Trash2 size={16} aria-hidden="true" />
                 </button>
@@ -94,12 +96,12 @@ function submitNew(e: SubmitEvent) {
             aria-label="{title} — 新增項目"
             autocomplete="off"
             placeholder="新增項目…"
-            class="flex-1 min-w-0 bg-well-deep border border-card-border rounded-xl px-3 py-2 text-sm text-text-primary outline-none focus:border-accent transition"
+            class="flex-1 min-w-0 min-h-[44px] bg-well-deep border border-card-border rounded-xl px-3 py-2 text-sm text-text-primary outline-none focus:border-accent transition"
         />
         <button
             type="submit"
             aria-label="新增項目"
-            class="flex-shrink-0 bg-accent text-accent-contrast rounded-xl p-2 transition active:scale-[0.96] cursor-pointer disabled:opacity-40"
+            class="flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center bg-accent text-accent-contrast rounded-xl transition active:scale-[0.96] cursor-pointer disabled:opacity-40"
             disabled={!newText.trim()}
         >
             <Plus size={18} class="stroke-[3]" aria-hidden="true" />

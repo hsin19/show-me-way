@@ -13,7 +13,7 @@ import {
 } from "./harness";
 
 // 行程設定檔（trip profiles）生命週期：建立 → 切換 → 刪除（先取消再確認）。
-// 建立與切換各觸發一次 loadTripData（isLoading 會暫時卸載總覽面板，切換器
+// 建立與切換各觸發一次 load（isLoading 會暫時卸載總覽面板，切換器
 // 因此收合），所以每個步驟都先等畫面落定，再重新展開切換器。
 
 const expander = () => screen.getByRole("button", { name: /目前行程/ });

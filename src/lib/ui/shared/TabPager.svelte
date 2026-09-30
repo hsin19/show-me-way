@@ -111,7 +111,7 @@ $effect(() => {
 
 let scroller = $state<HTMLDivElement>();
 
-// Deep-linking (the overview's phase card jumps straight to 記帳) can select a
+// Deep-linking (the overview's phase card jumps straight to 準備) can select a
 // chip that is scrolled off screen. A scoped scrollTo, NOT scrollIntoView: that
 // adjusts every scrollable ancestor, which on WebKit cancels the pager's gestures.
 $effect(() => {

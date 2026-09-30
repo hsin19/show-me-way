@@ -59,16 +59,10 @@ import { SvelteSet } from "svelte/reactivity";
 import { shareLinks } from "./share-link.svelte";
 import { showToast } from "./toast.svelte";
 
-/** Something the user has to decide before this trip can sync again. */
+/** Both sides changed since the last sync — something the user has to decide before this trip can sync again. */
 interface SyncConflict {
     tripId: string;
     fileName: string;
-    /**
-     * `both-changed` is a genuine divergence. `remote-newer` is only Drive having moved:
-     * taking it is safe, but a background run must not swap the trip the user is looking
-     * at, so it waits for a tap too.
-     */
-    kind: "both-changed" | "remote-newer";
 }
 
 interface SyncResult {
@@ -123,8 +117,6 @@ type CloudAction =
 const CLOUD_LIST_TTL_MS = 60_000;
 
 export interface SyncOptions {
-    /** false suppresses toasts, keeps token acquisition cache-only, and never swaps the trip. */
-    interactive?: boolean;
     /** Conflict resolution: which side wins. */
     force?: "local" | "remote";
     /**
@@ -319,7 +311,7 @@ class GDriveSyncState {
         const fileId = this.cloudFileId(tripId);
         if (!fileId) return "none";
         if (this.cloudListState === "ready" && !this.cloudFiles.some(file => file.id === fileId)) return "none";
-        if (this.conflictFor(tripId)?.kind === "both-changed") return "behind";
+        if (this.conflictFor(tripId)) return "behind";
         return this.tripSyncState(tripId, localYaml) === "dirty" ? "behind" : "kept";
     }
 
@@ -370,7 +362,6 @@ class GDriveSyncState {
             // From the last listing, which is where the divergence was found; the fallback
             // only shows before the first refresh of a fresh session.
             fileName: this.cloudFiles.find(file => file.id === record.fileId)?.name ?? "雲端行程",
-            kind: "both-changed",
         };
     }
 
@@ -618,11 +609,10 @@ class GDriveSyncState {
         tripId: string,
         options: SyncOptions = {},
     ): Promise<SyncResult | null> {
-        const interactive = options.interactive ?? true;
         if (!this.isConnected) return null;
         return this.withBusyLock(
             () => {
-                if (interactive) showToast("同步進行中，請稍候…");
+                showToast("同步進行中，請稍候…");
                 return null;
             },
             async () => {
@@ -631,7 +621,7 @@ class GDriveSyncState {
                 // re-armed below if this call is itself a checkOnly that finds the same thing.
                 if (this.pendingTransfer?.tripId === tripId) this.pendingTransfer = null;
                 try {
-                    const token = await this.getValidToken(interactive ? "interactive" : "cache-only");
+                    const token = await this.getValidToken();
                     const plan = await planCloudSync(token, this.trips[tripId] ?? null, localYaml);
                     // The user's answer to a conflict replaces the decision.
                     const decision = options.force === "local" ? "push" : options.force === "remote" ? "pull" : plan.decision;
@@ -640,13 +630,11 @@ class GDriveSyncState {
                     if (decision === "push") {
                         if (options.checkOnly) {
                             this.pendingTransfer = { tripId, direction: "push" };
-                            if (interactive) {
-                                showToast(
-                                    plan.remoteFile
-                                        ? `雲端「${plan.remoteFile.name}」落後於本機，可以上傳更新`
-                                        : "雲端還沒有這趟行程的備份，可以上傳建立",
-                                );
-                            }
+                            showToast(
+                                plan.remoteFile
+                                    ? `雲端「${plan.remoteFile.name}」落後於本機，可以上傳更新`
+                                    : "雲端還沒有這趟行程的備份，可以上傳建立",
+                            );
                             return { action: "push_ready", file: plan.remoteFile ?? undefined };
                         }
                         this.syncPhase = "pushing";
@@ -657,17 +645,15 @@ class GDriveSyncState {
                         const pushed = await plan.push(shareLinks.forTrip(tripId) ?? undefined);
                         this.adopt(tripId, pushed.record);
                         const res = pushed.file;
-                        if (interactive) {
-                            // A forced push is the user resolving a conflict, so say what it cost
-                            // rather than reporting it as a routine sync.
-                            showToast(
-                                options.force === "local"
-                                    ? `已以本機版本覆蓋雲端「${res.name}」`
-                                    : plan.remoteFile
-                                    ? `已同步「${res.name}」到 Google Drive`
-                                    : `已建立雲端備份「${res.name}」`,
-                            );
-                        }
+                        // A forced push is the user resolving a conflict, so say what it cost
+                        // rather than reporting it as a routine sync.
+                        showToast(
+                            options.force === "local"
+                                ? `已以本機版本覆蓋雲端「${res.name}」`
+                                : plan.remoteFile
+                                ? `已同步「${res.name}」到 Google Drive`
+                                : `已建立雲端備份「${res.name}」`,
+                        );
                         void this.refreshFiles({ force: true });
                         return { action: "pushed", file: res };
                     }
@@ -681,14 +667,8 @@ class GDriveSyncState {
                             // Arm the button's own "下載" tap rather than swapping the trip out
                             // from under a user who only asked to check.
                             this.pendingTransfer = { tripId, direction: "pull" };
-                            if (interactive) showToast(`雲端「${remoteFile.name}」有新版本，可以下載更新`);
+                            showToast(`雲端「${remoteFile.name}」有新版本，可以下載更新`);
                             return { action: "pull_ready", file: remoteFile };
-                        }
-                        if (!interactive) {
-                            // A debounced timer has nowhere to put the YAML and must not swap the
-                            // trip the user is looking at, so it asks instead of downloading.
-                            this.conflicts[tripId] = { tripId, fileName: remoteFile.name, kind: "remote-newer" };
-                            return { action: "conflict", file: remoteFile };
                         }
                         this.syncPhase = "pulling";
                         const pulled = await pull();
@@ -712,22 +692,20 @@ class GDriveSyncState {
                     if (decision === "conflict") {
                         // Deliberately changes nothing: re-binding or overwriting here would
                         // abandon whichever copy the user has not seen yet.
-                        this.conflicts[tripId] = { tripId, fileName: remoteFile.name, kind: "both-changed" };
-                        if (interactive) {
-                            showToast(`「${remoteFile.name}」雲端與本機都有修改，請選擇要保留哪一份`);
-                        }
+                        this.conflicts[tripId] = { tripId, fileName: remoteFile.name };
+                        showToast(`「${remoteFile.name}」雲端與本機都有修改，請選擇要保留哪一份`);
                         return { action: "conflict", file: remoteFile };
                     }
 
                     if (plan.settled) this.adopt(tripId, plan.settled);
-                    if (interactive) showToast(`「${remoteFile.name}」本地與雲端已是最新狀態`);
+                    showToast(`「${remoteFile.name}」本地與雲端已是最新狀態`);
                     return { action: "up_to_date", file: remoteFile };
                 } finally {
                     this.syncPhase = null;
                 }
             },
             msg => {
-                if (interactive) showToast(`同步失敗: ${msg}`);
+                showToast(`同步失敗: ${msg}`);
                 return null;
             },
         );

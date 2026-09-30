@@ -2,6 +2,7 @@ import { SCHEMA_URL } from "$lib/config";
 import {
     dump as dumpYaml,
     loadAll as loadYamlDocuments,
+    YAMLException,
 } from "js-yaml";
 import { safeParse } from "valibot";
 import {
@@ -25,7 +26,7 @@ export type { ChecklistItem, ConfirmationInfo, HotelInfo } from "./trip-schema";
 
 type AuthoredDay = ItineraryDocument["days"][number];
 
-export interface DayItinerary extends Omit<AuthoredDay, "day" | "region" | "pace" | "timeline"> {
+export interface DayItinerary extends Omit<AuthoredDay, "pace" | "timeline"> {
     /** Derived: 1-based position after `normalizeTripData` sorts and gap-fills by date. Never authored, never serialized. */
     day: number;
     /** `DEFAULT_PACE` when the author leaves it out. */
@@ -33,7 +34,7 @@ export interface DayItinerary extends Omit<AuthoredDay, "day" | "region" | "pace
     timeline: TimelineEvent[];
 }
 
-type TripInfo = Omit<ItineraryDocument["trip"], "id" | "start" | "end" | "departure"> & {
+type TripInfo = Omit<ItineraryDocument["trip"], "id"> & {
     /**
      * The trip's own identity, minted by `normalizeTripData` when absent and — unlike
      * the derived fields below — kept in the saved YAML, so it travels with an export,
@@ -138,21 +139,9 @@ function dropNullFields(value: unknown): void {
     }
 }
 
-/** `days[].region` is `title`'s old name; installed PWAs still hold YAML written with it. */
-function migrateLegacyRegion(raw: unknown): void {
-    const days = (raw as { days?: unknown; } | null)?.days;
-    if (!Array.isArray(days)) return;
-    for (const day of days) {
-        if (!day || typeof day !== "object" || Array.isArray(day)) continue;
-        const record = day as { title?: unknown; region?: unknown; };
-        if (record.title === undefined && typeof record.region === "string") record.title = record.region;
-        delete record.region;
-    }
-}
-
 /**
- * The countdown target, replacing the `trip.departure` authors used to hand-write:
- * day 1's first event, at local midnight when that event carries no usable time.
+ * The countdown target: day 1's first event, at local midnight when that event
+ * carries no usable time.
  * Deliberately offset-free -- the trip's own timezone is where the user reads it.
  */
 function deriveDeparture(firstDay: DayItinerary): string {
@@ -199,7 +188,6 @@ function normalizeTripData(raw: unknown): TripData {
     // Before the schema runs, so a file with no `days` hears that rather than the first nit inside `trip`.
     const outline = raw as { trip?: unknown; days?: unknown; };
     if (!outline.trip || !Array.isArray(outline.days)) throw new Error("YAML 缺少必要的結構 (trip 或 days 區塊)");
-    migrateLegacyRegion(raw);
     const parsed = safeParse(itinerarySchema, raw, { abortEarly: true });
     if (!parsed.success) throw new Error(describeIssue(parsed.issues[0]));
     const doc = parsed.output;
@@ -307,6 +295,25 @@ export function createChecklistItemId(prefix: "todo" | "pack"): string {
 }
 
 /**
+ * js-yaml words its syntax errors in English, and the editor prints this gate's
+ * message as it stands. Keyed by the start of js-yaml's `reason` (some carry the
+ * offending name after it); a reason not listed here is passed through untranslated.
+ */
+const YAML_SYNTAX_HINTS: ReadonlyArray<readonly [reason: string, hint: string]> = [
+    ["bad indentation of a mapping entry", "縮排不一致，或這一行的值裡有「: 」(冒號加空格)。整段文字請用引號包起來，例如 desc: '京都: 一日遊'"],
+    ["tab characters must not be used in indentation", "縮排不能使用 Tab，請改用空格"],
+    ["deficient indentation", "縮排不足，或引號、括號沒有成對"],
+    ["duplicated mapping key", "同一層有重複的欄位名稱"],
+    ["unidentified alias", "以 * 開頭的文字會被當成參照，請用引號包起來"],
+];
+
+function describeYamlSyntaxError(e: YAMLException): string {
+    const hint = YAML_SYNTAX_HINTS.find(([reason]) => e.reason.startsWith(reason))?.[1] ?? e.reason;
+    const head = `YAML 語法錯誤${e.mark ? `（第 ${e.mark.line + 1} 行）` : ""}：${hint}`;
+    return e.mark?.snippet ? `${head}\n\n${e.mark.snippet}` : head;
+}
+
+/**
  * Gate a YAML string before it becomes the trip — the editor, share-link imports
  * and AI edits all pass through here. Returns the normalized data, or throws with
  * a zh-TW message safe to show the user (the raw parse error is on `cause`).
@@ -315,7 +322,11 @@ export function validateYaml(yamlStr: string): TripData {
     try {
         return normalizeTripData(parseYaml(yamlStr));
     } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : "無效的 YAML 語法";
+        const message = e instanceof YAMLException
+            ? describeYamlSyntaxError(e)
+            : e instanceof Error
+            ? e.message
+            : "無效的 YAML 語法";
         throw new Error(message, { cause: e });
     }
 }
