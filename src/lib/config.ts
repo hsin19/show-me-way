@@ -29,8 +29,9 @@ export const REPO_URL = `https://github.com/${GITHUB_REPO}`;
 export const SCHEMA_URL = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/schema/showmeway-schema.json`;
 
 /**
- * The deployment a link printed by `trip:sync` opens in. The app never reads this: it builds
- * links from its own page, which the /show-me-way/ Pages copy and localhost both need.
+ * The deployment's own address: what a link printed by `trip:sync` opens in, and what the
+ * privacy policy names. In-app links come from the page instead, which the /show-me-way/
+ * Pages copy and localhost both need.
  */
 export const SITE_URL = "https://trip.hsin19.com/";
 

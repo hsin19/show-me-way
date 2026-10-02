@@ -2,6 +2,7 @@ import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { execSync } from "node:child_process";
 import { realpathSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
     fileURLToPath,
@@ -14,6 +15,7 @@ import {
     defineConfig,
     type Plugin,
     type ResolvedConfig,
+    type ViteDevServer,
 } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
@@ -64,51 +66,91 @@ function reloadOnItineraryEdit(): Plugin {
 }
 
 // Cloudflare Pages and GitHub Pages both answer /privacy with a file named privacy.html,
-// so the build writes one: index.html with the policy's own <title> and its text in a
-// <noscript>. The app still boots from it and renders the route on the client; the text
-// is for readers that run no script — a link checker, a crawler, the review of the Google
-// consent screen's privacy link — which would otherwise get an empty app shell.
+// and that address is what Google's OAuth consent screen links to, from outside this repo.
+// The build writes it: the finished index.html with PrivacyPolicy.svelte rendered into
+// #app and the module script taken out, so it is a static page that keeps the app's
+// stylesheet, the pre-paint theme script and the head links, and runs no app code.
+// `pnpm dev` answers the same address with the same page, rendered per request, its
+// entry swapped for the stylesheet alone (src/styles.ts).
 //
-// The text is rendered by a throwaway Vite server built from this same config, so the
-// aliases and Svelte settings are the app's own. PrivacyPolicy.svelte therefore has to
-// render without a browser, and the build fails rather than ship a page without its text.
-function prerenderPrivacyPage(): Plugin {
+// The build renders with a throwaway Vite server built from this same config, so the
+// aliases and Svelte settings are the app's own. Only the component is loaded, so
+// nothing else in the app has to be importable outside a browser.
+function renderPrivacyPage(): Plugin {
+    // One word for the address and the file: the hosts answer /privacy with privacy.html.
+    const page = "privacy";
+    const policyModule = "/src/lib/ui/privacy/PrivacyPolicy.svelte";
+
+    function replaceOnce(html: string, from: RegExp | string, to: string): string {
+        const next = html.replace(from, () => to);
+        if (next === html) throw new Error(`privacy-page: replacing ${String(from)} changed nothing`);
+        return next;
+    }
+
+    // The App's page with the policy in it, given a shell whose entry script is already
+    // dealt with. The theme-color metas hold the dark default that initTheme() corrects in
+    // the App; nothing runs here to correct it, so the browser picks its own instead.
+    async function privacyPage(server: ViteDevServer, shell: string): Promise<string> {
+        // svelte/server through the same loader: a second copy of svelte's internals fails
+        // on a context it never received.
+        const { default: Policy } = await server.ssrLoadModule(policyModule) as { default: Component; };
+        const { render } = await server.ssrLoadModule("svelte/server") as { render: typeof renderToString; };
+        const { head, body } = render(Policy);
+        const steps: [RegExp | string, string][] = [
+            [/<title>[^<]*<\/title>/, ""],
+            ["</head>", `${head}</head>`],
+            ['<div id="app"></div>', `<div id="app">${body}</div>`],
+        ];
+        return steps.reduce((page, [from, to]) => replaceOnce(page, from, to), shell).replace(/<meta name="theme-color"[^>]*>/g, "");
+    }
+
     let resolved: ResolvedConfig;
     return {
-        name: "showmeway:prerender-privacy",
-        // The nested server below is a `serve`, so the plugin cannot start itself again.
-        apply: "build",
+        name: "showmeway:privacy-page",
         // After vite:build-html has put the finished index.html into the bundle.
         enforce: "post",
         configResolved(config) {
             resolved = config;
         },
+        configureServer(server) {
+            const address = `${server.config.base}${page}`;
+            const component = path.join(server.config.root, policyModule);
+            // The component lives only in the server's module graph, so HMR never tells the
+            // page that the policy changed.
+            server.watcher.on("change", file => {
+                if (file === component) server.ws.send({ type: "full-reload" });
+            });
+            server.middlewares.use(async (req, res, next) => {
+                if (req.url?.split("?")[0] !== address) return next();
+                try {
+                    const source = await readFile(path.join(server.config.root, "index.html"), "utf8");
+                    const shell = await server.transformIndexHtml(req.url, replaceOnce(source, '"/src/main.ts"', '"/src/styles.ts"'));
+                    res.setHeader("Content-Type", "text/html");
+                    res.end(await privacyPage(server, shell));
+                } catch (error) {
+                    next(error);
+                }
+            });
+        },
         async generateBundle(_options, bundle) {
             const shell = bundle["index.html"];
-            if (shell?.type !== "asset") throw new Error("prerender-privacy: index.html is not in the bundle");
+            if (shell?.type !== "asset") throw new Error("privacy-page: index.html is not in the bundle");
             const server = await createServer({
                 root: resolved.root,
                 configFile: resolved.configFile,
                 mode: resolved.mode,
+                // Not the cache `pnpm dev` serves from: its config hash covers NODE_ENV, so a
+                // server sharing it would delete the dev prebundle and write a production one
+                // under a running dev server.
+                cacheDir: path.join(resolved.cacheDir, "privacy-page"),
                 server: { middlewareMode: true, watch: null, hmr: false },
                 appType: "custom",
                 logLevel: "silent",
             });
             try {
-                // Both through the server's loader: rendered by a second copy of svelte's
-                // internals, the page fails on a context it never received.
-                const page = await server.ssrLoadModule("/src/lib/ui/privacy/PrivacyPolicy.svelte") as {
-                    default: Component<{ onBack: () => void; }>;
-                    PRIVACY_TITLE: string;
-                };
-                const { render } = await server.ssrLoadModule("svelte/server") as { render: typeof renderToString; };
-                const { body } = render(page.default, { props: { onBack: () => {} } });
-
                 const source = typeof shell.source === "string" ? shell.source : new TextDecoder().decode(shell.source);
-                const titled = source.replace(/<title>[^<]*<\/title>/, () => `<title>${page.PRIVACY_TITLE}</title>`);
-                const html = titled.replace('<div id="app"></div>', () => `<div id="app"></div>\n        <noscript>${body}</noscript>`);
-                if (titled === source || html === titled) throw new Error('prerender-privacy: index.html no longer has a <title> and a <div id="app">');
-                this.emitFile({ type: "asset", fileName: "privacy.html", source: html });
+                const html = await privacyPage(server, replaceOnce(source, /<script type="module"[^>]*><\/script>/, ""));
+                this.emitFile({ type: "asset", fileName: `${page}.html`, source: html });
             } finally {
                 await server.close();
             }
@@ -156,7 +198,7 @@ export default defineConfig({
         reloadOnItineraryEdit(),
         svelte(),
         tailwindcss(),
-        prerenderPrivacyPage(),
+        renderPrivacyPage(),
         VitePWA({
             // "prompt": the new service worker waits until the user accepts the
             // in-app update banner, instead of taking over a page in active use.

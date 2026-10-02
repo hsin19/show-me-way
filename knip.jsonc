@@ -17,5 +17,8 @@
   // `svelte-eslint-parser` only reaches ESLint transitively, through
   // eslint-plugin-svelte's own dependencies. It stays listed explicitly so an
   // upstream dependency change cannot silently swap the parser version out.
+  //
+  // vite.config.ts loads PrivacyPolicy.svelte by path to render privacy.html, so nothing imports it.
+  "entry": ["src/lib/ui/privacy/PrivacyPolicy.svelte"],
   "ignoreDependencies": ["svelte-eslint-parser"]
 }

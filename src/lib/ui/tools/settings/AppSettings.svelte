@@ -25,10 +25,6 @@ import {
     isStandaloneMode,
     promptPwaInstall,
 } from "$lib/stores/pwa-install.svelte";
-import {
-    PRIVACY_URL,
-    route,
-} from "$lib/stores/route.svelte";
 import { shareLinks } from "$lib/stores/share-link.svelte";
 import {
     setThemePref,
@@ -38,7 +34,6 @@ import {
 import { showToast } from "$lib/stores/toast.svelte";
 import ConfirmBar from "$lib/ui/shared/ConfirmBar.svelte";
 import GitHubIcon from "$lib/ui/shared/icons/GitHubIcon.svelte";
-import { isPlainClick } from "$lib/ui/shared/plain-click";
 import Check from "@lucide/svelte/icons/check";
 import ChevronRight from "@lucide/svelte/icons/chevron-right";
 import Cloud from "@lucide/svelte/icons/cloud";
@@ -135,12 +130,6 @@ function handleFullReset() {
     setTimeout(() => {
         window.location.reload();
     }, 1000);
-}
-
-function openPrivacy(e: MouseEvent) {
-    if (!isPlainClick(e)) return;
-    e.preventDefault();
-    route.openPrivacy();
 }
 </script>
 
@@ -516,8 +505,7 @@ function openPrivacy(e: MouseEvent) {
     </div>
     <div class="mb-1.5">
         <a
-            href={PRIVACY_URL}
-            onclick={openPrivacy}
+            href="{import.meta.env.BASE_URL}privacy"
             class="
                 text-xs text-text-muted hover:text-text-primary transition-colors
                 inline-flex items-center gap-1 min-h-[44px]
