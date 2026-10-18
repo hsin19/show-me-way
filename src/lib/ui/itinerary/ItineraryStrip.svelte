@@ -1,4 +1,5 @@
 <script lang="ts">
+import { getLanguageConfig } from "$lib/domain/language";
 import {
     findScrollTargetEventIndex,
     formatNextEventLabel,
@@ -79,6 +80,8 @@ let nextEvent = $derived(todayData ? getNextEventInfo(todayData.timeline, todayD
 let nextEventLabel = $derived(nextEvent ? formatNextEventLabel(nextEvent) : null);
 let countdownText = $derived(getCountdownText(trip, clockNow));
 
+let driverPrompt = $derived(getLanguageConfig(trip.lang).driverPrompt);
+
 let panelKeys = $derived([0, ...days.map(d => d.day)]);
 // The pager's chip snippet is handed a key, not a day, so the date has to be
 // looked back up. Key 0 (the overview) has none.
@@ -133,6 +136,7 @@ function positionPanel(day: number, panel: HTMLElement) {
             <Timeline
                 dayData={currentDayData}
                 hotels={trip.hotels}
+                {driverPrompt}
                 mapProvider={trip.mapProvider}
                 weather={weatherForDay(currentDayData)}
                 now={clockNow}

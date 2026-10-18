@@ -23,11 +23,11 @@ const TOLERANCE = 0.5;
 
 const HOTEL = [
     "  hotels:",
-    "    - name: 測試飯店",
-    "      address: 東京都新宿區西新宿 1-1-1",
-    "      checkIn: '2099-01-01'",
-    "      checkOut: '2099-01-02'",
+    "    - start: '2099-01-01'",
+    "      end: '2099-01-02'",
+    "      title: 測試飯店",
     "      localName: テストホテル",
+    "      address: 東京都新宿區西新宿 1-1-1",
 ].join("\n");
 
 /** Gemini's model list, so the AI tab renders its chat UI instead of the key-error panel. */

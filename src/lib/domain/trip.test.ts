@@ -27,10 +27,10 @@ function tripYaml(hotelsYaml: string): string {
 
 const validHotel = [
     "",
-    "    - name: '測試旅店'",
+    "    - title: '測試旅店'",
     "      address: '1-2-3 Test St'",
-    "      checkIn: '2026-06-11'",
-    "      checkOut: '2026-06-12'",
+    "      start: '2026-06-11'",
+    "      end: '2026-06-12'",
 ].join("\n");
 
 describe("validateYaml — hotels 元素形狀", () => {
@@ -49,38 +49,38 @@ describe("validateYaml — hotels 元素形狀", () => {
     it("拒絕缺少必填欄位的元素", () => {
         const missingCheckOut = [
             "",
-            "    - name: '測試旅店'",
+            "    - title: '測試旅店'",
             "      address: '1-2-3 Test St'",
-            "      checkIn: '2026-06-11'",
+            "      start: '2026-06-11'",
         ].join("\n");
         expect(() => validateYaml(tripYaml(missingCheckOut)))
-            .toThrow("hotels 第 1 項缺少 checkOut 屬性");
+            .toThrow("hotels 第 1 項缺少 end 屬性");
     });
 
     it("拒絕型別錯誤的必填欄位", () => {
         const numericName = [
             "",
-            "    - name: 123",
+            "    - title: 123",
             "      address: '1-2-3 Test St'",
-            "      checkIn: '2026-06-11'",
-            "      checkOut: '2026-06-12'",
+            "      start: '2026-06-11'",
+            "      end: '2026-06-12'",
         ].join("\n");
         expect(() => validateYaml(tripYaml(numericName)))
-            .toThrow("hotels 第 1 項的 name 必須是文字");
+            .toThrow("hotels 第 1 項的 title 必須是文字");
     });
 
     it("接受未加引號的日期 (js-yaml 的 YAML 1.2 core schema 讀成純文字，不是 Date)", () => {
         const unquotedDates = [
             "",
-            "    - name: '測試旅店'",
+            "    - title: '測試旅店'",
             "      address: '1-2-3 Test St'",
-            "      checkIn: 2026-06-11",
-            "      checkOut: 2026-06-12",
+            "      start: 2026-06-11",
+            "      end: 2026-06-12",
         ].join("\n");
         const data = validateYaml(tripYaml(unquotedDates));
         expect(data.trip.hotels[0]).toMatchObject({
-            checkIn: "2026-06-11",
-            checkOut: "2026-06-12",
+            start: "2026-06-11",
+            end: "2026-06-12",
         });
     });
 
@@ -88,10 +88,20 @@ describe("validateYaml — hotels 元素形狀", () => {
         const data = validateYaml(tripYaml(validHotel));
         expect(data.trip.hotels).toHaveLength(1);
         expect(data.trip.hotels[0]).toMatchObject({
-            name: "測試旅店",
-            checkIn: "2026-06-11",
-            checkOut: "2026-06-12",
+            title: "測試旅店",
+            start: "2026-06-11",
+            end: "2026-06-12",
         });
+    });
+
+    it("舊的 name / checkIn / checkOut 讀成 title / start / end，存檔只寫新名字", () => {
+        const old = validHotel.replace("- title:", "- name:").replace("start:", "checkIn:").replace("end:", "checkOut:");
+        const legacy = validateYaml(tripYaml(old));
+        expect(legacy.trip.hotels[0]).toMatchObject({ title: "測試旅店", start: "2026-06-11", end: "2026-06-12" });
+        const saved = serializeToYaml(legacy);
+        expect(saved).toMatch(/start: '2026-06-11'\n\s+end: '2026-06-12'\n\s+title: 測試旅店/);
+        // Indented past `trip`'s own `name`, which keeps that spelling.
+        expect(saved).not.toMatch(/checkIn|checkOut|^ {4,}(?:- )?name:/m);
     });
 
     it("接受空的 hotels 列表", () => {
@@ -121,55 +131,38 @@ const bookedEvent = [
     "        desc: '出發'",
 ].join("\n");
 
-describe("validateYaml — confirmation 形狀", () => {
-    it("接受事件與飯店上完整的 confirmation", () => {
-        const conf = [
+describe("validateYaml — 住宿的說明欄位", () => {
+    it("住宿跟事件一樣接受 desc / bullets / links，存出來照 schema 的順序", () => {
+        const details = [
             "",
-            "        confirmation:",
-            "          code: 'ABC123'",
-            "          name: 'WANG XIAO MING'",
-            "          note: '出示護照'",
+            "      links:",
+            "        - label: '訂房確認信'",
+            "          url: 'https://example.com/booking.pdf'",
+            "      bullets:",
+            "        - '確認碼 `BK-1`'",
+            "      desc: '早餐 7:00 開始'",
         ].join("\n");
-        const data = validateYaml(timelineYaml(bookedEvent + conf));
-        expect(data.days[0]?.timeline[0]?.confirmation).toEqual({
-            code: "ABC123",
-            name: "WANG XIAO MING",
-            note: "出示護照",
+        const data = validateYaml(tripYaml(validHotel + details));
+        expect(data.trip.hotels[0]).toMatchObject({
+            desc: "早餐 7:00 開始",
+            bullets: ["確認碼 `BK-1`"],
+            links: [{ label: "訂房確認信", url: "https://example.com/booking.pdf" }],
         });
+        const saved = serializeToYaml(data);
+        expect(saved.indexOf("desc:")).toBeLessThan(saved.indexOf("bullets:"));
+        expect(saved.indexOf("bullets:")).toBeLessThan(saved.indexOf("links:"));
     });
 
-    it("接受只有 code 的 confirmation 與完全沒有 confirmation 的舊 YAML", () => {
-        const codeOnly = "\n        confirmation:\n          code: 'X-1'";
-        expect(validateYaml(timelineYaml(bookedEvent + codeOnly)).days[0]?.timeline[0]?.confirmation)
-            .toEqual({ code: "X-1" });
-        expect(validateYaml(timelineYaml(bookedEvent)).days[0]?.timeline[0]?.confirmation)
-            .toBeUndefined();
+    it("address 是選填，住宿可以不填，事件也可以填", () => {
+        const noAddress = validHotel.replace("\n      address: '1-2-3 Test St'", "");
+        expect(validateYaml(tripYaml(noAddress)).trip.hotels[0]?.address).toBeUndefined();
+        const withAddress = validateYaml(timelineYaml(`${bookedEvent}\n        address: '京都市下京区'`));
+        expect(withAddress.days[0]?.timeline[0]?.address).toBe("京都市下京区");
     });
 
-    it("拒絕非物件的 confirmation", () => {
-        expect(() => validateYaml(timelineYaml(`${bookedEvent}\n        confirmation: 'ABC123'`)))
-            .toThrow("days 第 1 項的 timeline 第 1 項的 confirmation 必須是物件");
-    });
-
-    it("拒絕缺少 code 的 confirmation", () => {
-        expect(() => validateYaml(timelineYaml(`${bookedEvent}\n        confirmation:\n          name: 'WANG'`)))
-            .toThrow("days 第 1 項的 timeline 第 1 項的 confirmation 缺少 code 屬性");
-    });
-
-    it("拒絕未加引號的數字 code (避免前導零遺失) 並提示修法", () => {
-        expect(() => validateYaml(timelineYaml(`${bookedEvent}\n        confirmation:\n          code: 012345`)))
-            .toThrow("confirmation 的 code 必須是文字 (數字代碼請加引號，例如 code: '012345')");
-    });
-
-    it("拒絕非文字的 name / note，並對飯店的 confirmation 指出項次", () => {
-        const hotelConf = [
-            "",
-            "      confirmation:",
-            "        code: 'BK-1'",
-            "        name: 123",
-        ].join("\n");
-        expect(() => validateYaml(tripYaml(validHotel + hotelConf)))
-            .toThrow("hotels 第 1 項的 confirmation 的 name 必須是文字");
+    it("拒絕非文字的 desc 並指出項次", () => {
+        expect(() => validateYaml(tripYaml(`${validHotel}\n      desc: 123`)))
+            .toThrow("hotels 第 1 項的 desc 必須是文字");
     });
 });
 
@@ -586,8 +579,6 @@ describe("serializeToYaml 與 round-trip", () => {
         "        type: booked",
         "        desc: '出發'",
         "        status: done",
-        "        confirmation:",
-        "          code: '012345'",
     ].join("\n") + validAlternatives + validStops;
 
     const richYaml = [
@@ -610,9 +601,10 @@ describe("serializeToYaml 與 round-trip", () => {
 
         const yaml = serializeToYaml(data);
         expect(yaml).not.toContain("_id");
-        expect(yaml).not.toMatch(/^\s+start:/m);
-        expect(yaml).not.toMatch(/^\s+end:/m);
-        expect(yaml).not.toMatch(/^\s+departure:/m);
+        // Two-space indent is `trip`'s own keys; a hotel or an event has a `start` of its own.
+        expect(yaml).not.toMatch(/^ {2}start:/m);
+        expect(yaml).not.toMatch(/^ {2}end:/m);
+        expect(yaml).not.toMatch(/^ {2}departure:/m);
         expect(yaml).not.toMatch(/^\s+day:\s*\d+/m);
     });
 
@@ -675,11 +667,10 @@ describe("serializeToYaml 與 round-trip", () => {
         expect(unwritten).not.toContain("checked");
     });
 
-    it("status / confirmation / alternatives / stops 經 round-trip 不遺失", () => {
+    it("status / alternatives / stops 經 round-trip 不遺失", () => {
         const data = validateYaml(serializeToYaml(validateYaml(richYaml)));
         const ev = data.days[0]!.timeline[0]!;
         expect(ev.status).toBe("done");
-        expect(ev.confirmation).toEqual({ code: "012345" });
         expect(ev.alternatives).toEqual([{
             title: "備案餐廳",
             localName: "백업식당",
@@ -710,13 +701,31 @@ describe("YAML alias bomb", () => {
 });
 
 describe("validateYaml — schema 補上的形狀檢查", () => {
-    it("事件缺少 time / title / type 時指出項次，而不是等到旅行當天才在時間軸炸掉", () => {
+    it("事件缺少時間或 title 時指出項次，而不是等到旅行當天才在時間軸炸掉；type 可以不寫", () => {
         expect(() => validateYaml(timelineYaml("\n      - title: '沒有時間'\n        type: standard")))
-            .toThrow("days 第 1 項的 timeline 第 1 項缺少 time 屬性");
+            .toThrow("days 第 1 項的 timeline 第 1 項缺少 time 或 start 屬性");
         expect(() => validateYaml(timelineYaml("\n      - time: '08:00'\n        type: standard")))
             .toThrow("days 第 1 項的 timeline 第 1 項缺少 title 屬性");
-        expect(() => validateYaml(timelineYaml("\n      - time: '08:00'\n        title: '沒有類型'")))
-            .toThrow("days 第 1 項的 timeline 第 1 項缺少 type 屬性");
+        expect(validateYaml(timelineYaml("\n      - time: '08:00'\n        title: '沒有類型'")).days[0]?.timeline[0]?.type).toBeUndefined();
+    });
+
+    it("事件可以只寫 start / end；end 要有 start，且不能早於 start", () => {
+        const span = (fields: string) => timelineYaml(`\n      - title: '紅眼班機'\n${fields}`);
+        expect(validateYaml(span("        start: '2026-06-11T19:40'\n        end: '2026-06-12T00:55'")).days[0]?.timeline[0]?.end).toBe("2026-06-12T00:55");
+        expect(() => validateYaml(span("        time: '19:40'\n        end: '2026-06-12T00:55'")))
+            .toThrow("days 第 1 項的 timeline 第 1 項有 end 卻缺少 start 屬性");
+        expect(() => validateYaml(span("        start: '2026-06-11T19:40'\n        end: '2026-06-11T08:00'")))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 end (2026-06-11T08:00) 早於 start (2026-06-11T19:40)");
+        expect(() => validateYaml(span("        start: '2026-06-11T25:00'")))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 start 不是有效的日期或時間 (2026-06-11T25:00)");
+    });
+
+    it("事件的 start 要在當天或隔天：打錯年份不會變成負的倒數", () => {
+        const span = (start: string) => timelineYaml(`\n      - title: '紅眼班機'\n        start: '${start}'`);
+        expect(validateYaml(span("2026-06-12T00:30")).days[0]?.timeline[0]?.start).toBe("2026-06-12T00:30");
+        expect(() => validateYaml(span("2025-06-11T08:00")))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 start (2025-06-11T08:00) 要在當天 (2026-06-11) 或隔天");
+        expect(() => validateYaml(span("2026-06-10T23:30"))).toThrow("要在當天 (2026-06-11) 或隔天");
     });
 
     it("拒絕數字的 time (未加引號的 800) 與未知的 type", () => {
@@ -731,10 +740,10 @@ describe("validateYaml — schema 補上的形狀檢查", () => {
             .toThrow("todo 第 1 項的 checked 必須是 true 或 false");
     });
 
-    it("hotels 的 checkIn / checkOut 必須是 YYYY-MM-DD，否則退房節點會靜靜消失", () => {
-        const slashDates = validHotel.replace("checkIn: '2026-06-11'", "checkIn: '2026/06/11'");
+    it("hotels 的 start / end 必須是 ISO 格式，否則退房節點會靜靜消失", () => {
+        const slashDates = validHotel.replace("start: '2026-06-11'", "start: '2026/06/11'");
         expect(() => validateYaml(tripYaml(slashDates)))
-            .toThrow("hotels 第 1 項的 checkIn 必須是 YYYY-MM-DD 日期格式");
+            .toThrow("hotels 第 1 項的 start 必須是 YYYY-MM-DD 或 YYYY-MM-DDTHH:mm 格式");
     });
 
     it("trip.mapProvider 只接受 naver / google", () => {
@@ -772,7 +781,7 @@ describe("validateYaml — schema 補上的形狀檢查", () => {
     it("欄位值留空 (YAML 的 null) 一律視為未填：選填欄位過關，必填欄位回報缺少", () => {
         expect(validateYaml(timelineYaml("\n      - time: '08:00'\n        title: '早餐'\n        type: standard\n        desc:")).days[0]?.timeline[0]?.desc).toBeUndefined();
         expect(() => validateYaml(timelineYaml("\n      - time:\n        title: '早餐'\n        type: standard")))
-            .toThrow("days 第 1 項的 timeline 第 1 項缺少 time 屬性");
+            .toThrow("days 第 1 項的 timeline 第 1 項缺少 time 或 start 屬性");
     });
 });
 
@@ -783,8 +792,8 @@ describe("validateYaml — 日期的語意檢查", () => {
     it("拒絕通過格式卻不存在於月曆上的日期 (Date 會把 2026-02-30 滾成 3 月 2 日)", () => {
         expect(() => validateYaml(days(day("2026-02-30"))))
             .toThrow("days 第 1 項的 date 不是有效的日期 (2026-02-30)");
-        expect(() => validateYaml(tripYaml(validHotel.replace("checkOut: '2026-06-12'", "checkOut: '2026-13-01'"))))
-            .toThrow("hotels 第 1 項的 checkOut 不是有效的日期 (2026-13-01)");
+        expect(() => validateYaml(tripYaml(validHotel.replace("end: '2026-06-12'", "end: '2026-13-01'"))))
+            .toThrow("hotels 第 1 項的 end 不是有效的日期或時間 (2026-13-01)");
     });
 
     it("拒絕兩天同一個日期，並以作者的順序指出兩個項次", () => {

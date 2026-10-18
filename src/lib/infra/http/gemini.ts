@@ -103,7 +103,7 @@ function buildSystemInstruction(itineraryYaml: string, currentDateTime: string):
         // Without rule 8 the model writes bare URLs, which markdown.ts renders as
         // literal text rather than links. The field list is hand-kept: it must name
         // exactly the fields RichText renders, and nothing checks that it does.
-        "8. desc、bullets、alternatives 的 note、todo 與 packing 的 text 支援行內 Markdown：連結一律寫成 [說明文字](https://…)，不要放裸網址；可用 **粗體**、*斜體*、`等寬`。其餘欄位（title、pace、confirmation 的 note 等）不支援，請寫純文字。",
+        "8. 事件與住宿的 desc、bullets，alternatives 的 note，todo 與 packing 的 text 支援行內 Markdown：連結一律寫成 [說明文字](https://…)，不要放裸網址；可用 **粗體**、*斜體*、`等寬`。其餘欄位（title、pace、address 等）不支援，請寫純文字。",
         // Rule 9: `56*36*23` parses as emphasis, here and in CommonMark alike, so
         // a size written that way loses its asterisks and italicizes the middle.
         "9. 在支援 Markdown 的欄位裡，尺寸與乘號請用 × 或反斜線跳脫（56×36×23 或 56\\*36\\*23），不要寫成 56*36*23，否則會被讀成斜體。",

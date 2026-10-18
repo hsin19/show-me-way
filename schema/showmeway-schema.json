@@ -42,60 +42,146 @@
           "items": {
             "type": "object",
             "properties": {
-              "name": {
+              "time": {
+                "type": "string",
+                "description": "時間 (給人看的文字)，例如 14:00 - 15:30、整天、22:00 之後。卡片上優先顯示這欄；沒填才用 start / end 組出來。"
+              },
+              "start": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}(?:T\\d{2}:\\d{2})?$",
+                "description": "入住：YYYY-MM-DD，或加上時間 YYYY-MM-DDTHH:mm。"
+              },
+              "end": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}(?:T\\d{2}:\\d{2})?$",
+                "description": "退房：格式同 start。退房當天不算住宿，所以換飯店那天的晚上算新飯店的。"
+              },
+              "title": {
                 "type": "string",
                 "description": "飯店/旅宿名稱"
               },
-              "address": {
+              "type": {
+                "enum": [
+                  "booked",
+                  "must-go",
+                  "standard",
+                  "option"
+                ],
                 "type": "string",
-                "description": "飯店外文地址 (供計程車司機觀看/複製)"
+                "description": "事件類型 (選填，預設 standard)：booked(預訂/橘色), must-go(必訪/粉色), standard(一般/藍色), option(備選/紫色)"
               },
-              "checkIn": {
+              "desc": {
                 "type": "string",
-                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-                "description": "入住日期 (YYYY-MM-DD)"
+                "description": "詳細說明描述，支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`"
               },
-              "checkOut": {
+              "status": {
+                "enum": [
+                  "done",
+                  "skipped"
+                ],
                 "type": "string",
-                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
-                "description": "退房日期 (YYYY-MM-DD)"
+                "description": "打卡狀態 (選填)：done=已完成, skipped=略過。未設定表示尚未造訪。通常由 App 內的打卡按鈕寫入，並隨 YAML 與分享連結保留進度。"
+              },
+              "bullets": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "備註條列式項目，例如訂位確認碼、入住須知。支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`（不支援 HTML）"
               },
               "localName": {
                 "type": "string",
                 "description": "地點的當地語言名稱，作為地圖搜尋關鍵字 (點擊按鈕開啟地圖/複製)"
               },
+              "address": {
+                "type": "string",
+                "description": "當地語言的地址 (選填)，放大時顯示給計程車司機看。導航靠 mapLink 就夠，這欄是給人看的。"
+              },
               "mapLink": {
                 "type": "string",
                 "description": "地圖直接連結 (如 naver.me / maps.app.goo.gl 短網址)。有設定時會優先使用，比關鍵字搜尋更精準。"
               },
-              "confirmation": {
-                "type": "object",
-                "properties": {
-                  "code": {
-                    "type": "string",
-                    "description": "訂位/訂房確認碼或訂單編號。純數字代碼請加引號 (例如 '012345')，避免被解析成數字而遺失前導零。"
+              "stops": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "地點顯示名稱 (通常是中文，例如「特雷維噴泉」)"
+                    },
+                    "localName": {
+                      "type": "string",
+                      "description": "地點的當地語言名稱 (選填，例如 'Fontana di Trevi')，可放大出示問路，也作為地圖搜尋關鍵字。沒有這個欄位 (也沒有 mapLink) 的話該站不會有地圖按鈕，所以建議填。"
+                    },
+                    "mapLink": {
+                      "type": "string",
+                      "description": "地圖直接連結 (選填，如 maps.app.goo.gl 短網址)。有設定時會優先使用，比關鍵字搜尋更精準。"
+                    }
                   },
-                  "name": {
-                    "type": "string",
-                    "description": "訂位人姓名 (選填)，建議與護照拼音一致。"
-                  },
-                  "note": {
-                    "type": "string",
-                    "description": "補充備註 (選填)，例如「入住/報到時出示護照」。"
-                  }
+                  "required": [
+                    "name"
+                  ],
+                  "additionalProperties": false
                 },
-                "required": [
-                  "code"
-                ],
-                "additionalProperties": false,
-                "description": "訂位/訂房確認資訊 (選填)。設定後卡片會顯示確認碼 chip，點一下複製，並可放大出示給櫃台。"
+                "description": "本事件依序走訪的多個地點 (選填)，例如「西班牙階梯 ➔ 特雷維噴泉 ➔ 萬神殿」這種串聯行程。每站各自產生地圖與放大按鈕，所以每一站都能放大出示問路，不像事件層的 localName 只能有一個。在事件卡上直接展開顯示 (不折疊)，因為這是行程主體。若是「擇一前往」的備選地點請用 alternatives；若只是官網、攻略文等補充網址請用 links。"
+              },
+              "links": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "description": "連結顯示文字"
+                    },
+                    "url": {
+                      "type": "string",
+                      "description": "連結網址：http(s)、mailto:、tel:、sms:、geo: 或裸網域 (會自動補 https://)。其他 scheme 不會顯示連結"
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "url"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "同一事件的補充連結 (選填)，例如官網、攻略文、訂房確認信。地圖連結會自動顯示對應的品牌 icon。若要列出本事件走訪的多個地點請改用 stops (每站會有地圖與放大按鈕)；若是「擇一前往」的備選地點 (如備案餐廳) 請改用 alternatives。"
+              },
+              "alternatives": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "description": "備選地點名稱"
+                    },
+                    "localName": {
+                      "type": "string",
+                      "description": "地點的當地語言名稱 (選填)，可放大出示問路，也作為地圖搜尋關鍵字"
+                    },
+                    "mapLink": {
+                      "type": "string",
+                      "description": "地圖直接連結 (如 naver.me / maps.app.goo.gl 短網址)。有設定時會優先使用，比關鍵字搜尋更精準。"
+                    },
+                    "note": {
+                      "type": "string",
+                      "description": "換點決策備註 (選填)，例如「排隊超過 30 分鐘就換」。支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`"
+                    }
+                  },
+                  "required": [
+                    "title"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "備選地點清單 (選填)，例如備案餐廳：每筆是一個候選地點，含當地語言店名 (可放大出示問路) 與備註 (如「排隊超過 30 分鐘就換」)，供現場換點決策。在事件卡尾端以折疊清單顯示。若只是同一事件的補充連結或多個點，請改用 links。"
               }
             },
             "required": [
-              "name",
-              "address",
-              "checkIn",
-              "checkOut"
+              "start",
+              "end",
+              "title"
             ],
             "additionalProperties": false
           }
@@ -138,7 +224,17 @@
               "properties": {
                 "time": {
                   "type": "string",
-                  "description": "時間區間，例如: 14:00 - 15:30"
+                  "description": "時間 (給人看的文字)，例如 14:00 - 15:30、整天、22:00 之後。卡片上優先顯示這欄；沒填才用 start / end 組出來。"
+                },
+                "start": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}(?:T\\d{2}:\\d{2})?$",
+                  "description": "開始 (選填)：YYYY-MM-DD 或 YYYY-MM-DDTHH:mm。App 判斷進行中、下一個行程都優先看它；可以跨到隔天，例如紅眼班機。"
+                },
+                "end": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}(?:T\\d{2}:\\d{2})?$",
+                  "description": "結束 (選填)：格式同 start，要搭配 start，且不能早於 start。"
                 },
                 "title": {
                   "type": "string",
@@ -152,7 +248,7 @@
                     "option"
                   ],
                   "type": "string",
-                  "description": "事件類型：booked(預訂/橘色), must-go(必訪/粉色), standard(一般/藍色), option(備選/紫色)"
+                  "description": "事件類型 (選填，預設 standard)：booked(預訂/橘色), must-go(必訪/粉色), standard(一般/藍色), option(備選/紫色)"
                 },
                 "desc": {
                   "type": "string",
@@ -171,37 +267,19 @@
                   "items": {
                     "type": "string"
                   },
-                  "description": "備註條列式項目，支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`（不支援 HTML）"
+                  "description": "備註條列式項目，例如訂位確認碼、入住須知。支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`（不支援 HTML）"
                 },
                 "localName": {
                   "type": "string",
                   "description": "地點的當地語言名稱，作為地圖搜尋關鍵字 (點擊按鈕開啟地圖/複製)"
                 },
+                "address": {
+                  "type": "string",
+                  "description": "當地語言的地址 (選填)，放大時顯示給計程車司機看。導航靠 mapLink 就夠，這欄是給人看的。"
+                },
                 "mapLink": {
                   "type": "string",
                   "description": "地圖直接連結 (如 naver.me / maps.app.goo.gl 短網址)。有設定時會優先使用，比關鍵字搜尋更精準。"
-                },
-                "confirmation": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string",
-                      "description": "訂位/訂房確認碼或訂單編號。純數字代碼請加引號 (例如 '012345')，避免被解析成數字而遺失前導零。"
-                    },
-                    "name": {
-                      "type": "string",
-                      "description": "訂位人姓名 (選填)，建議與護照拼音一致。"
-                    },
-                    "note": {
-                      "type": "string",
-                      "description": "補充備註 (選填)，例如「入住/報到時出示護照」。"
-                    }
-                  },
-                  "required": [
-                    "code"
-                  ],
-                  "additionalProperties": false,
-                  "description": "訂位/訂房確認資訊 (選填)。設定後卡片會顯示確認碼 chip，點一下複製，並可放大出示給櫃台。"
                 },
                 "stops": {
                   "type": "array",
@@ -248,7 +326,7 @@
                     ],
                     "additionalProperties": false
                   },
-                  "description": "同一事件的補充連結 (選填)，例如官網、攻略文。地圖連結會自動顯示對應的品牌 icon。若要列出本事件走訪的多個地點請改用 stops (每站會有地圖與放大按鈕)；若是「擇一前往」的備選地點 (如備案餐廳) 請改用 alternatives。"
+                  "description": "同一事件的補充連結 (選填)，例如官網、攻略文、訂房確認信。地圖連結會自動顯示對應的品牌 icon。若要列出本事件走訪的多個地點請改用 stops (每站會有地圖與放大按鈕)；若是「擇一前往」的備選地點 (如備案餐廳) 請改用 alternatives。"
                 },
                 "alternatives": {
                   "type": "array",
@@ -281,9 +359,7 @@
                 }
               },
               "required": [
-                "time",
-                "title",
-                "type"
+                "title"
               ],
               "additionalProperties": false
             }

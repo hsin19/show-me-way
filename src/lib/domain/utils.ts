@@ -170,6 +170,15 @@ export function isCalendarDate(iso: string): boolean {
     return toUtcIsoDate(new Date(Date.UTC(y, m - 1, d))) === iso;
 }
 
+/** `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm` naming a real day and, when given, a real time of day. */
+export function isCalendarDateTime(iso: string): boolean {
+    const [date = "", clock] = iso.split("T");
+    if (!isCalendarDate(date)) return false;
+    if (clock === undefined) return true;
+    const match = /^(\d{2}):(\d{2})$/.exec(clock);
+    return !!match && Number(match[1]) <= 23 && Number(match[2]) <= 59;
+}
+
 /** ("2026-06-11", "2026-06-16") -> "2026.06.11 – 06.16" */
 export function formatDateRange(startIso: string, endIso: string): string {
     const startDate = parseLocalDate(startIso);

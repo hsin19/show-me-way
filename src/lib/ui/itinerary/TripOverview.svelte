@@ -198,15 +198,18 @@ let langConfig = $derived(getLanguageConfig(trip.lang));
                 <BedDouble size={16} class="shrink-0 text-accent" aria-hidden="true" />
                 <span class="flex-1 min-w-0">
                     <span class="block text-[11px] font-bold text-text-muted">今晚入住</span>
-                    <span class="block text-sm font-bold text-text-primary truncate">{hotel.name}</span>
+                    <span class="block text-sm font-bold text-text-primary truncate">{hotel.title}</span>
                 </span>
-                <button
-                    onclick={() => onEnlarge({ kind: "place", title: hotel.name, localName: hotel.localName ?? hotel.name, address: hotel.address, prompt: langConfig.driverPrompt })}
-                    aria-label="放大顯示今晚飯店給司機看"
-                    class="shrink-0 min-w-[44px] min-h-[44px] -my-1.5 flex items-center justify-center bg-accent/10 text-accent rounded-lg transition duration-200 hover:bg-accent/20 cursor-pointer"
-                >
-                    <Maximize2 size={15} aria-hidden="true" />
-                </button>
+                <!-- Offered on the same terms as PlaceActions' enlarge button. -->
+                {#if hotel.address || hotel.localName}
+                    <button
+                        onclick={() => onEnlarge({ title: hotel.title, localName: hotel.localName ?? hotel.title, address: hotel.address, prompt: hotel.address ? langConfig.driverPrompt : undefined })}
+                        aria-label="放大顯示今晚飯店給司機看"
+                        class="shrink-0 min-w-[44px] min-h-[44px] -my-1.5 flex items-center justify-center bg-accent/10 text-accent rounded-lg transition duration-200 hover:bg-accent/20 cursor-pointer"
+                    >
+                        <Maximize2 size={15} aria-hidden="true" />
+                    </button>
+                {/if}
             </div>
         {/if}
     </div>
@@ -252,6 +255,6 @@ let langConfig = $derived(getLanguageConfig(trip.lang));
 {#if hotelList.length > 0}
     <div class="mt-6">
         <h3 class="text-[11px] font-bold text-text-muted mb-2 px-1">住宿</h3>
-        <HotelCards hotels={hotelList} {todayIso} driverPrompt={langConfig.driverPrompt} {onEnlarge} />
+        <HotelCards hotels={hotelList} {todayIso} driverPrompt={langConfig.driverPrompt} mapProvider={trip.mapProvider} {onEnlarge} />
     </div>
 {/if}

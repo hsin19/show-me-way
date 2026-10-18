@@ -6,8 +6,10 @@ import {
 import {
     buildDayReport,
     classifyTimelineEvents,
+    eventStartMinutes,
     findCurrentEventIndex,
     findScrollTargetEventIndex,
+    formatEventTime,
     formatNextEventLabel,
     getCountdownText,
     getNextEventInfo,
@@ -55,51 +57,81 @@ describe("parseEventStartMinutes", () => {
     });
 });
 
+describe("eventStartMinutes", () => {
+    it("start 有時間就用 start，跨到隔天的算過 1440", () => {
+        expect(eventStartMinutes({ start: "2026-06-11T14:00", time: "下午" }, "2026-06-11")).toBe(840);
+        expect(eventStartMinutes({ start: "2026-06-12T00:55" }, "2026-06-11")).toBe(1495);
+    });
+
+    it("start 只有日期就讀 time，但算在 start 那天", () => {
+        expect(eventStartMinutes({ start: "2026-06-11", time: "09:30" }, "2026-06-11")).toBe(570);
+        expect(eventStartMinutes({ start: "2026-06-12", time: "01:00" }, "2026-06-11")).toBe(1500);
+        expect(eventStartMinutes({ start: "2026-06-11" }, "2026-06-11")).toBeNull();
+    });
+});
+
+describe("formatEventTime", () => {
+    it("time 有寫就照寫的顯示", () => {
+        expect(formatEventTime({ time: "整天", start: "2026-06-11T09:00" }, "2026-06-11")).toBe("整天");
+    });
+
+    it("沒有 time 才用 start / end 組：當天只顯示時刻，跨日像機票一樣標 +1，沒有所在日就帶 MM/DD", () => {
+        expect(formatEventTime({ start: "2026-06-11T14:00", end: "2026-06-11T15:30" }, "2026-06-11")).toBe("14:00 – 15:30");
+        expect(formatEventTime({ start: "2026-06-11T19:40", end: "2026-06-12T00:55" }, "2026-06-11")).toBe("19:40 – 00:55 +1");
+        expect(formatEventTime({ start: "2026-06-11", end: "2026-06-14T11:00" })).toBe("06/11 – 06/14 11:00");
+    });
+
+    it("時間軸上只有日期的值：當天什麼都不顯示，別天顯示 +N", () => {
+        expect(formatEventTime({ start: "2026-06-11" }, "2026-06-11")).toBe("");
+        expect(formatEventTime({ start: "2026-06-11", end: "2026-06-13" }, "2026-06-11")).toBe("+2");
+    });
+});
+
 describe("findCurrentEventIndex", () => {
     const timed = (...times: string[]) => times.map(time => ({ time }));
 
     it("returns the last started event when now is between two events", () => {
-        expect(findCurrentEventIndex(timed("08:00", "12:00", "18:00"), new Date(2026, 5, 11, 14, 30)))
+        expect(findCurrentEventIndex(timed("08:00", "12:00", "18:00"), "2026-06-11", new Date(2026, 5, 11, 14, 30)))
             .toBe(1);
     });
 
     it("returns null before the first event", () => {
-        expect(findCurrentEventIndex(timed("08:00", "12:00"), new Date(2026, 5, 11, 6, 0)))
+        expect(findCurrentEventIndex(timed("08:00", "12:00"), "2026-06-11", new Date(2026, 5, 11, 6, 0)))
             .toBeNull();
     });
 
     it("returns the last timed event after everything started", () => {
-        expect(findCurrentEventIndex(timed("08:00", "12:00", "18:00"), new Date(2026, 5, 11, 23, 0)))
+        expect(findCurrentEventIndex(timed("08:00", "12:00", "18:00"), "2026-06-11", new Date(2026, 5, 11, 23, 0)))
             .toBe(2);
     });
 
     it("treats an exact start time as started (inclusive)", () => {
-        expect(findCurrentEventIndex(timed("08:00", "12:00"), new Date(2026, 5, 11, 12, 0)))
+        expect(findCurrentEventIndex(timed("08:00", "12:00"), "2026-06-11", new Date(2026, 5, 11, 12, 0)))
             .toBe(1);
     });
 
     it("skips events without a parseable time", () => {
-        expect(findCurrentEventIndex(timed("整天", "10:00", "自由活動", "15:00"), new Date(2026, 5, 11, 12, 0)))
+        expect(findCurrentEventIndex(timed("整天", "10:00", "自由活動", "15:00"), "2026-06-11", new Date(2026, 5, 11, 12, 0)))
             .toBe(1);
     });
 
     it("returns null for empty or fully untimed lists", () => {
-        expect(findCurrentEventIndex([], new Date(2026, 5, 11, 12, 0))).toBeNull();
-        expect(findCurrentEventIndex(timed("整天", "自由"), new Date(2026, 5, 11, 12, 0))).toBeNull();
+        expect(findCurrentEventIndex([], "2026-06-11", new Date(2026, 5, 11, 12, 0))).toBeNull();
+        expect(findCurrentEventIndex(timed("整天", "自由"), "2026-06-11", new Date(2026, 5, 11, 12, 0))).toBeNull();
     });
 
     it("picks the last started entry in display order for out-of-order times", () => {
-        expect(findCurrentEventIndex(timed("10:00", "14:00", "11:00"), new Date(2026, 5, 11, 11, 30)))
+        expect(findCurrentEventIndex(timed("10:00", "14:00", "11:00"), "2026-06-11", new Date(2026, 5, 11, 11, 30)))
             .toBe(2);
     });
 
     it("never selects an after-midnight (25:30) entry on the same day", () => {
-        expect(findCurrentEventIndex(timed("25:30"), new Date(2026, 5, 11, 23, 59)))
+        expect(findCurrentEventIndex(timed("25:30"), "2026-06-11", new Date(2026, 5, 11, 23, 59)))
             .toBeNull();
     });
 
     it("treats a 00:00 event as started just after midnight (0 is not 'no time')", () => {
-        expect(findCurrentEventIndex(timed("00:00"), new Date(2026, 5, 11, 0, 5)))
+        expect(findCurrentEventIndex(timed("00:00"), "2026-06-11", new Date(2026, 5, 11, 0, 5)))
             .toBe(0);
     });
 });
@@ -248,7 +280,7 @@ describe("findScrollTargetEventIndex", () => {
 });
 
 describe("isOvernightStay", () => {
-    const hotel = { checkIn: "2026-06-11", checkOut: "2026-06-14" };
+    const hotel = { start: "2026-06-11", end: "2026-06-14" };
 
     it("counts the check-in day and nights up to (not including) checkout", () => {
         expect(isOvernightStay(hotel, "2026-06-11")).toBe(true); // check-in day
@@ -259,8 +291,8 @@ describe("isOvernightStay", () => {
     });
 
     it("assigns a changeover day to the next hotel only (no double stay)", () => {
-        const a = { checkIn: "2026-06-11", checkOut: "2026-06-14" };
-        const b = { checkIn: "2026-06-14", checkOut: "2026-06-16" };
+        const a = { start: "2026-06-11", end: "2026-06-14" };
+        const b = { start: "2026-06-14", end: "2026-06-16" };
         const changeover = "2026-06-14";
         expect(isOvernightStay(a, changeover)).toBe(false);
         expect(isOvernightStay(b, changeover)).toBe(true);
@@ -269,15 +301,15 @@ describe("isOvernightStay", () => {
 
 describe("isCheckoutDay", () => {
     it("is true only on the checkout date", () => {
-        const hotel = { checkOut: "2026-06-14" };
+        const hotel = { end: "2026-06-14" };
         expect(isCheckoutDay(hotel, "2026-06-14")).toBe(true);
         expect(isCheckoutDay(hotel, "2026-06-13")).toBe(false);
         expect(isCheckoutDay(hotel, "2026-06-15")).toBe(false);
     });
 
     it("on a changeover day fires for the departing hotel while the next hotel is the overnight stay", () => {
-        const a = { checkIn: "2026-06-11", checkOut: "2026-06-14" };
-        const b = { checkIn: "2026-06-14", checkOut: "2026-06-16" };
+        const a = { start: "2026-06-11", end: "2026-06-14" };
+        const b = { start: "2026-06-14", end: "2026-06-16" };
         const changeover = "2026-06-14";
         expect(isCheckoutDay(a, changeover)).toBe(true); // 退房 A 顯示在頂端
         expect(isOvernightStay(b, changeover)).toBe(true); // 回飯店 B 顯示在底端
@@ -286,8 +318,8 @@ describe("isCheckoutDay", () => {
 
 describe("buildDayReport", () => {
     const hotels = [
-        { name: "弘大公寓", address: "首爾麻浦區楊花路 123", checkIn: "2026-06-11", checkOut: "2026-06-14" },
-        { name: "明洞飯店", address: "首爾中區明洞街 45", checkIn: "2026-06-14", checkOut: "2026-06-16" },
+        { title: "弘大公寓", address: "首爾麻浦區楊花路 123", start: "2026-06-11", end: "2026-06-14" },
+        { title: "明洞飯店", address: "首爾中區明洞街 45", start: "2026-06-14", end: "2026-06-16" },
     ];
 
     it("composes header, tonight's hotel with address, and the timeline summary", () => {
@@ -329,6 +361,13 @@ describe("buildDayReport", () => {
         expect(report).toContain("・12:00 拉麵店（略過）");
         expect(report).toContain("・14:00 景福宮");
         expect(report).not.toContain("景福宮 ✓");
+    });
+
+    it("leaves out the address line for a hotel without one", () => {
+        const day = { day: 1, date: "2026-06-11", title: "弘大", timeline: [] };
+        const report = buildDayReport(day, [{ ...hotels[0]!, address: undefined }], "首爾自由行");
+        expect(report).toContain("今晚住宿：弘大公寓");
+        expect(report).not.toContain("地址：");
     });
 
     it("assigns the changeover night to the next hotel (checkout day excluded)", () => {

@@ -24,10 +24,12 @@ import * as v from "valibot";
  */
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?$/;
 
 const MARKDOWN_HINT = "支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`";
 const LOCAL_NAME_DESC = "地點的當地語言名稱，作為地圖搜尋關鍵字 (點擊按鈕開啟地圖/複製)";
 const MAP_LINK_DESC = "地圖直接連結 (如 naver.me / maps.app.goo.gl 短網址)。有設定時會優先使用，比關鍵字搜尋更精準。";
+const ADDRESS_DESC = "當地語言的地址 (選填)，放大時顯示給計程車司機看。導航靠 mapLink 就夠，這欄是給人看的。";
 
 function text(description: string) {
     return v.pipe(v.string(), v.description(description));
@@ -37,25 +39,9 @@ function isoDate(description: string) {
     return v.pipe(v.string(), v.regex(ISO_DATE_PATTERN), v.description(description));
 }
 
-const confirmationSchema = v.pipe(
-    v.object({
-        // A numeric `code:` is rejected rather than coerced: it already lost its leading zeros by the time we see it.
-        code: text("訂位/訂房確認碼或訂單編號。純數字代碼請加引號 (例如 '012345')，避免被解析成數字而遺失前導零。"),
-        name: v.optional(text("訂位人姓名 (選填)，建議與護照拼音一致。")),
-        note: v.optional(text("補充備註 (選填)，例如「入住/報到時出示護照」。")),
-    }),
-    v.description("訂位/訂房確認資訊 (選填)。設定後卡片會顯示確認碼 chip，點一下複製，並可放大出示給櫃台。"),
-);
-
-const hotelSchema = v.object({
-    name: text("飯店/旅宿名稱"),
-    address: text("飯店外文地址 (供計程車司機觀看/複製)"),
-    checkIn: isoDate("入住日期 (YYYY-MM-DD)"),
-    checkOut: isoDate("退房日期 (YYYY-MM-DD)"),
-    localName: v.optional(text(LOCAL_NAME_DESC)),
-    mapLink: v.optional(text(MAP_LINK_DESC)),
-    confirmation: v.optional(confirmationSchema),
-});
+function isoDateTime(description: string) {
+    return v.pipe(v.string(), v.regex(ISO_DATE_TIME_PATTERN), v.description(description));
+}
 
 const linkSchema = v.object({
     label: text("連結顯示文字"),
@@ -76,35 +62,52 @@ const alternativeSchema = v.object({
     note: v.optional(text(`換點決策備註 (選填)，例如「排隊超過 30 分鐘就換」。${MARKDOWN_HINT}`)),
 });
 
-const timelineEventSchema = v.object({
-    time: text("時間區間，例如: 14:00 - 15:30"),
+// One shape for everything on the timeline — an authored event, or a hotel, which the app
+// lays into each night of its stay — so the two render through one card. Every field is
+// shared; a hotel only makes its dates required. Which of `time` and `start` an event needs
+// at least one of is checked in `normalizeTripData`, where the message can name both.
+const eventEntries = {
+    time: v.optional(text("時間 (給人看的文字)，例如 14:00 - 15:30、整天、22:00 之後。卡片上優先顯示這欄；沒填才用 start / end 組出來。")),
+    start: v.optional(isoDateTime("開始 (選填)：YYYY-MM-DD 或 YYYY-MM-DDTHH:mm。App 判斷進行中、下一個行程都優先看它；可以跨到隔天，例如紅眼班機。")),
+    end: v.optional(isoDateTime("結束 (選填)：格式同 start，要搭配 start，且不能早於 start。")),
     title: text("行程或事件標題"),
-    type: v.pipe(
+    type: v.optional(v.pipe(
         v.picklist(["booked", "must-go", "standard", "option"]),
-        v.description("事件類型：booked(預訂/橘色), must-go(必訪/粉色), standard(一般/藍色), option(備選/紫色)"),
-    ),
+        v.description("事件類型 (選填，預設 standard)：booked(預訂/橘色), must-go(必訪/粉色), standard(一般/藍色), option(備選/紫色)"),
+    )),
     // Optional on purpose -- an event without one renders a blank line rather than failing the load.
     desc: v.optional(text(`詳細說明描述，${MARKDOWN_HINT}`)),
     status: v.optional(v.pipe(
         v.picklist(["done", "skipped"]),
         v.description("打卡狀態 (選填)：done=已完成, skipped=略過。未設定表示尚未造訪。通常由 App 內的打卡按鈕寫入，並隨 YAML 與分享連結保留進度。"),
     )),
-    bullets: v.optional(v.pipe(v.array(v.string()), v.description(`備註條列式項目，${MARKDOWN_HINT}（不支援 HTML）`))),
+    bullets: v.optional(v.pipe(v.array(v.string()), v.description(`備註條列式項目，例如訂位確認碼、入住須知。${MARKDOWN_HINT}（不支援 HTML）`))),
     localName: v.optional(text(LOCAL_NAME_DESC)),
+    address: v.optional(text(ADDRESS_DESC)),
     mapLink: v.optional(text(MAP_LINK_DESC)),
-    confirmation: v.optional(confirmationSchema),
     stops: v.optional(v.pipe(
         v.array(stopSchema),
         v.description("本事件依序走訪的多個地點 (選填)，例如「西班牙階梯 ➔ 特雷維噴泉 ➔ 萬神殿」這種串聯行程。每站各自產生地圖與放大按鈕，所以每一站都能放大出示問路，不像事件層的 localName 只能有一個。在事件卡上直接展開顯示 (不折疊)，因為這是行程主體。若是「擇一前往」的備選地點請用 alternatives；若只是官網、攻略文等補充網址請用 links。"),
     )),
     links: v.optional(v.pipe(
         v.array(linkSchema),
-        v.description("同一事件的補充連結 (選填)，例如官網、攻略文。地圖連結會自動顯示對應的品牌 icon。若要列出本事件走訪的多個地點請改用 stops (每站會有地圖與放大按鈕)；若是「擇一前往」的備選地點 (如備案餐廳) 請改用 alternatives。"),
+        v.description("同一事件的補充連結 (選填)，例如官網、攻略文、訂房確認信。地圖連結會自動顯示對應的品牌 icon。若要列出本事件走訪的多個地點請改用 stops (每站會有地圖與放大按鈕)；若是「擇一前往」的備選地點 (如備案餐廳) 請改用 alternatives。"),
     )),
     alternatives: v.optional(v.pipe(
         v.array(alternativeSchema),
         v.description("備選地點清單 (選填)，例如備案餐廳：每筆是一個候選地點，含當地語言店名 (可放大出示問路) 與備註 (如「排隊超過 30 分鐘就換」)，供現場換點決策。在事件卡尾端以折疊清單顯示。若只是同一事件的補充連結或多個點，請改用 links。"),
     )),
+};
+
+const timelineEventSchema = v.object(eventEntries);
+
+// Overriding a key keeps its place in the spread, so a hotel's keys save in the event's order.
+// The older `name` / `checkIn` / `checkOut` are still read; see `normalizeTripData`.
+const hotelSchema = v.object({
+    ...eventEntries,
+    start: isoDateTime("入住：YYYY-MM-DD，或加上時間 YYYY-MM-DDTHH:mm。"),
+    end: isoDateTime("退房：格式同 start。退房當天不算住宿，所以換飯店那天的晚上算新飯店的。"),
+    title: text("飯店/旅宿名稱"),
 });
 
 const daySchema = v.object({
@@ -159,7 +162,6 @@ export const itinerarySchema = v.object({
 });
 
 export type ItineraryDocument = v.InferOutput<typeof itinerarySchema>;
-export type ConfirmationInfo = v.InferOutput<typeof confirmationSchema>;
 export type HotelInfo = v.InferOutput<typeof hotelSchema>;
 
 export interface TimelineEvent extends v.InferOutput<typeof timelineEventSchema> {

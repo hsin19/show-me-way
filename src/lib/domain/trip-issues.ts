@@ -3,7 +3,7 @@ import type { BaseIssue } from "valibot";
 /*
  * Turns the first valibot issue into the zh-TW sentence the editor shows. The
  * wording predates the schema and is pinned by `trip.test.ts`, spacing quirks
- * included (`trip的 id` but `confirmation 的 code`), so the rules below
+ * included (`trip的 id` but `timeline 第 1 項的 time`), so the rules below
  * reproduce it rather than tidy it -- a saved trip that used to fail with one
  * message should keep failing with the same one.
  */
@@ -20,7 +20,7 @@ function listChoices(expected: string): string {
 }
 
 /**
- * `["days", 0, "timeline", 1, "confirmation"]` → `days 第 1 項的 timeline 第 2 項的 confirmation`.
+ * `["days", 0, "timeline", 1, "links"]` → `days 第 1 項的 timeline 第 2 項的 links`.
  * `trip` is named only when it is the immediate parent (`trip的 id`); deeper
  * paths start at the list (`hotels 第 1 項`, never `trip的 hotels 第 1 項`).
  */
@@ -67,18 +67,16 @@ function describeField(issue: BaseIssue<unknown>, container: PathKey[], field: s
         if (field === "date" && !missing) return `${where}的 date 必須是 YYYY-MM-DD 日期格式`;
         if (field === "city") return `${where}的 city 必須是文字 (例如 'Tokyo')`;
     }
-    const insideConfirmation = container[container.length - 1] === "confirmation";
-    if (missing) return `${where}${insideConfirmation ? " " : ""}缺少 ${field} 屬性`;
+    if (missing) return `${where}缺少 ${field} 屬性`;
 
-    const subject = `${where}${insideConfirmation ? " 的 " : "的 "}${field}`;
-    if (insideConfirmation && field === "code") return `${subject} 必須是文字 (數字代碼請加引號，例如 code: '012345')`;
+    const subject = `${where}的 ${field}`;
     switch (issue.type) {
         case "string":
             return `${subject} 必須是文字`;
         case "array":
             return `${subject} 必須是列表`;
         case "object":
-            return field === "confirmation" ? `${subject} 必須是物件 (包含 code 屬性)` : `${subject} 必須是物件`;
+            return `${subject} 必須是物件`;
         case "boolean":
             return `${subject} 必須是 true 或 false`;
         case "number":
@@ -86,7 +84,9 @@ function describeField(issue: BaseIssue<unknown>, container: PathKey[], field: s
         case "integer":
             return `${subject} 必須是整數`;
         case "regex":
-            return `${subject} 必須是 YYYY-MM-DD 日期格式`;
+            return field === "start" || field === "end"
+                ? `${subject} 必須是 YYYY-MM-DD 或 YYYY-MM-DDTHH:mm 格式`
+                : `${subject} 必須是 YYYY-MM-DD 日期格式`;
         case "picklist":
             return `${subject} 必須是 ${listChoices(issue.expected ?? "")}`;
         default:

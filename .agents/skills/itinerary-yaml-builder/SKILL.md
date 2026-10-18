@@ -23,26 +23,26 @@ Convert messy trip notes into a schema-valid `public/itinerary.local.yaml` for t
 Top-level keys: `trip` and `days` (required); `todo`, `packing` (optional).
 
 - `trip` — requires `name`, `hotels[]`; optional `lang`, `city`, `mapProvider`; app-owned `id`.
-- `trip.hotels[]` — requires `name`, `address`, `checkIn`, `checkOut`; optional `localName`, `mapLink`, `confirmation`.
+- `trip.hotels[]` — exactly a timeline event's fields, plus required `start` (check-in) and `end` (checkout), each `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm`, and required `title`. Write these names; the older `name` / `checkIn` / `checkOut` are only read for old files. A booking reference goes in `bullets[]` (e.g. ``確認碼 `ABC123`：入住時出示護照``); there is no dedicated field.
 - `days[]` — requires `date`, `title`, `timeline[]`; optional `pace`, `city`. Order-insensitive: the app sorts by `date` and fills skipped dates in as free days.
-- `days[].timeline[]` — requires `time`, `title`, `type`; optional `desc`, `bullets[]`, `localName`, `mapLink`, `stops[]`, `links[]`, `alternatives[]`, `confirmation`, `status`.
+- `days[].timeline[]` — requires `title` and at least one of `time` / `start`; optional `end`, `type` (absent means `standard`), `desc`, `bullets[]`, `localName`, `address`, `mapLink`, `stops[]`, `links[]`, `alternatives[]`, `status`. `time` is free text for people and is what the card shows; `start` / `end` are ISO for the app — it reads "in progress" and "next up" from `start`, and builds the card's time from them only when `time` is absent. A cross-midnight leg (a red-eye) is `start` and `end` on different dates; an event's `start` itself must fall on its own day or past midnight into the next. A booking reference goes in `bullets[]`, as for hotels.
 - `todo[]` / `packing[]` — `text`, optional `checked`.
 
 What each field means, its examples, the `stops` vs `links` vs `alternatives` distinction and which fields accept Markdown are all in the schema's `description` strings — that is the reference, this list is only the skeleton.
 
 ## Conventions
 
-- **Dates are plain `YYYY-MM-DD`** and are parsed in local time by the app — never add a time or `Z` to any date field, and quote them so YAML keeps them as text. Times of day live in `timeline[].time` as `HH:MM`.
+- **Dates are plain `YYYY-MM-DD`** and are parsed in local time by the app, so quote them so YAML keeps them as text. `days[].date` never carries a time; `start` / `end` may add a local `THH:MM` (`'2026-10-11T14:00'`), never a `Z` or offset. Times of day otherwise live in `timeline[].time`.
 - **`trip.start` / `trip.end` / `trip.departure` and `day` numbers are derived — never write them.** The app sorts `days` by `date`, numbers them, fills any skipped date in as a free day, takes the first and last dates as the trip range, and uses day 1's first event time as the home-screen countdown target. They are stripped on every save, so a hand-written value silently disappears. Entries in `days` may be listed in any order.
 - **Never emit `_id`, and never write `id` on a todo/packing item** — both are runtime-only and stripped on save. `trip.id` is the opposite case: also app-generated, but persisted — never invent one, and never drop one that is already there.
-- **`time` is `HH:MM` or a range `14:00 - 15:30`.** An unquoted `800` is a number and is rejected.
+- **`time` is free text, usually `HH:MM` or a range `14:00 - 15:30`**, but `整天` or `22:00 之後` are fine; the app reads a leading `HH:MM` as the start. An unquoted `800` is a number and is rejected.
 - **`title` idiom:** short, emoji prefix welcome (✈️ 🏨 🍜 🛍️ ☕ 🎁). The schema's `maxLength` on `days[].title` / `pace` is a layout hint for a 390px phone, not a hard limit.
 - **`status` is the app's to write.** Leave it out when drafting a new trip; preserve existing `status`, `city` and `trip.id` when merging into an existing file.
 - **`stops` need a `localName` or `mapLink` each** or the stop has no map button; when an event has `stops`, do not repeat one of them in the event-level `localName`. Never hand-write a `google.com/maps/search/...` URL in `links[]` to list a place — that is what `stops` is for, and a hand-written Google URL ignores the trip's `mapProvider` (Naver for Korea).
 - **`links[].url` accepts `http(s)`, `mailto:`, `tel:`, `sms:`, `geo:` or a bare domain — anything else renders no chip**, so a restaurant's phone goes in as `tel:+81312345678`, never a `line://` deep link.
 - **Language:** keep all user-facing copy (titles, desc, pace) in Traditional Chinese to match the app.
 - **Event type defaults:** flights/tickets/reservations → `booked`; the day's headline attraction → `must-go`; routine moves/meals → `standard`; tentative or backup ideas → `option`.
-- **Be honest about gaps.** If the notes don't give a time or address, leave a clearly-marked placeholder (e.g. `desc: '（待確認地址）'`) rather than inventing specifics like exact addresses or flight numbers.
+- **Be honest about gaps.** If the notes don't give a time, leave a clearly-marked placeholder (e.g. `time: '待確認'`) rather than inventing specifics like flight numbers. An address the notes don't give is left out — `address` is optional, and an invented one is worse than none.
 
 ## Inline Markdown
 
@@ -65,7 +65,7 @@ Rules that matter when authoring:
 - **Never write a size as `56*36*23`.** An unspaced `*` pair is emphasis (CommonMark reads it the same way), so that renders as `56` *36* `23` with the asterisks gone. Use `×` — `56×36×23` — or escape them: `56\*36\*23`. Same for `3*2 晚`.
 - **No other Markdown works** — no headings, tables, block lists or raw HTML. `bullets[]` is already a list; do not prefix its items with `-` or `*`.
 - **Quote the YAML value when it starts with `*` or `[`**, or YAML reads it as an alias/flow sequence: `- '**穿短褲**或…'`.
-- These fields only. `confirmation.note`, `title`, `pace`, `stops[].name` and hotel fields render literally, so Markdown written there shows its own asterisks.
+- These fields only. `title`, `pace`, `stops[].name` and `address` render literally, so Markdown written there shows its own asterisks.
 
 ## Output rules
 

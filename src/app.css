@@ -12,7 +12,7 @@
        event-type colors and never mark interactive chrome. */
     --color-accent: #4cc2f7; /* sky — interactive: links, active states, CTAs */
     --color-accent-contrast: #06202e; /* text on solid accent surfaces */
-    --color-booked: #fbbf24; /* amber-400 — 預訂 events / confirmation codes */
+    --color-booked: #fbbf24; /* amber-400 — 預訂 events / checkout node */
     --color-must: #fb7185; /* rose-400 — 必訪 events / today marker */
     --color-option: #a78bfa; /* violet-400 — 備選 events */
     --color-positive: #34d399; /* emerald-400 — done / deposits / diff added */
@@ -85,7 +85,7 @@
     --color-accent: #9a3412;
     --color-accent-contrast: #fff8f2;
     /* yellow-800. mockup B's #a16207 measured 4.49:1 on the card — 0.01 short of
-       AA, and 預訂 badges / confirmation codes are information, not decoration.
+       AA, and 預訂 badges are information, not decoration.
        Kept yellower than `accent` so the two stay tellable apart on paper. */
     --color-booked: #854d0e;
     --color-must: #be123c;

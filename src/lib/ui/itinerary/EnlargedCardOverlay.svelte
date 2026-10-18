@@ -59,11 +59,7 @@ $effect(() => {
         >
             <div class="flex justify-between items-center mb-6">
                 <h3 class="text-sm text-text-secondary">
-                    {#if data.kind === "confirmation"}
-                        出示給櫃台人員看（點碼可複製）
-                    {:else}
-                        {data.prompt ?? "出示給司機 / 店員看（點字可複製）"}
-                    {/if}
+                    {data.prompt ?? "出示給司機 / 店員看（點字可複製）"}
                 </h3>
                 <button
                     onclick={onClose}
@@ -76,40 +72,23 @@ $effect(() => {
 
             <div class="text-center break-words px-2">
                 <p class="text-sm text-text-secondary mb-3">{data.title}</p>
-                {#if data.kind === "confirmation"}
+                <button
+                    type="button"
+                    onclick={() => copyToClipboard(data.localName, "已複製名稱")}
+                    class="text-text-primary text-2xl font-black leading-normal block w-full break-words cursor-pointer transition active:scale-[0.98]"
+                    title="點一下複製"
+                >
+                    {data.localName}
+                </button>
+                {#if data.address}
                     <button
                         type="button"
-                        onclick={() => copyToClipboard(data.code, "已複製確認碼")}
-                        class="text-accent text-4xl font-black leading-normal tracking-widest block w-full break-all cursor-pointer transition active:scale-[0.98]"
+                        onclick={() => copyToClipboard(data.address ?? "", "已複製地址")}
+                        class="text-accent text-3xl font-black leading-normal block w-full break-words mt-3 cursor-pointer transition active:scale-[0.98]"
                         title="點一下複製"
                     >
-                        {data.code}
+                        {data.address}
                     </button>
-                    {#if data.name}
-                        <p class="text-text-primary text-2xl font-black leading-normal break-words mt-3">{data.name}</p>
-                    {/if}
-                    {#if data.note}
-                        <p class="text-xs text-text-secondary leading-relaxed mt-3">{data.note}</p>
-                    {/if}
-                {:else}
-                    <button
-                        type="button"
-                        onclick={() => copyToClipboard(data.localName, "已複製名稱")}
-                        class="text-text-primary text-2xl font-black leading-normal block w-full break-words cursor-pointer transition active:scale-[0.98]"
-                        title="點一下複製"
-                    >
-                        {data.localName}
-                    </button>
-                    {#if data.address}
-                        <button
-                            type="button"
-                            onclick={() => copyToClipboard(data.address ?? "", "已複製地址")}
-                            class="text-accent text-3xl font-black leading-normal block w-full break-words mt-3 cursor-pointer transition active:scale-[0.98]"
-                            title="點一下複製"
-                        >
-                            {data.address}
-                        </button>
-                    {/if}
                 {/if}
             </div>
         </div>

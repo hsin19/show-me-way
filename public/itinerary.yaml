@@ -5,21 +5,23 @@ trip:
   mapProvider: google
   city: Tokyo
   hotels:
-    - name: 極簡設計精選飯店
-      address: 東京都新宿區西新宿 1-1-1
-      checkIn: '2026-10-01'
-      checkOut: '2026-10-03'
+    - start: 2026-10-01T15:00
+      end: 2026-10-03T11:00
+      title: 極簡設計精選飯店
+      desc: 新宿站西口步行 5 分鐘，大廳 24 小時可寄放行李。
+      bullets:
+        - 確認碼 `BK-20261001`（WANG XIAO MING）：入住時出示護照與訂房確認信
       localName: 新宿セレクトホテル
+      address: 東京都新宿區西新宿 1-1-1
       mapLink: https://maps.app.goo.gl/example-hotel
-      confirmation:
-        code: BK-20261001
-        name: WANG XIAO MING
-        note: 入住時出示護照與訂房確認信
-    - name: 灣岸景觀飯店
-      address: 東京都港區台場 2-2-2
-      checkIn: '2026-10-03'
-      checkOut: '2026-10-04'
+      links:
+        - label: 訂房確認信
+          url: https://www.example.com/booking
+    - start: '2026-10-03'
+      end: '2026-10-04'
+      title: 灣岸景觀飯店
       localName: お台場ベイビューホテル
+      address: 東京都港區台場 2-2-2
 days:
   - date: '2026-10-01'
     title: 抵達 · 新宿
@@ -29,10 +31,8 @@ days:
         type: booked
         desc: 桃園機場第一航廈出發，記得**提早 2.5 小時**到機場。
         status: done
-        confirmation:
-          code: ABC123
-          name: WANG XIAO MING
-          note: 線上登機證存手機，托運行李限重 23kg
+        bullets:
+          - 確認碼 `ABC123`（WANG XIAO MING）：線上登機證存手機，托運行李限重 23kg
       - time: '14:00'
         title: 飯店 Check-in
         type: standard
@@ -62,13 +62,12 @@ days:
         type: booked
         desc: 數位藝術展，須持預約 QR code 於指定時段入場。
         bullets:
+          - 確認碼 `TL-0099123`：出示 App 內 QR code
           - '**穿短褲**或可捲起的褲子（部分展區會踩水）'
           - 提早 15 分鐘到場排隊
         localName: チームラボプラネッツ TOKYO
+        address: 東京都江東区豊洲 6-1-16
         mapLink: https://maps.app.goo.gl/example-teamlab
-        confirmation:
-          code: TL-0099123
-          note: 出示 App 內 QR code
       - time: 12:30 - 13:30
         title: 午餐
         type: standard
@@ -101,16 +100,15 @@ days:
     title: 京都一日遊
     city: Kyoto
     timeline:
-      - time: '07:30'
+      - start: 2026-10-03T07:30
+        end: 2026-10-03T09:45
         title: 新幹線前往京都
         type: booked
         desc: 東京站搭乘東海道新幹線「のぞみ」前往京都，約 2 小時 15 分。
         bullets:
+          - 確認碼 `EX-778812`：進站刷 IC 卡與預約紀錄
           - 提前用 [EX 預約 App](https://www.example.com/ex-reserve) 劃位
           - 月台便當（駅弁）可當早餐
-        confirmation:
-          code: EX-778812
-          note: 進站刷 IC 卡與預約紀錄
       - time: 10:00 - 12:00
         title: 伏見稻荷大社
         type: must-go
@@ -132,8 +130,8 @@ days:
         title: 返回東京
         type: booked
         desc: 京都站搭新幹線返回東京，回飯店休息。
-        confirmation:
-          code: EX-778890
+        bullets:
+          - 確認碼 `EX-778890`
     pace: 早出晚歸，當天移動到京都
   - date: '2026-10-04'
     title: 採購 · 回程
@@ -146,9 +144,8 @@ days:
         title: 搭機回國
         type: booked
         desc: 帶著滿滿的回憶搭乘回程班機，記得預留退稅與安檢時間。
-        confirmation:
-          code: ABC456
-          name: WANG XIAO MING
+        bullets:
+          - 確認碼 `ABC456`（WANG XIAO MING）
     pace: 收尾行程，不排太滿
 todo:
   - text: 確認護照效期距回國日仍大於 6 個月

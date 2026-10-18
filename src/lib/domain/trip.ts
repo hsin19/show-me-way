@@ -20,9 +20,10 @@ import {
     addDaysIso,
     daysBetweenIso,
     isCalendarDate,
+    isCalendarDateTime,
 } from "./utils";
 
-export type { ChecklistItem, ConfirmationInfo, HotelInfo } from "./trip-schema";
+export type { ChecklistItem, HotelInfo, TimelineEvent } from "./trip-schema";
 
 type AuthoredDay = ItineraryDocument["days"][number];
 
@@ -139,13 +140,51 @@ function dropNullFields(value: unknown): void {
     }
 }
 
+/** A hotel's older field names, by the event field each now is. `trip:validate` reports them as renamed, not dropped. */
+export const LEGACY_HOTEL_FIELDS = { name: "title", checkIn: "start", checkOut: "end" } as const;
+
+/**
+ * Read a hotel's older field names as the event's, so YAML written with them — on a phone,
+ * in a backup, behind a share link someone else holds — still loads instead of failing on
+ * a missing required field. The next save writes the new names, and the old ones leave
+ * with the other unknown keys.
+ */
+function adoptLegacyHotelFields(trip: unknown): void {
+    const hotels = (trip as { hotels?: unknown; }).hotels;
+    if (!Array.isArray(hotels)) return;
+    for (const hotel of hotels) {
+        if (!hotel || typeof hotel !== "object") continue;
+        const record = hotel as Record<string, unknown>;
+        for (const [legacy, current] of Object.entries(LEGACY_HOTEL_FIELDS)) {
+            if (!(current in record) && legacy in record) record[current] = record[legacy];
+        }
+    }
+}
+
+/**
+ * What the schema cannot say about an item's `start` / `end`: a value on the calendar and
+ * the clock, an `end` that has a `start` and does not precede it. ISO strings compare as
+ * times, and a bare date reads as that day's midnight.
+ */
+function checkSpan(where: string, item: { start?: string; end?: string; }): void {
+    for (const field of ["start", "end"] as const) {
+        const value = item[field];
+        if (value !== undefined && !isCalendarDateTime(value)) throw new Error(`${where}的 ${field} 不是有效的日期或時間 (${value})`);
+    }
+    if (item.end === undefined) return;
+    if (item.start === undefined) throw new Error(`${where}有 end 卻缺少 start 屬性`);
+    if (item.end < item.start) throw new Error(`${where}的 end (${item.end}) 早於 start (${item.start})`);
+}
+
 /**
  * The countdown target: day 1's first event, at local midnight when that event
  * carries no usable time.
  * Deliberately offset-free -- the trip's own timezone is where the user reads it.
  */
 function deriveDeparture(firstDay: DayItinerary): string {
-    const minutes = parseEventStartMinutes(firstDay.timeline[0]?.time ?? "") ?? 0;
+    const first = firstDay.timeline[0];
+    if (first?.start?.includes("T")) return `${first.start}:00`;
+    const minutes = parseEventStartMinutes(first?.time ?? "") ?? 0;
     const wrapped = minutes % (24 * 60);
     return `${firstDay.date}T${formatEventMinutes(wrapped)}:00`;
 }
@@ -188,13 +227,25 @@ function normalizeTripData(raw: unknown): TripData {
     // Before the schema runs, so a file with no `days` hears that rather than the first nit inside `trip`.
     const outline = raw as { trip?: unknown; days?: unknown; };
     if (!outline.trip || !Array.isArray(outline.days)) throw new Error("YAML 缺少必要的結構 (trip 或 days 區塊)");
+    adoptLegacyHotelFields(outline.trip);
     const parsed = safeParse(itinerarySchema, raw, { abortEarly: true });
     if (!parsed.success) throw new Error(describeIssue(parsed.issues[0]));
     const doc = parsed.output;
 
-    for (const [i, hotel] of doc.trip.hotels.entries()) {
-        for (const field of ["checkIn", "checkOut"] as const) {
-            if (!isCalendarDate(hotel[field])) throw new Error(`hotels 第 ${i + 1} 項的 ${field} 不是有效的日期 (${hotel[field]})`);
+    for (const [i, hotel] of doc.trip.hotels.entries()) checkSpan(`hotels 第 ${i + 1} 項`, hotel);
+    for (const [d, day] of doc.days.entries()) {
+        for (const [e, event] of day.timeline.entries()) {
+            const where = `days 第 ${d + 1} 項的 timeline 第 ${e + 1} 項`;
+            if (event.time === undefined && event.start === undefined) throw new Error(`${where}缺少 time 或 start 屬性`);
+            checkSpan(where, event);
+            // On its day or past midnight into the next, as "25:30" may be. Anything further is
+            // a typo — a wrong year — that would otherwise show as "08:00 -365", count as
+            // started since midnight and, on day 1, set a departure already behind us. An
+            // invalid `day.date` is left for `sortAuthoredDays` to name.
+            const startDate = event.start?.slice(0, 10);
+            if (startDate && isCalendarDate(day.date) && startDate !== day.date && startDate !== addDaysIso(day.date, 1)) {
+                throw new Error(`${where}的 start (${event.start}) 要在當天 (${day.date}) 或隔天`);
+            }
         }
     }
 

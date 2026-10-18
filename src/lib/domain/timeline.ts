@@ -5,10 +5,22 @@
 // when a date bug is fixed.
 
 import {
+    daysBetweenIso,
     formatDayDate,
     parseLocalDate,
     toLocalIsoDate,
 } from "./utils";
+
+/**
+ * What a timeline item says about when: `time` is free text written for people, and
+ * `start` / `end` are ISO (`YYYY-MM-DD` or `YYYY-MM-DDTHH:mm`) written for the app. The
+ * screen prefers `time`, the clock logic prefers `start`; each falls back to the other.
+ */
+interface Timed {
+    time?: string;
+    start?: string;
+    end?: string;
+}
 
 export interface CountdownTrip {
     start: string; // YYYY-MM-DD
@@ -18,8 +30,9 @@ export interface CountdownTrip {
 
 /**
  * Time left until the trip's first event, for the overview's prep card; null from the
- * first day on. There is deliberately no "already left" case: `departure` is derived to
- * sit on `start`, so it cannot be in the past while the trip has not begun.
+ * first day on. There is deliberately no "already left" case: `departure` is derived from
+ * day 1's first event, which sits on `start` or past midnight into the next day, so it
+ * cannot be in the past while the trip has not begun.
  */
 export function getCountdownText(trip: CountdownTrip, now: Date = new Date()): string | null {
     if (now >= parseLocalDate(trip.start)) return null;
@@ -51,22 +64,57 @@ export function parseEventStartMinutes(time: string): number | null {
 }
 
 /**
+ * Minutes after `dayDate`'s local midnight at which the item starts: `start`'s time of
+ * day when it has one, otherwise what `time` begins with. Either is counted on `start`'s
+ * date when there is one, so a start on the next date lands past 1440 just as the
+ * "25:30" notation does.
+ */
+export function eventStartMinutes(event: Timed, dayDate: string): number | null {
+    const [date, clock] = event.start?.split("T") ?? [];
+    const minutes = parseEventStartMinutes(clock ?? event.time ?? "");
+    if (minutes === null) return null;
+    return (date ? daysBetweenIso(dayDate, date) * 24 * 60 : 0) + minutes;
+}
+
+/**
+ * The time chip's text: `time` as written, or else `start` – `end`. On a card that sits on
+ * `dayDate`, a value reads against that day the way a ticket marks an arrival on another
+ * date (`00:55 +1`), and a bare date on the day itself says nothing. Without a `dayDate`
+ * (a hotel in 住宿) a value leads with MM/DD.
+ */
+export function formatEventTime(event: Timed, dayDate?: string): string {
+    if (event.time) return event.time;
+    const part = (iso: string) => {
+        const [date = "", clock] = iso.split("T");
+        if (dayDate) {
+            const offset = daysBetweenIso(dayDate, date);
+            const shift = offset === 0 ? "" : `${offset > 0 ? "+" : ""}${offset}`;
+            return [clock, shift].filter(Boolean).join(" ");
+        }
+        const mmdd = `${date.slice(5, 7)}/${date.slice(8, 10)}`;
+        return clock ? `${mmdd} ${clock}` : mmdd;
+    };
+    return [event.start, event.end].filter(value => value !== undefined).map(part).filter(Boolean).join(" – ");
+}
+
+/**
  * Index of the "current" event: the last one already started at `now`'s local
  * time of day. Untimed events can never be current, and null means nothing has
  * started yet. Display (YAML) order decides — the list is not re-sorted — so with
  * out-of-order times the last started entry wins.
  *
- * Date-agnostic: check `dayDate === toLocalIsoDate(now)` yourself before treating
- * the result as today's in-progress event.
+ * Reads `now` as a time on `dayDate`: check `dayDate === toLocalIsoDate(now)` yourself
+ * before treating the result as today's in-progress event.
  */
 export function findCurrentEventIndex(
-    events: ReadonlyArray<{ time: string; }>,
+    events: readonly Timed[],
+    dayDate: string,
     now: Date = new Date(),
 ): number | null {
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
     let current: number | null = null;
     for (const [i, event] of events.entries()) {
-        const start = parseEventStartMinutes(event.time);
+        const start = eventStartMinutes(event, dayDate);
         if (start !== null && start <= nowMinutes) current = i;
     }
     return current;
@@ -80,18 +128,19 @@ export type EventTimeStatus = "past" | "current" | "upcoming" | "no-time";
  *
  * Position, not the clock, decides past vs. upcoming: everything above the
  * current card reads as done even when the literal times are out of order.
- * Untimed events are never dimmed, and the current event stays current until
- * midnight, since an event has no end time to clear it.
+ * Untimed events are never dimmed. A current event stays current until the next one
+ * starts, and the day's last until midnight: `end` is not read here, so nothing clears
+ * it sooner.
  */
 export function classifyTimelineEvents(
-    events: ReadonlyArray<{ time: string; }>,
+    events: readonly Timed[],
     dayDate: string,
     now: Date = new Date(),
 ): EventTimeStatus[] | null {
     if (dayDate !== toLocalIsoDate(now)) return null;
-    const currentIdx = findCurrentEventIndex(events, now);
+    const currentIdx = findCurrentEventIndex(events, dayDate, now);
     return events.map((event, i) => {
-        if (parseEventStartMinutes(event.time) === null) return "no-time";
+        if (eventStartMinutes(event, dayDate) === null) return "no-time";
         if (currentIdx === null) return "upcoming";
         if (i === currentIdx) return "current";
         return i < currentIdx ? "past" : "upcoming";
@@ -120,22 +169,22 @@ export function formatEventMinutes(minutes: number): string {
  * not today or the day has nothing to announce.
  */
 export function getNextEventInfo(
-    events: ReadonlyArray<{ time: string; title: string; status?: "done" | "skipped"; }>,
+    events: ReadonlyArray<Timed & { title: string; status?: "done" | "skipped"; }>,
     dayDate: string,
     now: Date = new Date(),
 ): NextEventInfo | null {
     if (dayDate !== toLocalIsoDate(now)) return null;
-    const currentIdx = findCurrentEventIndex(events, now);
+    const currentIdx = findCurrentEventIndex(events, dayDate, now);
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
     for (const event of events.slice((currentIdx ?? -1) + 1)) {
         // Manually resolved events are never announced as what's next.
         if (event.status) continue;
-        const start = parseEventStartMinutes(event.time);
+        const start = eventStartMinutes(event, dayDate);
         if (start === null) continue;
         return {
             kind: "upcoming",
             title: event.title,
-            time: formatEventMinutes(start),
+            time: startClock(event, start),
             // The clamp is belt-and-braces: an event after the current one must
             // start later than now, or it would be the current one.
             minutesUntil: Math.max(0, start - nowMinutes),
@@ -148,8 +197,13 @@ export function getNextEventInfo(
     return {
         kind: "current",
         title: current.title,
-        time: formatEventMinutes(parseEventStartMinutes(current.time) ?? 0),
+        time: startClock(current, eventStartMinutes(current, dayDate) ?? 0),
     };
+}
+
+/** `start`'s own time of day, so a start on the next date reads 00:55 rather than 24:55. */
+function startClock(event: Timed, minutes: number): string {
+    return event.start?.split("T")[1] ?? formatEventMinutes(minutes);
 }
 
 export function formatNextEventLabel(info: NextEventInfo): string {
@@ -166,12 +220,12 @@ export function formatNextEventLabel(info: NextEventInfo): string {
  * yet, or every event from the current one onward is resolved.
  */
 export function findScrollTargetEventIndex(
-    events: ReadonlyArray<{ time: string; status?: "done" | "skipped"; }>,
+    events: ReadonlyArray<Timed & { status?: "done" | "skipped"; }>,
     dayDate: string,
     now: Date = new Date(),
 ): number | null {
     if (dayDate !== toLocalIsoDate(now)) return null;
-    let eventIdx = findCurrentEventIndex(events, now);
+    let eventIdx = findCurrentEventIndex(events, dayDate, now);
     while (eventIdx !== null && events[eventIdx]?.status) {
         eventIdx = eventIdx + 1 < events.length ? eventIdx + 1 : null;
     }
@@ -185,15 +239,15 @@ export function findScrollTargetEventIndex(
  * from here so they cannot disagree.
  */
 export function isOvernightStay(
-    hotel: { checkIn: string; checkOut: string; },
+    hotel: { start: string; end: string; },
     date: string,
 ): boolean {
-    return date >= hotel.checkIn && date < hotel.checkOut;
+    return date >= hotel.start.slice(0, 10) && date < hotel.end.slice(0, 10);
 }
 
 /** Is `date` this hotel's checkout day? Drives the auto-inserted 退房 node. */
-export function isCheckoutDay(hotel: { checkOut: string; }, date: string): boolean {
-    return date === hotel.checkOut;
+export function isCheckoutDay(hotel: { end: string; }, date: string): boolean {
+    return date === hotel.end.slice(0, 10);
 }
 
 /** The 報平安 message for one day. Plain text, so it pastes cleanly into LINE. */
@@ -202,15 +256,16 @@ export function buildDayReport(
         day: number;
         date: string;
         title: string;
-        timeline: ReadonlyArray<{ time: string; title: string; status?: "done" | "skipped"; }>;
+        timeline: ReadonlyArray<Timed & { title: string; status?: "done" | "skipped"; }>;
     },
-    hotels: ReadonlyArray<{ name: string; address: string; checkIn: string; checkOut: string; }>,
+    hotels: ReadonlyArray<{ title: string; address?: string; start: string; end: string; }>,
     tripName: string,
 ): string {
     const lines = [`【${tripName}】Day ${dayData.day}｜${formatDayDate(dayData.date)}｜${dayData.title}`];
     const hotel = hotels.find(h => isOvernightStay(h, dayData.date));
     if (hotel) {
-        lines.push(`今晚住宿：${hotel.name}`, `地址：${hotel.address}`);
+        lines.push(`今晚住宿：${hotel.title}`);
+        if (hotel.address) lines.push(`地址：${hotel.address}`);
     } else {
         lines.push("今晚住宿：未安排");
     }
@@ -219,7 +274,7 @@ export function buildDayReport(
         lines.push("（無安排）");
     } else {
         for (const event of dayData.timeline) {
-            const line = `・${[event.time, event.title].filter(Boolean).join(" ")}`;
+            const line = `・${[formatEventTime(event, dayData.date), event.title].filter(Boolean).join(" ")}`;
             // Check-in marks are included: the point of the report is real progress,
             // not the plan.
             lines.push(event.status === "done" ? `${line} ✓` : event.status === "skipped" ? `${line}（略過）` : line);
