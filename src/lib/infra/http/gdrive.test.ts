@@ -13,7 +13,6 @@ import {
     clearCachedAccessToken,
     clearDeadShareLink,
     clearGdriveUser,
-    deleteCloudTrip,
     downloadCloudTripYaml,
     fetchCloudTripMeta,
     fetchGoogleUserInfo,
@@ -28,6 +27,7 @@ import {
     saveGdriveUser,
     saveTripSyncMap,
     setCachedAccessToken,
+    trashCloudTrip,
     uploadAttachment,
     uploadOrUpdateCloudTrip,
 } from "./gdrive";
@@ -348,16 +348,20 @@ describe("gdrive module", () => {
             expect(yaml).toBe("trip:\n  name: 測試下載\n");
         });
 
-        it("deletes a trip file", async () => {
-            vi.stubGlobal(
-                "fetch",
-                vi.fn().mockResolvedValue({
-                    ok: true,
-                    status: 204,
-                }),
-            );
+        it("moves a trip file to the trash instead of deleting it", async () => {
+            vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200 }));
 
-            await expect(deleteCloudTrip("token", "file-123")).resolves.toBeUndefined();
+            await expect(trashCloudTrip("token", "file-123")).resolves.toBeUndefined();
+            const req = fetchCall(0);
+            expect(req.method).toBe("PATCH");
+            expect(req.url).toBe("https://www.googleapis.com/drive/v3/files/file-123");
+            expect(JSON.parse(req.body)).toEqual({ trashed: true });
+        });
+
+        it("counts a file that is already gone as trashed", async () => {
+            vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+
+            await expect(trashCloudTrip("token", "file-123")).resolves.toBeUndefined();
         });
 
         it("treats a trashed remote file as gone", async () => {

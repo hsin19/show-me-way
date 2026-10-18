@@ -28,7 +28,6 @@ import {
     clearDeadShareLink,
     clearGdriveUser,
     type CloudTripFile,
-    deleteCloudTrip,
     fetchCloudTrip,
     fetchGoogleUserInfo,
     getCachedAccessToken,
@@ -40,6 +39,7 @@ import {
     requestGoogleAccessToken,
     saveGdriveUser,
     saveTripSyncMap,
+    trashCloudTrip,
     type TripSyncMap,
     type TripSyncRecord,
     updateCloudShareLink,
@@ -759,12 +759,12 @@ class GDriveSyncState {
             },
             async () => {
                 const token = await this.getValidToken();
-                await deleteCloudTrip(token, fileId);
+                await trashCloudTrip(token, fileId);
                 // Any trip still bound to it would PATCH a file that no longer exists.
                 Object.entries(this.trips)
                     .filter(([, record]) => record.fileId === fileId)
                     .forEach(([tripId]) => this.unbindTrip(tripId));
-                showToast("已從 Google Drive 刪除行程");
+                showToast("已把行程移到 Google Drive 的垃圾桶");
                 void this.refreshFiles({ force: true });
                 return true;
             },

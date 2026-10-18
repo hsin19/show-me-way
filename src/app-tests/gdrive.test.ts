@@ -430,9 +430,10 @@ test("刪除雲端行程：確認後該列從清單消失", async () => {
     await user.click(screen.getByRole("button", { name: "刪除雲端檔案 待刪行程" }));
     await user.click(screen.getByRole("button", { name: "確定刪除" }));
 
-    await screen.findByText("已從 Google Drive 刪除行程");
+    await screen.findByText("已把行程移到 Google Drive 的垃圾桶");
     await waitFor(() => expect(row()).toBeNull());
-    expect(drive.list()).toHaveLength(0);
+    // 丟進垃圾桶而不是永久刪除：誤刪的話 30 天內還救得回來。
+    expect(drive.list()).toEqual([expect.objectContaining({ id: CLOUD_FILE_ID, trashed: true })]);
 });
 
 // 同步記錄比的是 bytes：勾了又取消，行程內容其實沒變，就不該變成「本機有改動」。

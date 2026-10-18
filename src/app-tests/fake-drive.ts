@@ -155,18 +155,16 @@ export function installFakeDrive(page: AppPage, initial: FakeFile[] = []): FakeD
 
         const fileId = url.pathname.replace("/drive/v3/files/", "");
         const file = files.get(fileId);
-        if (method === "DELETE") {
-            files.delete(fileId);
-            return new Response(null, { status: 204 });
-        }
         if (!file) return json({ error: { message: "not found" } }, 404);
         if (url.searchParams.get("alt") === "media") {
             downloads++;
             return new Response(file.content, { headers: { "Content-Type": "text/yaml" } });
         }
-        // metadata-only PATCH：分享連結的寫入不該動到內容，也不該重算 contentHash
+        // metadata-only PATCH：分享連結的寫入、丟進垃圾桶，都不該動到內容，也不該重算 contentHash
         if (method === "PATCH") {
-            mergeProps(file, (JSON.parse((await request.text()) || "{}") as { appProperties?: Record<string, string | null>; }).appProperties);
+            const body = JSON.parse((await request.text()) || "{}") as { appProperties?: Record<string, string | null>; trashed?: boolean; };
+            mergeProps(file, body.appProperties);
+            if (body.trashed) file.trashed = true;
         }
         return json(meta(file));
     });

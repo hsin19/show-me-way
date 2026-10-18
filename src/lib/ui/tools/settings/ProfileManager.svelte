@@ -284,7 +284,7 @@ async function handleDeleteCloud(fileId: string) {
                         />
                     {:else if confirmingCloudDeleteFileId === file.id}
                         <ConfirmBar
-                            message={`確定從 Google Drive 刪除「${file.name}」嗎？此動作無法復原。`}
+                            message={`確定從 Google Drive 刪除「${file.name}」嗎？檔案會移到 Drive 的垃圾桶，30 天內都能從那裡還原。`}
                             confirmLabel="確定刪除"
                             onconfirm={() => handleDeleteCloud(file.id)}
                             oncancel={() => (confirmingCloudDeleteFileId = null)}

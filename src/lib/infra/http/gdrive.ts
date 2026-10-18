@@ -743,11 +743,19 @@ export async function fetchCloudTrip(token: string, fileId: string): Promise<{ y
     return { yaml, remoteFile };
 }
 
-/** Delete a file in Google Drive */
-export async function deleteCloudTrip(token: string, fileId: string): Promise<void> {
+/**
+ * Moves a trip file to Drive's trash rather than deleting it, so a mistaken delete stays
+ * recoverable for the 30 days Drive keeps it, version history included. The trip's folder
+ * stays: it may hold files the user put there, which `drive.file` cannot even see.
+ */
+export async function trashCloudTrip(token: string, fileId: string): Promise<void> {
     const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        method: "PATCH",
+        headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ trashed: true }),
     });
 
     // 404 means someone already removed it, which is the outcome the caller wanted.
