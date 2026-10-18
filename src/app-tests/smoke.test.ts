@@ -1,15 +1,13 @@
 import {
-    addDaysIso,
-    getTodayIsoString,
-} from "$lib/domain/utils";
-import {
     screen,
     waitFor,
     within,
 } from "@testing-library/dom";
 import {
     expect,
+    onTestFinished,
     test,
+    vi,
 } from "vitest";
 import {
     checklist,
@@ -73,9 +71,11 @@ test("日程切換：各天顯示對應事件後可返回總覽", async () => {
 });
 
 test("總覽：行程進行中時標出今天，點今天卡片回到當天", async () => {
-    // FIXTURE_YAML 刻意落在 2099、永遠碰不到今天，所以這條自己以今天為中心排三天。
-    const today = getTodayIsoString();
-    const days = [-1, 0, 1].map((offset, i) => `  - date: '${addDaysIso(today, offset)}'\n    title: 第${i + 1}天區域\n    timeline:\n      - time: '09:00'\n        title: 第${i + 1}天事件\n        type: standard\n`).join("");
+    // FIXTURE_YAML 刻意落在 2099、永遠碰不到今天，所以這條把時鐘停在自己三天行程的第二天中午。
+    // 只換掉 Date：Testing Library 的等待靠真的計時器在輪詢。
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 9, 11, 12, 0) });
+    onTestFinished(() => void vi.useRealTimers());
+    const days = ["10", "11", "12"].map((dd, i) => `  - date: '2026-10-${dd}'\n    title: 第${i + 1}天區域\n    timeline:\n      - time: '09:00'\n        title: 第${i + 1}天事件\n`).join("");
     const page = createPage({ yaml: `trip:\n  name: 今天測試\n  hotels: []\ndays:\n${days}` });
     await page.goto("/");
     const { user } = page;
@@ -89,9 +89,9 @@ test("總覽：行程進行中時標出今天，點今天卡片回到當天", as
     const marked = screen.getAllByRole("button", { current: "date" }).map(button => button.textContent ?? "");
     expect(marked.filter(text => text.includes("第2天區域") && text.includes("今天"))).toHaveLength(1);
 
-    // 今天的事件 09:00 開始：此刻是「接下來」還是「進行中」看時鐘，兩種都要帶出它。
+    // 中午時 09:00 的事件已經開始。
     const todayCard = screen.getByRole("button", { name: /^今天\s*・DAY 02/ });
-    expect(todayCard.textContent).toContain("第2天事件");
+    expect(todayCard.textContent).toContain("進行中：第2天事件");
     await user.click(todayCard);
     await screen.findByRole("heading", { name: "第2天區域" });
 });

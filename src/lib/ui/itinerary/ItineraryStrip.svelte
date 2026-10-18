@@ -10,7 +10,7 @@ import type {
     DayItinerary,
     TripData,
 } from "$lib/domain/trip";
-import { toLocalIsoDate } from "$lib/domain/utils";
+import { tripDayOf } from "$lib/domain/utils";
 import type { DailyWeather } from "$lib/infra/http/weather";
 import type { ProfileInfo } from "$lib/infra/storage/profiles";
 import type { EnlargedCard } from "$lib/ui/shared/enlarge";
@@ -73,7 +73,7 @@ let {
 // Breathing room above the card an auto-scroll lands on.
 const EVENT_SCROLL_GAP = 8;
 
-let todayIso = $derived(toLocalIsoDate(clockNow));
+let todayIso = $derived(tripDayOf(clockNow));
 let todayData = $derived(days.find(d => d.date === todayIso) ?? null);
 let todayDay = $derived(todayData?.day ?? null);
 let nextEvent = $derived(todayData ? getNextEventInfo(todayData.timeline, todayData.date, clockNow) : null);

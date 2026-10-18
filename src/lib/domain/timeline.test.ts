@@ -57,6 +57,15 @@ describe("parseEventStartMinutes", () => {
     });
 });
 
+describe("classifyTimelineEvents 的一天到凌晨 4 點", () => {
+    it("凌晨 1:40 還是前一天：25:30 的事件進行中，隔天的時間軸還不算今天", () => {
+        const events = [{ time: "20:00" }, { time: "25:30" }];
+        const smallHours = new Date(2026, 5, 11, 1, 40);
+        expect(classifyTimelineEvents(events, "2026-06-10", smallHours)).toEqual(["past", "current"]);
+        expect(classifyTimelineEvents(events, "2026-06-11", smallHours)).toBeNull();
+    });
+});
+
 describe("eventStartMinutes", () => {
     it("start 有時間就用 start，跨到隔天的算過 1440", () => {
         expect(eventStartMinutes({ start: "2026-06-11T14:00", time: "下午" }, "2026-06-11")).toBe(840);
@@ -176,8 +185,8 @@ describe("classifyTimelineEvents", () => {
             .toEqual(["past", "past", "current"]);
     });
 
-    it("treats just-after-midnight as today (local time, no UTC shift)", () => {
-        expect(classifyTimelineEvents(timed("08:00"), today, new Date(2026, 5, 11, 0, 30)))
+    it("treats just after the 04:00 rollover as today (local time, no UTC shift)", () => {
+        expect(classifyTimelineEvents(timed("08:00"), today, new Date(2026, 5, 11, 4, 30)))
             .toEqual(["upcoming"]);
     });
 });
@@ -398,6 +407,12 @@ describe("getCountdownText", () => {
         start: "2026-06-11",
         departure: "2026-06-11T14:00:00+08:00",
     };
+
+    it("keeps counting through the small hours of the first date, which are still the eve", () => {
+        expect(getCountdownText(trip, new Date("2026-06-11T02:00:00+08:00"))).toBe("即將出發 12時 0分");
+        // A day 1 that opens before 04:00 has already begun then: no negative countdown.
+        expect(getCountdownText({ start: "2026-06-11", departure: "2026-06-11T02:00:00" }, new Date("2026-06-11T03:00:00"))).toBeNull();
+    });
 
     it("has nothing to count from the first day on", () => {
         // Still before the 14:00 departure: the first day is the today card's, not a countdown's.

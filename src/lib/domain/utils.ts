@@ -40,8 +40,25 @@ export function toLocalIsoDate(date: Date): string {
     return `${yyyy}-${mm}-${dd}`;
 }
 
+/**
+ * When one trip day hands over to the next. A night out that runs past midnight still
+ * belongs to the day it began, while an early bus or flight from about 04:30 belongs to
+ * the new one — a later hour would leave a 05:30 departure off today's card.
+ */
+export const DAY_ROLLOVER_HOUR = 4;
+
+/**
+ * The trip day `now` belongs to: the calendar date until `DAY_ROLLOVER_HOUR`, the day
+ * before it until then. Counted on the wall clock rather than in elapsed hours, so a
+ * daylight-saving change in the small hours does not move the boundary.
+ */
+export function tripDayOf(now: Date): string {
+    return toLocalIsoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() - DAY_ROLLOVER_HOUR, now.getMinutes()));
+}
+
+/** Today as the trip counts it, which is `tripDayOf`, not the calendar date. */
 export function getTodayIsoString(): string {
-    return toLocalIsoDate(new Date());
+    return tripDayOf(new Date());
 }
 
 /** A backup's ISO timestamp as a local "06/11(四) 14:30". */

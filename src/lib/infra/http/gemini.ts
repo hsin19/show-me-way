@@ -3,8 +3,10 @@ import {
     type TripData,
 } from "$lib/domain/trip";
 import {
+    DAY_ROLLOVER_HOUR,
     splitDayDate,
     toLocalIsoDate,
+    tripDayOf,
 } from "$lib/domain/utils";
 import { appStorage } from "$lib/infra/storage/app-storage";
 
@@ -351,7 +353,11 @@ export async function sendChatMessage(
     const { weekday } = splitDayDate(nowIso);
     const hours = String(now.getHours()).padStart(2, "0");
     const minutes = String(now.getMinutes()).padStart(2, "0");
-    const nowStr = `${nowIso} (星期${weekday}) ${hours}:${minutes}`;
+    // The real clock, plus which day "today" means in the small hours, when the trip still
+    // counts the night as the day before and the user does too.
+    const tripDay = tripDayOf(now);
+    const dayNote = tripDay === nowIso ? "" : `（凌晨 ${DAY_ROLLOVER_HOUR} 點前還算前一天：使用者說的「今天」是 ${tripDay} 的行程）`;
+    const nowStr = `${nowIso} (星期${weekday}) ${hours}:${minutes}${dayNote}`;
 
     let res: Response;
     try {

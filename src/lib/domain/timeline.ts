@@ -7,8 +7,8 @@
 import {
     daysBetweenIso,
     formatDayDate,
-    parseLocalDate,
     toLocalIsoDate,
+    tripDayOf,
 } from "./utils";
 
 /**
@@ -30,14 +30,14 @@ export interface CountdownTrip {
 
 /**
  * Time left until the trip's first event, for the overview's prep card; null from the
- * first day on. There is deliberately no "already left" case: `departure` is derived from
- * day 1's first event, which sits on `start` or past midnight into the next day, so it
- * cannot be in the past while the trip has not begun.
+ * first trip day on, and once that event has begun — which a day 1 opening before
+ * `DAY_ROLLOVER_HOUR` does while the trip day is still the eve.
  */
 export function getCountdownText(trip: CountdownTrip, now: Date = new Date()): string | null {
-    if (now >= parseLocalDate(trip.start)) return null;
+    if (tripDayOf(now) >= trip.start) return null;
 
     const diff = new Date(trip.departure).getTime() - now.getTime();
+    if (diff <= 0) return null;
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     if (days > 0) return `倒數 ${days} 天 ${hours} 小時`;
@@ -98,20 +98,28 @@ export function formatEventTime(event: Timed, dayDate?: string): string {
 }
 
 /**
- * Index of the "current" event: the last one already started at `now`'s local
- * time of day. Untimed events can never be current, and null means nothing has
- * started yet. Display (YAML) order decides — the list is not re-sorted — so with
- * out-of-order times the last started entry wins.
+ * `now` as minutes after `dayDate`'s local midnight, the scale `eventStartMinutes` uses:
+ * 01:40 the morning after reads 1540, as late as a "25:40" event.
+ */
+function minutesIntoDay(dayDate: string, now: Date): number {
+    return daysBetweenIso(dayDate, toLocalIsoDate(now)) * 24 * 60 + now.getHours() * 60 + now.getMinutes();
+}
+
+/**
+ * Index of the "current" event: the last one already started at `now`. Untimed events
+ * can never be current, and null means nothing has started yet. Display (YAML) order
+ * decides — the list is not re-sorted — so with out-of-order times the last started
+ * entry wins.
  *
- * Reads `now` as a time on `dayDate`: check `dayDate === toLocalIsoDate(now)` yourself
- * before treating the result as today's in-progress event.
+ * Measures `now` from `dayDate` whatever day it is: check `dayDate === tripDayOf(now)`
+ * yourself before treating the result as today's in-progress event.
  */
 export function findCurrentEventIndex(
     events: readonly Timed[],
     dayDate: string,
     now: Date = new Date(),
 ): number | null {
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const nowMinutes = minutesIntoDay(dayDate, now);
     let current: number | null = null;
     for (const [i, event] of events.entries()) {
         const start = eventStartMinutes(event, dayDate);
@@ -137,7 +145,7 @@ export function classifyTimelineEvents(
     dayDate: string,
     now: Date = new Date(),
 ): EventTimeStatus[] | null {
-    if (dayDate !== toLocalIsoDate(now)) return null;
+    if (dayDate !== tripDayOf(now)) return null;
     const currentIdx = findCurrentEventIndex(events, dayDate, now);
     return events.map((event, i) => {
         if (eventStartMinutes(event, dayDate) === null) return "no-time";
@@ -173,9 +181,9 @@ export function getNextEventInfo(
     dayDate: string,
     now: Date = new Date(),
 ): NextEventInfo | null {
-    if (dayDate !== toLocalIsoDate(now)) return null;
+    if (dayDate !== tripDayOf(now)) return null;
     const currentIdx = findCurrentEventIndex(events, dayDate, now);
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const nowMinutes = minutesIntoDay(dayDate, now);
     for (const event of events.slice((currentIdx ?? -1) + 1)) {
         // Manually resolved events are never announced as what's next.
         if (event.status) continue;
@@ -224,7 +232,7 @@ export function findScrollTargetEventIndex(
     dayDate: string,
     now: Date = new Date(),
 ): number | null {
-    if (dayDate !== toLocalIsoDate(now)) return null;
+    if (dayDate !== tripDayOf(now)) return null;
     let eventIdx = findCurrentEventIndex(events, dayDate, now);
     while (eventIdx !== null && events[eventIdx]?.status) {
         eventIdx = eventIdx + 1 < events.length ? eventIdx + 1 : null;

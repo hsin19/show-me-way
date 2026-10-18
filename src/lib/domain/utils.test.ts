@@ -116,6 +116,14 @@ describe("getTodayIsoString", () => {
         vi.setSystemTime(new Date(2026, 5, 11, 23, 59));
         expect(getTodayIsoString()).toBe("2026-06-11");
     });
+
+    it("counts the small hours as the day before, until 04:00", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date(2026, 5, 12, 3, 59));
+        expect(getTodayIsoString()).toBe("2026-06-11");
+        vi.setSystemTime(new Date(2026, 5, 12, 4, 0));
+        expect(getTodayIsoString()).toBe("2026-06-12");
+    });
 });
 
 describe("toLocalIsoDate", () => {

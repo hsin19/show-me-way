@@ -67,7 +67,7 @@ const alternativeSchema = v.object({
 // shared; a hotel only makes its dates required. Which of `time` and `start` an event needs
 // at least one of is checked in `normalizeTripData`, where the message can name both.
 const eventEntries = {
-    time: v.optional(text("時間 (給人看的文字)，例如 14:00 - 15:30、整天、22:00 之後。卡片上優先顯示這欄；沒填才用 start / end 組出來。")),
+    time: v.optional(text("時間 (給人看的文字)，例如 14:00 - 15:30、整天、22:00 之後。卡片上優先顯示這欄；沒填才用 start / end 組出來。凌晨 4 點前的活動算前一天的延續：寫在前一天，時間寫成 25:30 這樣，或用隔天的 start。")),
     start: v.optional(isoDateTime("開始 (選填)：YYYY-MM-DD 或 YYYY-MM-DDTHH:mm。App 判斷進行中、下一個行程都優先看它；可以跨到隔天，例如紅眼班機。")),
     end: v.optional(isoDateTime("結束 (選填)：格式同 start，要搭配 start，且不能早於 start。")),
     title: text("行程或事件標題"),

@@ -351,12 +351,31 @@ describe("sendChatMessage", () => {
         });
         vi.stubGlobal("fetch", fetchMock);
 
+        vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 5, 11, 14, 30) });
         const yaml = "trip:\n  name: '沖繩'";
         await sendChatMessage("key", "gemini-2.5-flash", [], "hi", yaml);
 
         const body = captured as { system_instruction: string; };
         expect(body.system_instruction).toContain(`=== 行程資料 (YAML) ===\n${yaml}\n=== 行程資料結束 ===`);
-        expect(body.system_instruction).toMatch(/現在時間：\d{4}-\d{2}-\d{2} \(星期[日一二三四五六]\) \d{2}:\d{2}/);
+        expect(body.system_instruction).toContain("現在時間：2026-06-11 (星期四) 14:30\n");
+        vi.useRealTimers();
+    });
+
+    it("tells the model which day 「今天」 means in the small hours, when the trip still counts the night as the day before", async () => {
+        let captured: unknown;
+        vi.stubGlobal(
+            "fetch",
+            vi.fn((_url: string, init: { body: string; }) => {
+                captured = JSON.parse(init.body);
+                return Promise.resolve({ ok: true, json: () => Promise.resolve(modelOutput("好")) });
+            }),
+        );
+        vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 5, 11, 2, 0) });
+        await sendChatMessage("key", "gemini-2.5-flash", [], "hi", "trip:\n  name: '沖繩'");
+        vi.useRealTimers();
+
+        expect((captured as { system_instruction: string; }).system_instruction)
+            .toContain("現在時間：2026-06-11 (星期四) 02:00（凌晨 4 點前還算前一天：使用者說的「今天」是 2026-06-10 的行程）");
     });
 
     it("throws the rate-limit message on 429", async () => {
