@@ -357,29 +357,25 @@ describe("buildDayReport", () => {
 describe("getCountdownText", () => {
     const trip = {
         start: "2026-06-11",
-        end: "2026-06-16",
         departure: "2026-06-11T14:00:00+08:00",
     };
 
-    it("shows in-progress during the trip", () => {
-        expect(getCountdownText(trip, new Date("2026-06-13T10:00:00+08:00")))
-            .toBe("✈️ 冒險進行中！");
-    });
-
-    it("shows completed after the trip", () => {
-        expect(getCountdownText(trip, new Date("2026-06-20T10:00:00+08:00")))
-            .toBe("🗺️ 旅程圓滿結束");
+    it("has nothing to count from the first day on", () => {
+        // Still before the 14:00 departure: the first day is the today card's, not a countdown's.
+        // No offset, so it is 08:00 on the start day in whatever zone the runner is in.
+        expect(getCountdownText(trip, new Date("2026-06-11T08:00:00"))).toBeNull();
+        expect(getCountdownText(trip, new Date("2026-06-20T10:00:00+08:00"))).toBeNull();
     });
 
     it("counts down days + hours before the trip", () => {
         // 3 days before departure
         const now = new Date("2026-06-08T14:00:00+08:00");
-        expect(getCountdownText(trip, now)).toBe("⏳ 倒數 3 天 0 小時");
+        expect(getCountdownText(trip, now)).toBe("倒數 3 天 0 小時");
     });
 
     it("shows hours + minutes when under a day to go (before the trip starts)", () => {
         const now = new Date("2026-06-10T22:00:00+08:00");
-        expect(getCountdownText(trip, now)).toBe("⏳ 即將出發 16時 0分");
+        expect(getCountdownText(trip, now)).toBe("即將出發 16時 0分");
     });
 });
 

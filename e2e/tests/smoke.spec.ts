@@ -5,15 +5,15 @@ import {
 } from "./fixtures";
 
 // The one smoke case that needs a real browser: that the 總覽 chip stays put while
-// the day chips scroll is layout (scrollLeft and client rects), which happy-dom does
-// not compute. The rest of the smoke suite — boot, fallback template, day switching,
+// the day chips scroll, and that selecting it leaves their scroll alone, is layout
+// (scrollLeft and client rects), which happy-dom does not compute. The rest of the smoke suite — boot, fallback template, day switching,
 // check-in and checklist persistence, the error screen — runs in-process in
 // src/app-tests/smoke.test.ts.
 
 // TabPager renders the 總覽 chip OUTSIDE the scroller (pinnedCount=1), so it
 // cannot scroll away however long the trip is. Asserted structurally rather than
 // by offset: the point is that it is not part of the scrolling content.
-test("日程列：總覽 chip 不隨日期捲動離開", async ({ page }) => {
+test("日程列：總覽 chip 不隨日期捲動離開，切到總覽也不把日期捲回開頭", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     // Ten days so the strip overflows well past the sticky range.
     const days = Array.from({ length: 10 }, (_, i) => i + 1)
@@ -49,4 +49,12 @@ test("日程列：總覽 chip 不隨日期捲動離開", async ({ page }) => {
     expect(pinned.scrolled).toBe(true);
     expect(pinned.insideScroller).toBe(false);
     expect(pinned.leadsRow).toBe(true);
+
+    // The config's reducedMotion makes any scroll the row would do instant, so once the
+    // overview has rendered there is nothing left in flight to wait for.
+    const scrollLeft = () => page.evaluate(() => document.querySelector<HTMLElement>("[data-pager-scroller]")!.scrollLeft);
+    const before = await scrollLeft();
+    await overview.click();
+    await expect(page.getByRole("heading", { level: 2, name: "長行程" })).toBeVisible();
+    expect(await scrollLeft()).toBe(before);
 });

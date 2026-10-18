@@ -1,4 +1,8 @@
 import {
+    addDaysIso,
+    getTodayIsoString,
+} from "$lib/domain/utils";
+import {
     screen,
     waitFor,
     within,
@@ -66,6 +70,30 @@ test("日程切換：各天顯示對應事件後可返回總覽", async () => {
 
     await user.click(screen.getByRole("button", { name: "總覽" }));
     await screen.findByRole("heading", { level: 2, name: "測試行程" });
+});
+
+test("總覽：行程進行中時標出今天，點今天卡片回到當天", async () => {
+    // FIXTURE_YAML 刻意落在 2099、永遠碰不到今天，所以這條自己以今天為中心排三天。
+    const today = getTodayIsoString();
+    const days = [-1, 0, 1].map((offset, i) => `  - date: '${addDaysIso(today, offset)}'\n    title: 第${i + 1}天區域\n    timeline:\n      - time: '09:00'\n        title: 第${i + 1}天事件\n        type: standard\n`).join("");
+    const page = createPage({ yaml: `trip:\n  name: 今天測試\n  hotels: []\ndays:\n${days}` });
+    await page.goto("/");
+    const { user } = page;
+
+    // 開啟時本來就會落在今天；先回總覽，才是要測的起點。
+    await screen.findByRole("heading", { name: "第2天區域" });
+    await user.click(screen.getByRole("button", { name: "總覽" }));
+    await screen.findByRole("heading", { level: 2, name: "今天測試" });
+
+    // 日期列的 chip 本來就有標記；這裡要的是總覽清單裡的那一列。
+    const marked = screen.getAllByRole("button", { current: "date" }).map(button => button.textContent ?? "");
+    expect(marked.filter(text => text.includes("第2天區域") && text.includes("今天"))).toHaveLength(1);
+
+    // 今天的事件 09:00 開始：此刻是「接下來」還是「進行中」看時鐘，兩種都要帶出它。
+    const todayCard = screen.getByRole("button", { name: /^今天\s*・DAY 02/ });
+    expect(todayCard.textContent).toContain("第2天事件");
+    await user.click(todayCard);
+    await screen.findByRole("heading", { name: "第2天區域" });
 });
 
 test("事件打卡：標記完成並於重新載入後保留", async () => {

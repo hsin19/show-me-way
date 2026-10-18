@@ -74,39 +74,42 @@ test("開啟時自動定位到今天：面板、今天標記與 chip 進入視�
     expect(state.inView).toBe(true);
 });
 
-// Mid-trip the overview capsule stops showing a countdown and starts showing the
-// current/next event, whose title is arbitrarily long. It must ellipse rather
-// than wrap: wrapping pushes the 切換行程 switcher onto a second row. Only
-// reachable with a real "today", hence this suite rather than the far-future smoke tests.
-test("行程進行中：總覽膠囊截斷過長的事件標題，不擠掉切換行程", async ({ page }) => {
+// Mid-trip the overview's today card carries the current/next event, whose title is
+// arbitrarily long. It must ellipse on one line rather than wrap. Only reachable with
+// a real "today", hence this suite rather than the far-future smoke tests. The
+// switcher shares the date's row, and at the iPhone width it must stay on it.
+test("行程進行中：今天卡片截斷過長的事件標題，切換行程與日期同一行", async ({ page }) => {
     const { yaml } = build("聖母百花大教堂前往領主廣場沿途散步順道逛皮件小店與中央市場");
     await stubMissingLocalItinerary(page);
     await seedItinerary(page, yaml);
     await page.goto("/");
 
-    // Today's panel is the landing spot; the hero card lives on the overview.
+    // Today's panel is the landing spot; the today card lives on the overview.
     await page.getByRole("button", { name: "總覽" }).click();
-    const capsule = page.locator("[data-countdown]");
-    await expect(capsule).toBeVisible();
-    // Guard the premise: this only tests truncation if the label really is the
-    // long event title (getNextEventInfo returning null would show a countdown).
-    await expect(capsule).toContainText("聖母百花大教堂");
+    const nextEvent = page.locator("[data-next-event]");
+    await expect(nextEvent).toBeVisible();
+    // Guard the premise: this only tests truncation if the line really is the long
+    // event title (getNextEventInfo returning null would render no line at all).
+    await expect(nextEvent).toContainText("聖母百花大教堂");
 
     const layout = await page.evaluate(() => {
-        const cap = document.querySelector("[data-countdown]") as HTMLElement;
-        const span = cap.querySelector("span") as HTMLElement;
+        const line = document.querySelector("[data-next-event]") as HTMLElement;
         const switcher = document.querySelector('button[aria-label="切換行程選單"]') as HTMLElement;
-        const capRect = cap.getBoundingClientRect();
+        const date = switcher.parentElement!.querySelector("p") as HTMLElement;
+        const panel = switcher.closest(".panel") as HTMLElement;
+        const dateRect = date.getBoundingClientRect();
         const swRect = switcher.getBoundingClientRect();
         return {
-            // Vertical overlap, not equal tops: the two pills differ slightly in
-            // height (the switcher carries icons) and `items-center` centres them.
-            sameRow: capRect.bottom > swRect.top && swRect.bottom > capRect.top,
-            truncated: span.scrollWidth > span.clientWidth,
-            singleLine: capRect.height < 40,
+            truncated: line.scrollWidth > line.clientWidth,
+            singleLine: line.getBoundingClientRect().height < 24,
+            // Vertical overlap, not equal tops: the pill is taller than the date line
+            // and `items-center` centres them.
+            sameRow: dateRect.bottom > swRect.top && swRect.bottom > dateRect.top,
+            insidePanel: swRect.right <= panel.getBoundingClientRect().right,
         };
     });
     expect(layout.truncated).toBe(true);
-    expect(layout.sameRow).toBe(true);
     expect(layout.singleLine).toBe(true);
+    expect(layout.sameRow).toBe(true);
+    expect(layout.insidePanel).toBe(true);
 });

@@ -116,14 +116,12 @@ let scroller = $state<HTMLDivElement>();
 // adjusts every scrollable ancestor, which on WebKit cancels the pager's gestures.
 $effect(() => {
     if (!scroller) return;
-    const behavior = prefersReducedMotion() ? "auto" : "smooth";
     const idx = scrollKeys.indexOf(current);
-    if (idx < 0) {
-        // A pinned chip is current: it never moves, so rewind the row instead so
-        // the first scrollable chip sits right beside it.
-        scroller.scrollTo({ left: 0, behavior });
-        return;
-    }
+    // A pinned chip never moves, so there is nothing to bring into view: the row stays
+    // where the user left it. Rewinding it lost their place — from day 17, the
+    // overview put the row back at day 1.
+    if (idx < 0) return;
+    const behavior = prefersReducedMotion() ? "auto" : "smooth";
     const el = scroller.querySelectorAll<HTMLElement>("[data-pager-chip]")[idx];
     if (!el) return;
     const chipRect = el.getBoundingClientRect();

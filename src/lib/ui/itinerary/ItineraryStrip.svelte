@@ -76,10 +76,8 @@ let todayIso = $derived(toLocalIsoDate(clockNow));
 let todayData = $derived(days.find(d => d.date === todayIso) ?? null);
 let todayDay = $derived(todayData?.day ?? null);
 let nextEvent = $derived(todayData ? getNextEventInfo(todayData.timeline, todayData.date, clockNow) : null);
-let countdownText = $derived.by(() => {
-    if (nextEvent) return formatNextEventLabel(nextEvent);
-    return getCountdownText(trip, clockNow);
-});
+let nextEventLabel = $derived(nextEvent ? formatNextEventLabel(nextEvent) : null);
+let countdownText = $derived(getCountdownText(trip, clockNow));
 
 let panelKeys = $derived([0, ...days.map(d => d.day)]);
 // The pager's chip snippet is handed a key, not a day, so the date has to be
@@ -114,6 +112,7 @@ function positionPanel(day: number, panel: HTMLElement) {
                 {trip}
                 {days}
                 {countdownText}
+                {nextEventLabel}
                 {todayIso}
                 {prepDone}
                 {prepTotal}

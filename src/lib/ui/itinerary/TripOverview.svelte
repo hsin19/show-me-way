@@ -14,11 +14,11 @@ import type { ProfileInfo } from "$lib/infra/storage/profiles";
 import type { EnlargedCard } from "$lib/ui/shared/enlarge";
 import ProfileManager from "$lib/ui/tools/settings/ProfileManager.svelte";
 import BedDouble from "@lucide/svelte/icons/bed-double";
+import CalendarCheck from "@lucide/svelte/icons/calendar-check";
 import CalendarRange from "@lucide/svelte/icons/calendar-range";
 import ChevronDown from "@lucide/svelte/icons/chevron-down";
 import ChevronRight from "@lucide/svelte/icons/chevron-right";
-import FolderKanban from "@lucide/svelte/icons/folder-kanban";
-import ListChecks from "@lucide/svelte/icons/list-checks";
+import Hourglass from "@lucide/svelte/icons/hourglass";
 import Loader2 from "@lucide/svelte/icons/loader-2";
 import Maximize2 from "@lucide/svelte/icons/maximize-2";
 import Share2 from "@lucide/svelte/icons/share-2";
@@ -28,8 +28,10 @@ import WeatherBadge from "./WeatherBadge.svelte";
 interface Props {
     trip: TripData["trip"];
     days: DayItinerary[];
-    /** Already worded by the caller — a countdown, or what is happening now. */
-    countdownText: string;
+    /** Time left until departure, already worded; null from the trip's first day on. */
+    countdownText: string | null;
+    /** Today's current or next event, already worded; null when today has nothing left to announce. */
+    nextEventLabel: string | null;
     /** Local YYYY-MM-DD; the whole panel's notion of "today" comes from here, not from the clock. */
     todayIso: string;
     prepDone: number;
@@ -56,6 +58,7 @@ let {
     trip,
     days,
     countdownText,
+    nextEventLabel,
     todayIso,
     prepDone,
     prepTotal,
@@ -81,6 +84,8 @@ function toggleSwitcher() {
 
 // A plain string compare is safe here: these are all local-time YYYY-MM-DD.
 let phase = $derived(todayIso < trip.start ? "before" : todayIso > trip.end ? "after" : "during");
+
+let todayDay = $derived(days.find(d => d.date === todayIso) ?? null);
 
 let hotelList = $derived(trip.hotels ?? []);
 let tonightHotel = $derived(hotelList.find(h => isOvernightStay(h, todayIso)) ?? null);
@@ -109,21 +114,14 @@ let langConfig = $derived(getLanguageConfig(trip.lang));
             {/if}
         </button>
     </div>
-    <p class="text-xs text-text-secondary font-medium tracking-wide mt-1.5 flex items-center gap-1.5">
-        <CalendarRange size={14} class="shrink-0" aria-hidden="true" />
-        {formatDateRange(trip.start, trip.end)}・共 {days.length} 天
-    </p>
-
-    <!-- Deliberately NOT flex-wrap: wrapping is decided from each item's full
-         content width BEFORE any shrinking, so a long capsule label would drop to
-         a second row untouched instead of ellipsing. -->
-    <div class="mt-4 flex items-center justify-between gap-2">
-        <!-- `min-w-0` is what lets the inner `truncate` work at all: without it
-             this flex item cannot shrink below its content, and a long 進行中 label
-             pushes the switcher off the row. -->
-        <div data-countdown class="inline-flex min-w-0 items-center bg-accent/12 text-accent text-xs font-bold px-3.5 py-2 rounded-full">
-            <span class="truncate">{countdownText}</span>
-        </div>
+    <div class="mt-1 flex items-center justify-between gap-2">
+        <!-- `min-w-0` lets the date shrink and wrap rather than push the switcher off
+             the row on a narrow phone; the two nowrap halves make it break after the
+             ・ instead of inside a date. -->
+        <p class="min-w-0 text-xs text-text-secondary font-medium tracking-wide flex items-center gap-1.5">
+            <CalendarRange size={14} class="shrink-0" aria-hidden="true" />
+            <span><span class="whitespace-nowrap">{formatDateRange(trip.start, trip.end)}・</span><span class="whitespace-nowrap">共 {days.length} 天</span></span>
+        </p>
 
         {#if onSwitchProfile && onCreateProfile}
             <button
@@ -133,7 +131,6 @@ let langConfig = $derived(getLanguageConfig(trip.lang));
                 aria-expanded={isSwitcherOpen}
                 aria-label="切換行程選單"
             >
-                <FolderKanban size={13} class="shrink-0 text-accent" aria-hidden="true" />
                 <span>切換行程</span>
                 <ChevronDown size={13} class="shrink-0 transition-transform duration-200 {isSwitcherOpen ? 'rotate-180 text-accent' : 'text-text-muted'}" aria-hidden="true" />
             </button>
@@ -157,35 +154,61 @@ let langConfig = $derived(getLanguageConfig(trip.lang));
     {/if}
 </div>
 
-<!-- Exactly one helper card, chosen by trip phase — what matters before, during
-     and after a trip is not the same thing. -->
-{#if phase === "before" && prepTotal > 0}
+<!-- Helper cards chosen by trip phase — what matters before, during and after a
+     trip is not the same thing. Before, the countdown and what is left to prepare;
+     mid-trip, the way back to today, which may sit far down the day list, and
+     tonight's hotel; after, nothing. -->
+{#if phase === "before" && countdownText}
     <button
         onclick={onOpenPrepare}
         class="w-full panel rounded-xl p-3.5 mb-6 flex items-center gap-3 text-left hover:bg-tint-2 transition cursor-pointer"
     >
-        <ListChecks size={16} class="shrink-0 text-accent" aria-hidden="true" />
+        <Hourglass size={16} class="shrink-0 text-accent" aria-hidden="true" />
         <span class="flex-1 min-w-0">
-            <span class="block text-[11px] font-bold text-text-muted">行前準備</span>
-            <span class="block text-sm font-bold text-text-primary">{prepDone}/{prepTotal} 項完成</span>
+            <span class="block text-sm font-bold text-text-primary">{countdownText}</span>
+            <span class="block text-[11px] font-bold text-text-muted">行前準備{prepTotal > 0 ? ` ${prepDone}/${prepTotal} 項完成` : ""}</span>
         </span>
         <ChevronRight size={16} class="text-text-muted shrink-0" aria-hidden="true" />
     </button>
-{:else if phase === "during" && tonightHotel}
-    {@const hotel = tonightHotel}
-    <div class="panel rounded-xl p-3.5 mb-6 flex items-center gap-3">
-        <BedDouble size={16} class="shrink-0 text-accent" aria-hidden="true" />
-        <span class="flex-1 min-w-0">
-            <span class="block text-[11px] font-bold text-text-muted">今晚入住</span>
-            <span class="block text-sm font-bold text-text-primary truncate">{hotel.name}</span>
-        </span>
-        <button
-            onclick={() => onEnlarge({ kind: "place", title: hotel.name, localName: hotel.localName ?? hotel.name, address: hotel.address, prompt: langConfig.driverPrompt })}
-            aria-label="放大顯示今晚飯店給司機看"
-            class="shrink-0 min-w-[44px] min-h-[44px] -my-1.5 flex items-center justify-center bg-accent/10 text-accent rounded-lg transition duration-200 hover:bg-accent/20 cursor-pointer"
-        >
-            <Maximize2 size={15} aria-hidden="true" />
-        </button>
+{:else if phase === "during" && (todayDay || tonightHotel)}
+    <div class="space-y-3 mb-6">
+        {#if todayDay}
+            {@const today = todayDay}
+            {@const date = splitDayDate(today.date)}
+            <button
+                onclick={() => onSelectDay(today.day)}
+                class="w-full panel rounded-xl p-3.5 flex items-center gap-3 text-left hover:bg-tint-2 transition cursor-pointer"
+            >
+                <CalendarCheck size={16} class="shrink-0 text-accent" aria-hidden="true" />
+                <span class="flex-1 min-w-0">
+                    <span class="block text-[11px] font-bold text-text-muted">
+                        <span class="text-must">今天</span>・DAY {String(today.day).padStart(2, "0")}・{date.mmdd}・{date.weekday}
+                    </span>
+                    <span class="block text-sm font-bold text-text-primary truncate">{today.title}</span>
+                    {#if nextEventLabel}
+                        <span data-next-event class="block text-xs font-semibold text-accent truncate mt-0.5">{nextEventLabel}</span>
+                    {/if}
+                </span>
+                <ChevronRight size={16} class="text-text-muted shrink-0" aria-hidden="true" />
+            </button>
+        {/if}
+        {#if tonightHotel}
+            {@const hotel = tonightHotel}
+            <div class="panel rounded-xl p-3.5 flex items-center gap-3">
+                <BedDouble size={16} class="shrink-0 text-accent" aria-hidden="true" />
+                <span class="flex-1 min-w-0">
+                    <span class="block text-[11px] font-bold text-text-muted">今晚入住</span>
+                    <span class="block text-sm font-bold text-text-primary truncate">{hotel.name}</span>
+                </span>
+                <button
+                    onclick={() => onEnlarge({ kind: "place", title: hotel.name, localName: hotel.localName ?? hotel.name, address: hotel.address, prompt: langConfig.driverPrompt })}
+                    aria-label="放大顯示今晚飯店給司機看"
+                    class="shrink-0 min-w-[44px] min-h-[44px] -my-1.5 flex items-center justify-center bg-accent/10 text-accent rounded-lg transition duration-200 hover:bg-accent/20 cursor-pointer"
+                >
+                    <Maximize2 size={15} aria-hidden="true" />
+                </button>
+            </div>
+        {/if}
     </div>
 {/if}
 
@@ -193,9 +216,11 @@ let langConfig = $derived(getLanguageConfig(trip.lang));
     {#each days as day (day.day)}
         {@const weather = weatherFor(day)}
         {@const date = splitDayDate(day.date)}
+        {@const isToday = day.date === todayIso}
         <button
             onclick={() => onSelectDay(day.day)}
-            class="w-full panel rounded-xl p-3.5 flex items-center gap-3 text-left hover:bg-tint-2 transition cursor-pointer"
+            aria-current={isToday ? "date" : undefined}
+            class="w-full panel rounded-xl p-3.5 flex items-center gap-3 text-left hover:bg-tint-2 transition cursor-pointer {isToday ? 'outline outline-accent/40' : ''}"
         >
             <!-- Same two lines as DayChip, so the list and the strip read as one
                  thing; keep them in step. -->
@@ -206,7 +231,12 @@ let langConfig = $derived(getLanguageConfig(trip.lang));
                 </span>
             </div>
             <div class="flex-1 min-w-0">
-                <p class="text-sm font-semibold text-text-primary truncate">{day.title}</p>
+                <div class="flex items-center gap-1.5">
+                    <p class="min-w-0 text-sm font-semibold text-text-primary truncate">{day.title}</p>
+                    {#if isToday}
+                        <span class="shrink-0 text-[10px] font-bold text-must bg-must/12 px-1.5 py-0.5 rounded-full">今天</span>
+                    {/if}
+                </div>
                 {#if weather}
                     <div class="mt-1">
                         <WeatherBadge {weather} />

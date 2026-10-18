@@ -12,31 +12,25 @@ import {
 
 export interface CountdownTrip {
     start: string; // YYYY-MM-DD
-    end: string; // YYYY-MM-DD
     /** Local date-time without an offset; derived from day 1's first event, never authored. */
     departure: string;
 }
 
 /**
- * The hero's phase label: 進行中 / 已結束, or a countdown to the trip's first event.
- * There is deliberately no "already left" case: `departure` is derived to sit on
- * `start`, so it cannot be in the past while the trip has not begun.
+ * Time left until the trip's first event, for the overview's prep card; null from the
+ * first day on. There is deliberately no "already left" case: `departure` is derived to
+ * sit on `start`, so it cannot be in the past while the trip has not begun.
  */
-export function getCountdownText(trip: CountdownTrip, now: Date = new Date()): string {
-    const departureDate = new Date(trip.departure);
-    const startDate = parseLocalDate(trip.start);
-    const endDate = new Date(trip.end + "T23:59:59");
+export function getCountdownText(trip: CountdownTrip, now: Date = new Date()): string | null {
+    if (now >= parseLocalDate(trip.start)) return null;
 
-    if (now >= startDate && now <= endDate) return "✈️ 冒險進行中！";
-    if (now > endDate) return "🗺️ 旅程圓滿結束";
-
-    const diff = departureDate.getTime() - now.getTime();
+    const diff = new Date(trip.departure).getTime() - now.getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    if (days > 0) return `⏳ 倒數 ${days} 天 ${hours} 小時`;
+    if (days > 0) return `倒數 ${days} 天 ${hours} 小時`;
 
     const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    return `⏳ 即將出發 ${hours}時 ${mins}分`;
+    return `即將出發 ${hours}時 ${mins}分`;
 }
 
 /**
@@ -121,10 +115,9 @@ export function formatEventMinutes(minutes: number): string {
 }
 
 /**
- * The event to feature in the header capsule: the next unresolved one, or the
- * one in progress when nothing further is scheduled. Null when `dayDate` is not
- * today or the day has nothing to announce — callers fall back to
- * `getCountdownText`.
+ * The event to feature on the overview's today card: the next unresolved one, or
+ * the one in progress when nothing further is scheduled. Null when `dayDate` is
+ * not today or the day has nothing to announce.
  */
 export function getNextEventInfo(
     events: ReadonlyArray<{ time: string; title: string; status?: "done" | "skipped"; }>,
@@ -169,7 +162,7 @@ export function formatNextEventLabel(info: NextEventInfo): string {
  * The event a freshly-opened day panel should auto-scroll to: the current one,
  * skipped forward past anything already resolved (done/skipped) rather than
  * opening on a struck-through card — the same rule `getNextEventInfo` follows
- * for the header capsule. Null when `dayDate` is not today, nothing has started
+ * for the today card. Null when `dayDate` is not today, nothing has started
  * yet, or every event from the current one onward is resolved.
  */
 export function findScrollTargetEventIndex(
