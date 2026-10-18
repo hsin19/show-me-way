@@ -522,7 +522,7 @@ test("背景檢查：token 過期時提示重新連線，連上後才說雲端�
     await screen.findByText("雲端有這趟行程的新版本");
 });
 
-test("背景檢查：關掉過期提示後回到前景不再問，重新開啟才又問", async () => {
+test("背景檢查：過期提示一天只問一次，回到前景或重新開啟都不再問，隔天才又問", async () => {
     const page = createPage();
     installFakeDrive(page, [CLOUD_COPY]);
     seedConnected({ expiredToken: true, record: IN_SYNC });
@@ -533,15 +533,23 @@ test("背景檢查：關掉過期提示後回到前景不再問，重新開啟�
     await page.user.click(await screen.findByRole("button", { name: "關閉通知" }));
     await waitFor(() => expect(notice()).toBeNull());
 
-    // 從別的 app 切回來：背景檢查照跑，但提示還在冷卻中。等這一輪清單失敗的 warn —— 提示在它
+    // 從別的 app 切回來：背景檢查照跑，但今天已經問過。等這一輪清單失敗的 warn —— 提示在它
     // 之後才決定，waitForConsole 也要等 warn 之後的那一輪跑完才回來 —— 然後只當下判斷一次：
     // 會重試的斷言可能等到一則又跳出來的提示自己到期才通過。
-    const recheck = page.waitForConsole("Refresh cloud files failed");
+    let recheck = page.waitForConsole("Refresh cloud files failed");
     page.setVisibility("visible");
     await recheck;
     expect(notice()).toBeNull();
 
-    // 冷卻只存在記憶體：重新開啟就當沒這回事。
+    // iOS 從 Maps 回來常是冷啟動：重新開啟也算同一天。
+    recheck = page.waitForConsole("Refresh cloud files failed");
+    await page.reload();
+    await recheck;
+    expect(notice()).toBeNull();
+
+    // 只換掉 Date：計時器照常走，toast 與背景檢查才不會跟著停下來。
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 24 * 3600_000 });
+    onTestFinished(() => void vi.useRealTimers());
     await page.reload();
     await screen.findByText(EXPIRED_NOTICE);
 });

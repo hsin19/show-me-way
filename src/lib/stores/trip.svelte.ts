@@ -25,6 +25,7 @@ import {
     validateYaml,
 } from "$lib/domain/trip";
 import {
+    getTodayIsoString,
     insertAtClamped,
     yamlFingerprint,
 } from "$lib/domain/utils";
@@ -88,9 +89,11 @@ const PUBLISH_PROMPT_KEY = "publish-pending";
 // The inbound half, kept separate so the two notices replace themselves and not each other.
 const CLOUD_UPDATE_PROMPT_KEY = "cloud-update";
 const SHARED_UPDATE_PROMPT_KEY = "shared-update";
-// A declined reconnect keeps quiet for about half a travel day rather than on every return
-// from Maps. In memory on purpose: a cold start is a fresh session and may ask again.
-const RECONNECT_PROMPT_SNOOZE_MS = 6 * 60 * 60_000;
+// The local date the expired-login notice last showed. Kept in storage, not memory: an
+// installed iOS PWA often comes back from Maps as a cold start, and a snooze held in memory
+// asked again on every one of them. A calendar day rather than a span, so it is the first
+// open of each travel day that asks, in whatever time zone the phone is in.
+const RECONNECT_PROMPT_SHOWN_KEY = "reconnect_prompt_shown";
 // Re-reading a received link means downloading and decrypting the whole trip — hop exposes
 // no cheap "has this changed" — so it is worth one check per visit, not one per tab switch.
 const SHARED_CHECK_TTL_MS = 10 * 60_000;
@@ -157,6 +160,23 @@ function askAboutCloudFile(question: PlaceQuestion): boolean {
     }
 }
 
+function reconnectPromptShownToday(): boolean {
+    try {
+        return appStorage.get(RECONNECT_PROMPT_SHOWN_KEY) === getTodayIsoString();
+    } catch {
+        return false;
+    }
+}
+
+function stampReconnectPrompt(day: string | null): void {
+    try {
+        if (day === null) appStorage.remove(RECONNECT_PROMPT_SHOWN_KEY);
+        else appStorage.set(RECONNECT_PROMPT_SHOWN_KEY, day);
+    } catch {
+        // Only costs the once-a-day limit; the notice itself still works.
+    }
+}
+
 /** A placement, or storage refused a write — no trip lost, though the active slot may have moved, so reload either way. */
 type PlaceOutcome = Placement | { kind: "failed"; };
 
@@ -188,8 +208,6 @@ export class TripStore {
     private lastSharedCheckAt = 0;
     /** Set by dismissing the prompt, cleared by the next foreground or explicit save. */
     private publishPromptDeclined = false;
-    /** Until when the expired-login notice stays quiet, set by letting it go. */
-    private reconnectPromptSnoozedUntil = 0;
 
     prepDone = $derived(this.data ? [...this.data.todo, ...this.data.packing].filter(i => i.checked).length : 0);
     prepTotal = $derived(this.data ? this.data.todo.length + this.data.packing.length : 0);
@@ -539,16 +557,16 @@ export class TripStore {
      * and a newer cloud copy would go unnoticed; the tap on this notice is the user gesture
      * a popup needs. Only for a trip bound to Drive — an unbound one has nothing to check.
      *
-     * Letting it go — the ✕ or the expiry, as with the install prompt — snoozes it for
-     * `RECONNECT_PROMPT_SNOOZE_MS`; a token found valid ends the snooze, so the next expiry
-     * is announced again.
+     * Shown at most once a day. The day is stamped when it shows, not when it is let go: an
+     * app killed on the way out fires neither the ✕ nor the expiry. A token found valid
+     * clears the stamp, so the expiry after a reconnect is announced again.
      */
     private promptCloudReconnect(openTripManagement: () => void): boolean {
         if (!gdriveSync.needsReconnect()) {
-            this.reconnectPromptSnoozedUntil = 0;
+            stampReconnectPrompt(null);
             return false;
         }
-        if (!this.data || !navigator.onLine || Date.now() < this.reconnectPromptSnoozedUntil) return false;
+        if (!this.data || !navigator.onLine || reconnectPromptShownToday()) return false;
         const profileId = ensureActiveProfileId();
         if (!gdriveSync.cloudFileId(profileId)) return false;
         showToast({
@@ -556,11 +574,9 @@ export class TripStore {
             actionLabel: "重新連線",
             onAction: () => void this.reconnectAndCheck(openTripManagement),
             showDismiss: true,
-            onDismiss: () => {
-                this.reconnectPromptSnoozedUntil = Date.now() + RECONNECT_PROMPT_SNOOZE_MS;
-            },
             dedupeKey: CLOUD_UPDATE_PROMPT_KEY,
         });
+        stampReconnectPrompt(getTodayIsoString());
         return true;
     }
 
