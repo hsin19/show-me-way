@@ -199,7 +199,7 @@ describe("listGeminiModels", () => {
                 })
             ),
         );
-        await expect(listGeminiModels("key")).rejects.toThrow("Gemini 服務發生錯誤（503），請稍後再試。\n詳細資訊：gemini-3.5-flash is currently experiencing high demand");
+        await expect(listGeminiModels("key")).rejects.toThrow("這個模型現在太忙（Google 那邊暫時滿載，跟你的額度無關），請稍後再試，或換一個模型。\n詳細資訊：gemini-3.5-flash is currently experiencing high demand");
     });
 
     it("caches the models promise in memory per API key and reuses it on subsequent calls", async () => {
@@ -261,8 +261,10 @@ describe("sendChatMessage", () => {
         return { steps: [{ type: "model_output", content: texts.map(t => ({ type: "text", text: t })) }] };
     }
 
-    function functionCall(yaml: string, summary = "改好了") {
-        return { steps: [{ type: "function_call", id: "c1", name: "update_itinerary", arguments: { yaml, summary } }] };
+    const ADD_TODO = { op: "add_item", list: "todo", text: "換日幣" };
+
+    function functionCall(...edits: unknown[]) {
+        return { steps: [{ type: "function_call", id: "c1", name: "edit_itinerary", arguments: { edits } }] };
     }
 
     it("joins text from the model_output step on success", async () => {
@@ -271,22 +273,31 @@ describe("sendChatMessage", () => {
 
         const turn = await sendChatMessage("key", "gemini-2.5-flash", [], "第二天去哪？", "trip: {}");
         expect(turn.text).toBe("第二天去明洞。");
-        expect(turn.edit).toBeNull();
+        expect(turn.edits).toBeNull();
         expect(fetchMock).toHaveBeenCalledOnce();
     });
 
-    it("returns a proposed edit when the model calls update_itinerary", async () => {
-        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(functionCall("trip: {}", "加了咖啡廳")) })));
+    it("returns the proposed edits, in the app's own names, when the model calls edit_itinerary", async () => {
+        const move = { op: "move_event", date: "2026-10-05", title: "咖啡廳", to_date: "2026-10-06", after: "早餐", yaml: "time: '10:00'" };
+        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(functionCall(ADD_TODO, move)) })));
         const turn = await sendChatMessage("key", "gemini-2.5-flash", [], "加咖啡廳", buildContext());
-        expect(turn.edit).toEqual({ yaml: "trip: {}", summary: "加了咖啡廳" });
+        expect(turn.edits).toEqual([
+            { op: "add_item", list: "todo", text: "換日幣", date: undefined, title: undefined, toDate: undefined, after: undefined, yaml: undefined },
+            { op: "move_event", date: "2026-10-05", title: "咖啡廳", toDate: "2026-10-06", after: "早餐", yaml: "time: '10:00'", list: undefined, text: undefined },
+        ]);
         expect(turn.text).toBe("");
     });
 
-    it("parses function_call arguments given as a JSON string", async () => {
-        const payload = { steps: [{ type: "function_call", name: "update_itinerary", arguments: JSON.stringify({ yaml: "trip: {}", summary: "x" }) }] };
+    it("parses function_call arguments given as a JSON string, and joins edits split over several calls", async () => {
+        const payload = {
+            steps: [
+                { type: "function_call", name: "edit_itinerary", arguments: JSON.stringify({ edits: [ADD_TODO] }) },
+                { type: "function_call", name: "edit_itinerary", arguments: { edits: [{ op: "remove_item", list: "packing", text: "雨傘" }] } },
+            ],
+        };
         vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(payload) })));
         const turn = await sendChatMessage("key", "gemini-2.5-flash", [], "hi", buildContext());
-        expect(turn.edit?.yaml).toBe("trip: {}");
+        expect(turn.edits?.map(edit => edit.op)).toEqual(["add_item", "remove_item"]);
     });
 
     it("posts to the Interactions endpoint with the model, key header, and edit tool, statelessly", async () => {
@@ -309,8 +320,8 @@ describe("sendChatMessage", () => {
         };
         expect(body.model).toBe("gemini-2.5-pro");
         expect(body.store).toBe(false);
-        expect(body.tools[0]?.name).toBe("update_itinerary");
-        expect(body.tools[0]?.parameters.required).toContain("yaml");
+        expect(body.tools[0]?.name).toBe("edit_itinerary");
+        expect(body.tools[0]?.parameters.required).toContain("edits");
     });
 
     it("replays prior history as input steps and appends the new user turn", async () => {
@@ -343,7 +354,7 @@ describe("sendChatMessage", () => {
         await expect(sendChatMessage("key", "gemini-2.5-flash", [], "hi", buildContext())).rejects.toThrow("無法連線");
     });
 
-    it("embeds the itinerary YAML between its markers and the current time in the posted system instruction", async () => {
+    it("embeds the itinerary YAML between its markers, with the current time after it so the rest stays a cacheable prefix", async () => {
         let captured: unknown;
         const fetchMock = vi.fn((_url: string, init: { body: string; }) => {
             captured = JSON.parse(init.body);
@@ -356,8 +367,8 @@ describe("sendChatMessage", () => {
         await sendChatMessage("key", "gemini-2.5-flash", [], "hi", yaml);
 
         const body = captured as { system_instruction: string; };
-        expect(body.system_instruction).toContain(`=== 行程資料 (YAML) ===\n${yaml}\n=== 行程資料結束 ===`);
-        expect(body.system_instruction).toContain("現在時間：2026-06-11 (星期四) 14:30\n");
+        expect(body.system_instruction).toContain(`=== 行程資料 (YAML) ===\n${yaml}\n=== 行程資料結束 ===\n現在時間：2026-06-11 (星期四) 14:30`);
+        expect(body.system_instruction.endsWith("現在時間：2026-06-11 (星期四) 14:30")).toBe(true);
         vi.useRealTimers();
     });
 
@@ -378,32 +389,56 @@ describe("sendChatMessage", () => {
             .toContain("現在時間：2026-06-11 (星期四) 02:00（凌晨 4 點前還算前一天：使用者說的「今天」是 2026-06-10 的行程）");
     });
 
-    it("throws the rate-limit message on 429", async () => {
-        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: false, status: 429, json: () => Promise.resolve({}) })));
+    it("throws the rate-limit message on 429, without retrying a quota that is spent", async () => {
+        const fetchMock = vi.fn(() => Promise.resolve({ ok: false, status: 429, json: () => Promise.resolve({}) }));
+        vi.stubGlobal("fetch", fetchMock);
         await expect(sendChatMessage("key", "gemini-2.5-flash", [], "hi", buildContext())).rejects.toThrow("已達 Gemini 使用上限，請稍後再試。");
+        expect(fetchMock).toHaveBeenCalledOnce();
+    });
+
+    it("waits out a busy model and sends again before giving up", async () => {
+        vi.useFakeTimers();
+        const busy = { ok: false, status: 503, json: () => Promise.resolve({ error: { message: "gemini-3.6-flash is currently experiencing high demand." } }) };
+        const fetchMock = vi.fn()
+            .mockResolvedValueOnce(busy)
+            .mockResolvedValueOnce(busy)
+            .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(modelOutput("好")) });
+        vi.stubGlobal("fetch", fetchMock);
+
+        const turn = sendChatMessage("key", "gemini-3.6-flash", [], "hi", buildContext());
+        await vi.runAllTimersAsync();
+        expect((await turn).text).toBe("好");
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+
+        fetchMock.mockReset().mockResolvedValue(busy);
+        const gaveUp = expect(sendChatMessage("key", "gemini-3.6-flash", [], "hi", buildContext())).rejects.toThrow("這個模型現在太忙（Google 那邊暫時滿載，跟你的額度無關）");
+        await vi.runAllTimersAsync();
+        await gaveUp;
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+        vi.useRealTimers();
     });
 
     it("returns both the reply text and the proposed edit on a mixed turn", async () => {
         const payload = {
             steps: [
                 { type: "model_output", content: [{ type: "text", text: "幫你加好了。" }] },
-                { type: "function_call", id: "c1", name: "update_itinerary", arguments: { yaml: "trip: {}", summary: "加了景點" } },
+                { type: "function_call", id: "c1", name: "edit_itinerary", arguments: { edits: [ADD_TODO] } },
             ],
         };
         vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(payload) })));
 
         const turn = await sendChatMessage("key", "gemini-2.5-flash", [], "加景點", buildContext());
         expect(turn.text).toBe("幫你加好了。");
-        expect(turn.edit).toEqual({ yaml: "trip: {}", summary: "加了景點" });
+        expect(turn.edits?.[0]?.op).toBe("add_item");
     });
 
-    it("throws when update_itinerary lacks a usable yaml and there is no text", async () => {
-        const blankYaml = { steps: [{ type: "function_call", name: "update_itinerary", arguments: { yaml: "   ", summary: "x" } }] };
-        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(blankYaml) })));
+    it("throws when edit_itinerary carries no usable edit and there is no text", async () => {
+        const noOp = functionCall({ list: "todo", text: "換日幣" });
+        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(noOp) })));
         await expect(sendChatMessage("key", "gemini-2.5-flash", [], "hi", buildContext())).rejects.toThrow("沒有回覆");
 
-        const missingYaml = { steps: [{ type: "function_call", name: "update_itinerary", arguments: { summary: "x" } }] };
-        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(missingYaml) })));
+        const missingEdits = { steps: [{ type: "function_call", name: "edit_itinerary", arguments: {} }] };
+        vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(missingEdits) })));
         await expect(sendChatMessage("key", "gemini-2.5-flash", [], "hi", buildContext())).rejects.toThrow("沒有回覆");
     });
 });

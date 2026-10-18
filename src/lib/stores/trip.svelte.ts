@@ -360,13 +360,10 @@ export class TripStore {
     }
 
     /**
-     * Land the whole-document YAML the AI produced. Assigns `this.data` in place rather than
-     * through `load()`, which would unmount the AI tab and lose its conversation. Because the
-     * model re-authors the entire file and `normalizeTripData` defaults `todo`/`packing` to
-     * `[]`, a section it forgets to echo back validates clean and is wiped — a new top-level
-     * section has to be named in `buildSystemInstruction`'s edit rules, not just added to
-     * `TripData`. Also the one path that regenerates every `_id` without remounting, so
-     * anything keyed by `_id` goes stale in place.
+     * Land the trip the AI's edits produced (`applyItineraryEdits`, run on the trip as it
+     * stood). Assigns `this.data` in place rather than through `load()`, which would unmount
+     * the AI tab and lose its conversation. Also the one path that regenerates every `_id`
+     * without remounting, so anything keyed by `_id` goes stale in place.
      */
     applyAiEdit(yaml: string): boolean {
         let parsed: TripData;

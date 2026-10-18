@@ -1,4 +1,8 @@
 import {
+    EDIT_OPS,
+    type ItineraryEdit,
+} from "$lib/domain/itinerary-edits";
+import {
     serializeToYaml,
     type TripData,
 } from "$lib/domain/trip";
@@ -92,16 +96,15 @@ export function buildItineraryContext(tripData: TripData): string {
 function buildSystemInstruction(itineraryYaml: string, currentDateTime: string): string {
     return [
         "你是「ShowMeWay」旅遊行程 App 的 AI 助手。請依據以下使用者的行程資料（YAML 格式）協助查詢與編輯行程。",
-        `現在時間：${currentDateTime}`,
         "【回答規則】",
         "1. 以使用者提問所用的語言回答；無法判斷時使用繁體中文（台灣用語）。",
         "2. 查詢類問題只根據行程資料作答；若資料中沒有相關內容，請如實說明找不到，不要編造。",
         "3. 回答簡潔、口語、重點明確，適合在手機上閱讀。",
         "4. 提到日期或時間時，沿用行程資料中的格式。",
         "【編輯規則】",
-        "5. 當使用者要求新增、修改或刪除行程內容（例如加景點、改時間、換飯店、加待辦或打包項目）時，呼叫 update_itinerary 工具。",
-        "6. 呼叫時 yaml 參數要傳入「完整」的更新後行程（沿用原本所有欄位與結構，只改動需要變動的部分，其餘原封不動保留，不可省略）；summary 參數用與回答相同的語言一兩句話說明這次的變更。",
-        "7. 僅在確實要修改行程時才呼叫 update_itinerary；單純回答問題時不要呼叫，直接用文字回覆即可。",
+        "5. 當使用者要求新增、修改、刪除或搬移行程內容（例如加景點、改時間、換飯店、加待辦或打包項目）時，呼叫 edit_itinerary 工具：edits 依序列出每一項修改，只描述要改的地方，不要重寫整份行程；一次需求要改好幾處，就放在同一次呼叫裡。呼叫的同時用一兩句話說明這次的變更。",
+        "6. 指定要改的對象：事件用 date（它目前所在那天的日期）加 title（目前的標題）；當天資訊用 date；住宿用 title（同名時再加 date＝入住日）；待辦或打包項目用 list（todo 或 packing）加 text（目前的文字）。title 與 text 照抄原文，太長時只寫開頭一段、足以分辨是哪一個即可。新增或搬移事件可用 after 指定排在哪個事件之後，不給就依時間排。",
+        "7. 僅在確實要修改行程時才呼叫 edit_itinerary；單純回答問題時不要呼叫，直接用文字回覆即可。",
         // Without rule 8 the model writes bare URLs, which markdown.ts renders as
         // literal text rather than links. The field list is hand-kept: it must name
         // exactly the fields RichText renders, and nothing checks that it does.
@@ -111,57 +114,71 @@ function buildSystemInstruction(itineraryYaml: string, currentDateTime: string):
         "9. 在支援 Markdown 的欄位裡，尺寸與乘號請用 × 或反斜線跳脫（56×36×23 或 56\\*36\\*23），不要寫成 56*36*23，否則會被讀成斜體。",
         // Without rule 10 the model emits `desc: [官網](https://…)`, which js-yaml
         // reads as a flow sequence, or `desc: **提早**到`, which it reads as an
-        // alias — either way the whole edit fails validateYaml.
-        "10. 值的開頭若是 [ 或 *，整個值一定要用單引號包起來（例如 desc: '**提早兩小時**到機場'、text: '[申請入口](https://…) 記得先辦'），否則 YAML 會解析失敗、整次修改都套用不了。",
-        // Appended rather than filed with the edit rules above so rules 8-10, which the
-        // docs and comments refer to by number, keep their numbers. applyAiEdit restores
-        // trip.id regardless — this only saves the model from inventing one.
-        "11. trip.id 是 App 自動產生的行程識別碼，請原封不動照抄，不要修改、刪除或自行產生。",
+        // alias — either way the whole edit fails to parse.
+        "10. yaml 參數裡，值的開頭若是 [ 或 *，整個值一定要用單引號包起來（例如 desc: '**提早兩小時**到機場'、text: '[申請入口](https://…) 記得先辦'），否則 YAML 會解析失敗、整次修改都套用不了。",
+        // After the Markdown rules rather than filed with the edit rules, so rules 8-10,
+        // which the docs and comments refer to by number, keep their numbers.
+        "11. yaml 參數的寫法：update_ 開頭的修改只寫要改的欄位，值設為 null 代表刪除該欄位，bullets、links、stops 這類清單欄位要給完整的新清單；add_ 開頭的修改寫出完整的新項目。",
         // A fileId names a file already in the owner's Drive; one the model invents is a dead chip.
-        "12. attachments 的 fileId 指向雲端上已存在的檔案，請原封不動照抄，不要修改或自行產生；搬動事件時附件跟著一起搬。",
+        "12. attachments 的 fileId 指向雲端上已存在的檔案，不可自行產生；事件要換到別天請用 move_event，附件會跟著走。",
+        // The two check-in fields are written only once set — an unchecked item has no
+        // `checked` at all — so without this the model cannot see that they exist.
+        "13. 勾選待辦或打包項目：update_item，yaml 寫 checked: true（取消勾選寫 checked: false）。事件打卡：update_event，yaml 寫 status: done（已完成）或 status: skipped（略過），取消寫 status: null。yaml 裡只能用行程資料裡出現的欄位名稱，不要自創欄位。",
         "",
         "=== 行程資料 (YAML) ===",
         itineraryYaml,
         "=== 行程資料結束 ===",
+        // Last, because it changes every minute: Gemini's implicit cache only matches an
+        // identical prefix, and anything above this line — the rules and the whole trip —
+        // stays one from turn to turn.
+        `現在時間：${currentDateTime}`,
     ].join("\n");
 }
 
-// A tool call rather than a YAML block in prose, so nothing has to be scraped out
-// of the reply. Every call is intercepted client-side, validated and confirmed —
-// see ChatPanel — so the model never edits the trip on its own.
-const UPDATE_ITINERARY_TOOL_NAME = "update_itinerary";
+// A tool call rather than a YAML block in prose, so nothing has to be scraped out of the
+// reply, and targeted edits rather than the whole document, so the reply stays short —
+// see `itinerary-edits.ts`. Every call is intercepted client-side, applied, validated
+// and confirmed — see ChatPanel — so the model never edits the trip on its own.
+const EDIT_ITINERARY_TOOL_NAME = "edit_itinerary";
 
-const UPDATE_ITINERARY_TOOL = {
+const EDIT_ITINERARY_TOOL = {
     type: "function",
-    name: UPDATE_ITINERARY_TOOL_NAME,
-    description: "當使用者要求新增、修改或刪除行程內容（景點、時間、飯店、待辦、打包等）時呼叫，傳入更新後的完整行程 YAML。單純回答問題時不要呼叫。",
+    name: EDIT_ITINERARY_TOOL_NAME,
+    description: "當使用者要求新增、修改、刪除或搬移行程內容（景點、時間、飯店、待辦、打包等）時呼叫，edits 依序列出要做的修改，App 會依序套用並請使用者確認。單純回答問題時不要呼叫。",
     parameters: {
         type: "object",
         properties: {
-            yaml: {
-                type: "string",
-                description: "完整的更新後行程 YAML，沿用原本所有欄位與結構，只改動需要變動的部分，其餘原封不動保留。",
-            },
-            summary: {
-                type: "string",
-                description: "用繁體中文一兩句話說明這次做了哪些變更。",
+            edits: {
+                type: "array",
+                items: {
+                    type: "object",
+                    properties: {
+                        op: {
+                            type: "string",
+                            enum: EDIT_OPS,
+                            description: "update_event / add_event / remove_event / move_event：事件；update_day / add_day / remove_day：一整天；update_hotel / add_hotel / remove_hotel：住宿；update_trip：行程名稱、城市等；add_item / update_item / remove_item：待辦或打包清單。",
+                        },
+                        date: { type: "string", description: "事件目前所在那天、或要改的那天的日期（YYYY-MM-DD）；住宿同名時填入住日。" },
+                        title: { type: "string", description: "事件或住宿目前的完整標題，一字不差。" },
+                        list: { type: "string", enum: ["todo", "packing"], description: "清單項目所在的清單。" },
+                        text: { type: "string", description: "清單項目目前的完整文字，一字不差。" },
+                        to_date: { type: "string", description: "move_event：要搬到哪天（YYYY-MM-DD）。" },
+                        after: { type: "string", description: "add_event / move_event：排在哪個事件之後（它目前的完整標題）；不給就依時間排。" },
+                        yaml: { type: "string", description: "YAML 格式：add_ 開頭的修改寫完整的新項目；update_ 開頭的修改只寫要改的欄位（null 代表刪除）。" },
+                    },
+                    required: ["op"],
+                },
             },
         },
-        required: ["yaml", "summary"],
+        required: ["edits"],
     },
 } as const;
-
-interface ProposedEdit {
-    /** The complete updated itinerary, NOT yet validated — that is the caller's job. */
-    yaml: string;
-    /** zh-TW one-liner describing the change, for the chat bubble. */
-    summary: string;
-}
 
 export interface ChatTurn {
     /** Empty when the model only called the edit tool. */
     text: string;
-    edit: ProposedEdit | null;
+    /** The edits the model proposed, NOT yet applied or validated — that is the caller's job. Null when it proposed none. */
+    edits: ItineraryEdit[] | null;
 }
 
 interface InteractionStep {
@@ -174,7 +191,7 @@ interface InteractionStep {
 // An Interactions response is a list of execution steps — thoughts, tool calls,
 // model output — of which only the last two kinds interest us.
 function extractTurn(payload: unknown): ChatTurn {
-    const empty: ChatTurn = { text: "", edit: null };
+    const empty: ChatTurn = { text: "", edits: null };
     if (typeof payload !== "object" || payload === null) return empty;
     const steps = (payload as { steps?: unknown; }).steps;
     if (!Array.isArray(steps)) return empty;
@@ -185,26 +202,42 @@ function extractTurn(payload: unknown): ChatTurn {
         .map(c => (c.type === "text" && typeof c.text === "string" ? c.text : ""))
         .join("")
         .trim();
-    const call = typed.find(s => s.type === "function_call" && s.name === UPDATE_ITINERARY_TOOL_NAME);
-    return { text, edit: call ? parseEditArgs(call.arguments) : null };
+    // A model may split one request over several calls; they apply in the order sent.
+    const edits = typed
+        .filter(s => s.type === "function_call" && s.name === EDIT_ITINERARY_TOOL_NAME)
+        .flatMap(s => parseEditArgs(s.arguments));
+    return { text, edits: edits.length > 0 ? edits : null };
+}
+
+function optionalString(value: unknown): string | undefined {
+    return typeof value === "string" ? value : undefined;
 }
 
 // Arguments normally arrive as an object; the JSON-string form is tolerated
 // because the API has been seen to send both.
-function parseEditArgs(args: unknown): ProposedEdit | null {
+function parseEditArgs(args: unknown): ItineraryEdit[] {
     let obj: unknown = args;
     if (typeof obj === "string") {
         try {
             obj = JSON.parse(obj);
         } catch {
-            return null;
+            return [];
         }
     }
-    if (typeof obj !== "object" || obj === null) return null;
-    const yaml = (obj as { yaml?: unknown; }).yaml;
-    const summary = (obj as { summary?: unknown; }).summary;
-    if (typeof yaml !== "string" || !yaml.trim()) return null;
-    return { yaml, summary: typeof summary === "string" ? summary : "" };
+    const edits = (obj as { edits?: unknown; } | null)?.edits;
+    if (!Array.isArray(edits)) return [];
+    return edits
+        .filter((edit): edit is Record<string, unknown> => !!edit && typeof edit === "object" && typeof (edit as { op?: unknown; }).op === "string")
+        .map(edit => ({
+            op: edit.op as string,
+            date: optionalString(edit.date),
+            title: optionalString(edit.title),
+            list: optionalString(edit.list),
+            text: optionalString(edit.text),
+            toDate: optionalString(edit.to_date),
+            after: optionalString(edit.after),
+            yaml: edit.yaml,
+        }));
 }
 
 async function handleErrorResponse(res: Response): Promise<never> {
@@ -226,6 +259,8 @@ async function handleErrorResponse(res: Response): Promise<never> {
         ? "API 金鑰無效或權限不足，請確認金鑰是否正確。"
         : (status === 429)
         ? "已達 Gemini 使用上限，請稍後再試。"
+        : (status === 503)
+        ? "這個模型現在太忙（Google 那邊暫時滿載，跟你的額度無關），請稍後再試，或換一個模型。"
         : `Gemini 服務發生錯誤（${status}），請稍後再試。`;
 
     const combined = detailMsg ? `${userMsg}\n詳細資訊：${detailMsg}` : userMsg;
@@ -328,6 +363,15 @@ export function pickDefaultModel(models: GeminiModel[]): string | null {
     return (models.find(m => m.id.startsWith("gemini-")) ?? models[0])?.id ?? null;
 }
 
+// Google sheds load on a busy model with a 503 that usually clears within seconds. Waited
+// out here so the user does not have to tap 重試 for what a moment's pause fixes; nothing
+// is lost by sending again, since an edit only ever lands on the user's own tap.
+const BUSY_RETRY_DELAYS_MS = [2000, 5000];
+
+function isBusy(status: number): boolean {
+    return status === 500 || status === 502 || status === 503 || status === 504;
+}
+
 function toInputSteps(history: ChatMessage[], userText: string) {
     const steps = history.map(m => ({
         type: m.role === "user" ? "user_input" : "model_output",
@@ -361,24 +405,31 @@ export async function sendChatMessage(
     const dayNote = tripDay === nowIso ? "" : `（凌晨 ${DAY_ROLLOVER_HOUR} 點前還算前一天：使用者說的「今天」是 ${tripDay} 的行程）`;
     const nowStr = `${nowIso} (星期${weekday}) ${hours}:${minutes}${dayNote}`;
 
+    const body = JSON.stringify({
+        model,
+        store: false,
+        // Re-sent every turn, so the model always edits the current trip
+        // and the replayed history can stay prose-only.
+        system_instruction: buildSystemInstruction(itineraryYaml, nowStr),
+        input: toInputSteps(history, userText),
+        tools: [EDIT_ITINERARY_TOOL],
+    });
+
     let res: Response;
-    try {
-        res = await fetch(`${GEMINI_API_BASE}/interactions`, {
-            method: "POST",
-            headers: { ...authHeaders(apiKey), "Content-Type": "application/json" },
-            body: JSON.stringify({
-                model,
-                store: false,
-                // Re-sent every turn, so the model always edits the current trip
-                // and the replayed history can stay prose-only.
-                system_instruction: buildSystemInstruction(itineraryYaml, nowStr),
-                input: toInputSteps(history, userText),
-                tools: [UPDATE_ITINERARY_TOOL],
-            }),
-        });
-    } catch (e) {
-        console.error("Gemini request failed", e);
-        throw new Error("無法連線到 Gemini，請檢查網路連線。", { cause: e });
+    for (let attempt = 0;; attempt++) {
+        try {
+            res = await fetch(`${GEMINI_API_BASE}/interactions`, {
+                method: "POST",
+                headers: { ...authHeaders(apiKey), "Content-Type": "application/json" },
+                body,
+            });
+        } catch (e) {
+            console.error("Gemini request failed", e);
+            throw new Error("無法連線到 Gemini，請檢查網路連線。", { cause: e });
+        }
+        const delay = BUSY_RETRY_DELAYS_MS[attempt];
+        if (!isBusy(res.status) || delay === undefined) break;
+        await new Promise(resolve => setTimeout(resolve, delay));
     }
 
     if (!res.ok) {
@@ -387,7 +438,7 @@ export async function sendChatMessage(
 
     const payload: unknown = await res.json();
     const turn = extractTurn(payload);
-    if (!turn.text && !turn.edit) {
+    if (!turn.text && !turn.edits) {
         throw new Error("Gemini 沒有回覆內容，請換個方式再問一次。");
     }
     return turn;

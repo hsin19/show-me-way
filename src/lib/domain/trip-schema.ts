@@ -177,6 +177,15 @@ export const itinerarySchema = v.object({
 
 export type ItineraryDocument = v.InferOutput<typeof itinerarySchema>;
 export type HotelInfo = v.InferOutput<typeof hotelSchema>;
+
+/** Every field each kind of entry may carry, read off the schema so a field added there needs no second list. */
+export const ENTRY_FIELDS = {
+    event: Object.keys(timelineEventSchema.entries),
+    hotel: Object.keys(hotelSchema.entries),
+    day: Object.keys(daySchema.entries),
+    trip: Object.keys(tripSchema.entries),
+    item: Object.keys(checklistItemSchema.entries),
+};
 export type Attachment = v.InferOutput<typeof attachmentSchema>;
 
 export interface TimelineEvent extends v.InferOutput<typeof timelineEventSchema> {

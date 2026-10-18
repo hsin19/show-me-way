@@ -1,8 +1,9 @@
 <script lang="ts">
 import {
-    type TripData,
-    validateYaml,
-} from "$lib/domain/trip";
+    applyItineraryEdits,
+    type ItineraryEdit,
+} from "$lib/domain/itinerary-edits";
+import type { TripData } from "$lib/domain/trip";
 import {
     buildItineraryContext,
     type ChatMessage,
@@ -10,7 +11,6 @@ import {
     sendChatMessage,
 } from "$lib/infra/http/gemini";
 import { createModelPicker } from "$lib/stores/gemini-models.svelte";
-import ConfirmBar from "$lib/ui/shared/ConfirmBar.svelte";
 import { edgeFade } from "$lib/ui/shared/edge-fade";
 import Check from "@lucide/svelte/icons/check";
 import ChevronDown from "@lucide/svelte/icons/chevron-down";
@@ -38,12 +38,16 @@ let { tripData, onApplyEdit, onOpenAppSettings }: Props = $props();
 // never YAML, since the current itinerary is re-sent in the system prompt. The
 // rest is UI state for the suggestion card.
 interface UiMessage extends ChatMessage {
-    /** Set only once the proposed YAML has passed `validateYaml`. */
-    editYaml?: string;
-    /** The itinerary as it was when this edit was proposed, so its diff stays stable once another lands. */
+    /** Set only once they have applied cleanly to `baseYaml`. */
+    edits?: ItineraryEdit[];
+    /** The itinerary as it was when the edits were proposed, so the card's diff stays stable once another lands. */
     baseYaml?: string;
+    /** `baseYaml` with the edits applied: what the diff shows. */
+    editYaml?: string;
     editApplied?: boolean;
     editError?: string;
+    /** Why the edits no longer apply to the trip as it now stands. */
+    applyError?: string;
 }
 
 // The conversation lives only as long as the tab is mounted; leaving it is how
@@ -98,17 +102,17 @@ async function triggerSend(promptText: string) {
 
     try {
         const turn = await sendChatMessage(apiKey, modelPicker.activeModel, history, text, baseYaml);
-        const next: UiMessage = { role: "model", content: turn.text || turn.edit?.summary || "" };
-        if (turn.edit) {
-            next.content = turn.text || turn.edit.summary || "我已幫你準備好行程修改，請確認下方的變更。";
-            // Validated here, before an apply is even offered — one of the three
+        const next: UiMessage = { role: "model", content: turn.text };
+        if (turn.edits) {
+            next.content = turn.text || "我已幫你準備好行程修改，請確認下方的變更。";
+            // Applied and validated here, before an apply is even offered — one of the
             // gates between the model and the user's trip.
             try {
-                validateYaml(turn.edit.yaml);
-                next.editYaml = turn.edit.yaml;
+                next.editYaml = applyItineraryEdits(baseYaml, turn.edits);
+                next.edits = turn.edits;
                 next.baseYaml = baseYaml;
             } catch (e) {
-                next.editError = e instanceof Error ? e.message : "AI 產生的行程格式有誤。";
+                next.editError = e instanceof Error ? e.message : "AI 給的修改格式有誤。";
             }
         }
         messages = [...messages, next];
@@ -143,22 +147,20 @@ async function scrollToBottom() {
     scrollEl?.scrollTo({ top: scrollEl.scrollHeight, behavior: "smooth" });
 }
 
-// One slot, so tapping 套用 on another stale card closes the previous confirm.
-let confirmingStaleApply = $state<UiMessage | null>(null);
-
 // The card only turns 已套用 on App's `true` — it revalidates, and can refuse.
 function applyEdit(message: UiMessage) {
-    if (!message.editYaml || message.editApplied) return;
-    // The trip may have moved since this suggestion's snapshot was taken —
-    // applying replaces the WHOLE document, silently rolling back everything
-    // done in between (manual edits, check-ins, checklist ticks). The card's diff
-    // is against the snapshot, so the user cannot see that rollback in it.
-    if (confirmingStaleApply !== message && buildItineraryContext(tripData) !== message.baseYaml) {
-        confirmingStaleApply = message;
+    if (!message.edits || message.editApplied) return;
+    // Re-run on the trip as it is now, not the snapshot the diff was drawn from: a check-in,
+    // a ticked item or another suggestion applied since then stays.
+    let yaml: string;
+    try {
+        yaml = applyItineraryEdits(buildItineraryContext(tripData), message.edits);
+    } catch (e) {
+        message.applyError = `行程在這則建議之後改過，這些修改對不上了。${e instanceof Error ? e.message : ""}`;
         return;
     }
-    confirmingStaleApply = null;
-    if (onApplyEdit(message.editYaml)) message.editApplied = true;
+    message.applyError = undefined;
+    if (onApplyEdit(yaml)) message.editApplied = true;
 }
 </script>
 
@@ -298,7 +300,7 @@ function applyEdit(message: UiMessage) {
                         <div class="flex justify-start">
                             <div class="max-w-[85%] flex items-start gap-1.5 text-xs text-danger bg-danger/10 border border-danger/20 p-2.5 rounded-lg">
                                 <TriangleAlert size={14} class="shrink-0 mt-px" aria-hidden="true" />
-                                <span>AI 產生的行程無效，未套用。{message.editError}</span>
+                                <span>AI 給的修改無法套用。{message.editError}</span>
                             </div>
                         </div>
                     {:else if message.editYaml}
@@ -312,13 +314,11 @@ function applyEdit(message: UiMessage) {
                                     <div class="flex items-center gap-1.5 text-xs font-semibold text-positive">
                                         <Check size={14} aria-hidden="true" />已套用變更
                                     </div>
-                                {:else if confirmingStaleApply === message}
-                                    <ConfirmBar
-                                        message="這則建議之後行程已有變動，套用會以 AI 版本覆蓋那些修改。"
-                                        confirmLabel="仍要套用"
-                                        onconfirm={() => applyEdit(message)}
-                                        oncancel={() => (confirmingStaleApply = null)}
-                                    />
+                                {:else if message.applyError}
+                                    <div role="alert" class="flex items-start gap-1.5 text-xs text-danger">
+                                        <TriangleAlert size={14} class="shrink-0 mt-px" aria-hidden="true" />
+                                        <span>{message.applyError}</span>
+                                    </div>
                                 {:else}
                                     <button
                                         onclick={() => applyEdit(message)}

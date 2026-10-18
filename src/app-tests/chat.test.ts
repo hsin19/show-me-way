@@ -1,4 +1,3 @@
-import { FIXTURE_YAML } from "$lib/testing/fixture-trip";
 import {
     type Matcher,
     screen,
@@ -18,7 +17,7 @@ import {
 // AI 聊天分頁（ChatPanel + gemini.ts）。Gemini 的兩個端點都用 page.route 接住（其餘
 // 外部來源一律被 harness 擋下）：GET /v1beta/models 回單頁模型清單（絕不可帶
 // nextPageToken，否則 listGeminiModels 會無限翻頁），POST /v1beta/interactions 回
-// Interactions steps 形狀的整包 JSON（模型文字 + update_itinerary function_call）——
+// Interactions steps 形狀的整包 JSON（模型文字 + edit_itinerary function_call）——
 // sendChatMessage 讀的是 res.json()，不是串流。兩個端點都像真的 Gemini 一樣只認
 // x-goog-api-key 標頭帶的金鑰、其餘回 400：不驗金鑰的話，存了卻沒送出去的金鑰照樣會過。
 
@@ -31,12 +30,10 @@ const ONE_MODEL = {
     ],
 };
 
-/** FIXTURE_YAML 多一個待辦：接在 todo 清單最後一項後面，仍是合法的行程 YAML。 */
-function withTodo(text: string): string {
-    return FIXTURE_YAML.replace("packing: []", `  - text: ${text}\npacking: []`);
+/** 模型呼叫 edit_itinerary 新增一個待辦：只送這一筆修改，不是整份行程。 */
+function addTodo(text: string, id = "c1") {
+    return { type: "function_call", id, name: "edit_itinerary", arguments: { edits: [{ op: "add_item", list: "todo", text }] } };
 }
-
-const EDITED_YAML = withTodo("換日幣");
 
 function json(body: unknown, status = 200): Response {
     return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -81,7 +78,7 @@ test("AI 聊天：儲存金鑰、AI 建議修改行程、套用後保留至重�
             json({
                 steps: [
                     { type: "model_output", content: [{ type: "text", text: "已幫你加入待辦。" }] },
-                    { type: "function_call", id: "c1", name: "update_itinerary", arguments: { yaml: EDITED_YAML, summary: "已加入待辦「換日幣」。" } },
+                    addTodo("換日幣"),
                 ],
             })),
     );
@@ -131,9 +128,7 @@ test("AI 聊天：儲存金鑰、AI 建議修改行程、套用後保留至重�
     await screen.findByRole("checkbox", { name: "換日幣" });
 });
 
-test("AI 聊天：行程變動後套用過期建議需要二次確認，且確認後以 AI 版本覆蓋", async () => {
-    const EDIT_1 = withTodo("換日幣");
-    const EDIT_2 = withTodo("買轉接頭");
+test("AI 聊天：先套用後一則建議，再套用較早的那則，兩個修改都留著", async () => {
     const page = createPage();
     window.localStorage.setItem("showmeway_gemini_api_key", "test-key");
     page.route(MODELS_URL_PREFIX, keyed("test-key", () => json(ONE_MODEL)));
@@ -142,17 +137,13 @@ test("AI 聊天：行程變動後套用過期建議需要二次確認，且確�
         INTERACTIONS_URL,
         keyed("test-key", () => {
             call++;
-            return json({
-                steps: [
-                    { type: "function_call", id: `c${call}`, name: "update_itinerary", arguments: { yaml: call === 1 ? EDIT_1 : EDIT_2, summary: `建議 ${call}` } },
-                ],
-            });
+            return json({ steps: [addTodo(call === 1 ? "換日幣" : "買轉接頭", `c${call}`)] });
         }),
     );
     await page.goto("/");
     const { user } = page;
 
-    // 連續送出兩個編輯請求：兩張卡的 baseYaml 都是原始行程。
+    // 連續送出兩個編輯請求：兩張卡都是對原始行程提出的。
     await user.click(navTab("AI"));
     await page.fill(await screen.findByLabelText("輸入問題"), "加換日幣");
     await user.click(screen.getByRole("button", { name: "送出" }));
@@ -161,23 +152,76 @@ test("AI 聊天：行程變動後套用過期建議需要二次確認，且確�
     await user.click(screen.getByRole("button", { name: "送出" }));
     await waitFor(() => expect(screen.getAllByRole("button", { name: "套用變更" })).toHaveLength(2));
 
-    // 套用第一張 → 行程改變，第二張的快照隨之過期。離開 AI 分頁會卸掉對話，所以
+    // 先套用第二張，行程就跟第一張的快照不一樣了。離開 AI 分頁會卸掉對話，所以
     // 套上去的是不是被按的那一張，只能從存檔看。
-    await user.click(screen.getAllByRole("button", { name: "套用變更" })[0]!);
+    await user.click(screen.getAllByRole("button", { name: "套用變更" })[1]!);
     await screen.findByText("已套用變更");
-    expect(window.localStorage.getItem("showmeway_user_yaml")).toContain("text: 換日幣");
+    expect(window.localStorage.getItem("showmeway_user_yaml")).toContain("text: 買轉接頭");
 
-    // 過期的卡不能一按就套用：先出現覆蓋警告，確認後才套用。
+    // 較早的那張是對目前的行程重跑它的修改，不是拿舊快照整份蓋掉，所以不用再確認一次。
     await user.click(screen.getByRole("button", { name: "套用變更" }));
-    await screen.findByText(/套用會以 AI 版本覆蓋那些修改/);
-    await user.click(screen.getByRole("button", { name: "仍要套用" }));
     await waitFor(() => expect(screen.getAllByText("已套用變更")).toHaveLength(2));
 
-    // 第二張卡的 base 是套用前的行程，所以第一張加的待辦被覆蓋掉。
     await user.click(navTab("工具"));
     await user.click(screen.getByRole("button", { name: "準備" }));
     screen.getByRole("checkbox", { name: "買轉接頭" });
-    expect(screen.queryByRole("checkbox", { name: /換日幣/ })).toBeNull();
+    screen.getByRole("checkbox", { name: "換日幣" });
+});
+
+test("AI 聊天：行程改過之後這則修改對不上了，就停下來說明，不套用", async () => {
+    const page = createPage();
+    window.localStorage.setItem("showmeway_gemini_api_key", "test-key");
+    page.route(MODELS_URL_PREFIX, keyed("test-key", () => json(ONE_MODEL)));
+    let call = 0;
+    page.route(
+        INTERACTIONS_URL,
+        keyed("test-key", () => {
+            call++;
+            const edits = call === 1
+                ? [{ op: "update_item", list: "todo", text: "測試待辦項目", yaml: "text: 換日幣" }]
+                : [{ op: "remove_item", list: "todo", text: "測試待辦項目" }];
+            return json({ steps: [{ type: "function_call", id: `c${call}`, name: "edit_itinerary", arguments: { edits } }] });
+        }),
+    );
+    await page.goto("/");
+    const { user } = page;
+
+    await user.click(navTab("AI"));
+    await page.fill(await screen.findByLabelText("輸入問題"), "待辦改成換日幣");
+    await user.click(screen.getByRole("button", { name: "送出" }));
+    await screen.findByRole("button", { name: "套用變更" });
+    await page.fill(composer(), "刪掉那個待辦");
+    await user.click(screen.getByRole("button", { name: "送出" }));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "套用變更" })).toHaveLength(2));
+
+    await user.click(screen.getAllByRole("button", { name: "套用變更" })[0]!);
+    await screen.findByText("已套用變更");
+    // 第二張要刪的「測試待辦項目」已經被改名了。
+    await user.click(screen.getByRole("button", { name: "套用變更" }));
+    expect((await screen.findByText(/這些修改對不上了/)).textContent).toContain("清單裡找不到「測試待辦項目」");
+    expect(window.localStorage.getItem("showmeway_user_yaml")).toContain("text: 換日幣");
+});
+
+test("AI 聊天：修改對不到行程時直接說明，不給套用按鈕", async () => {
+    const page = createPage();
+    window.localStorage.setItem("showmeway_gemini_api_key", "test-key");
+    page.route(MODELS_URL_PREFIX, keyed("test-key", () => json(ONE_MODEL)));
+    page.route(
+        INTERACTIONS_URL,
+        keyed("test-key", () =>
+            json({
+                steps: [{ type: "function_call", id: "c1", name: "edit_itinerary", arguments: { edits: [{ op: "remove_event", date: "2099-01-01", title: "不存在的事件" }] } }],
+            })),
+    );
+    await page.goto("/");
+    const { user } = page;
+
+    await user.click(navTab("AI"));
+    await page.fill(await screen.findByLabelText("輸入問題"), "刪掉那個行程");
+    await user.click(screen.getByRole("button", { name: "送出" }));
+
+    await screen.findByText(/AI 給的修改無法套用。第 1 項修改（刪除事件）沒辦法套用：2099-01-01 找不到「不存在的事件」/);
+    expect(screen.queryByRole("button", { name: "套用變更" })).toBeNull();
 });
 
 test("AI 聊天：Gemini 無法連線時顯示錯誤並保留提問", async () => {
