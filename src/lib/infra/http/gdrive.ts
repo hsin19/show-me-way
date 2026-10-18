@@ -20,6 +20,8 @@ import {
 } from "$lib/infra/storage/storage-cache";
 
 export const GDRIVE_FOLDER_NAME = "ShowMeWay";
+const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
+const TRIP_MIME_TYPE = "text/yaml";
 /** Checked explicitly after consent; the userinfo scopes fail loudly in `connect()` instead. */
 const GDRIVE_SCOPE_DRIVE_FILE = "https://www.googleapis.com/auth/drive.file";
 
@@ -116,8 +118,7 @@ function loadGdriveFolderId(): string | null {
     }
 }
 
-/** Exported for the store tests, which pre-seed the folder to skip the lookup round trip. */
-export function saveGdriveFolderId(folderId: string): void {
+function saveGdriveFolderId(folderId: string): void {
     try {
         appStorage.set(GDRIVE_FOLDER_ID_STORAGE, folderId);
     } catch (e) {
@@ -382,15 +383,15 @@ export async function findOrCreateAppFolder(token: string): Promise<string> {
     }
 
     // Query folder
-    const query = `name = '${GDRIVE_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+    const query = `name = '${GDRIVE_FOLDER_NAME}' and mimeType = '${FOLDER_MIME_TYPE}' and trashed = false`;
     const searchRes = await fetch(
         `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)&spaces=drive`,
         { headers: { Authorization: `Bearer ${token}` } },
     );
 
     // A failed search must not fall through to the create below: a transient 5xx or
-    // rateLimitExceeded would mint a second ShowMeWay folder and cache its id, leaving
-    // every existing cloud trip in a folder the app no longer looks at.
+    // rateLimitExceeded would mint a second ShowMeWay folder and cache its id, and every
+    // trip created from then on would land in a tree beside the user's existing ones.
     assertDriveOk(searchRes, "無法搜尋 Google Drive 資料夾");
 
     const searchData = await searchRes.json() as { files?: { id: string; }[]; };
@@ -409,7 +410,7 @@ export async function findOrCreateAppFolder(token: string): Promise<string> {
         },
         body: JSON.stringify({
             name: GDRIVE_FOLDER_NAME,
-            mimeType: "application/vnd.google-apps.folder",
+            mimeType: FOLDER_MIME_TYPE,
         }),
     });
 
@@ -458,11 +459,31 @@ export async function fetchCloudTripMeta(token: string, fileId: string): Promise
     };
 }
 
-/** List all trip files stored in the ShowMeWay Google Drive folder */
-export async function listCloudTrips(token: string, folderId?: string): Promise<CloudTripFile[]> {
-    const parentFolderId = folderId || await findOrCreateAppFolder(token);
-    const query = `'${parentFolderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
-    const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,modifiedTime,size,md5Checksum,appProperties)&orderBy=modifiedTime+desc`;
+/*
+ * Each trip has a folder of its own under ShowMeWay holding its YAML and its attachments.
+ * The app names it `YYYYMM 行程名` when it creates it and never again, so a name the user
+ * gives it in Drive stays; it is found by the `showmewayTripId` it carries, never by name.
+ * Two devices creating one at once can leave a twin: everything inside is addressed by
+ * file id, so a twin costs tidiness rather than data, and the oldest is the one every
+ * device picks.
+ */
+
+/**
+ * Every trip: the YAML in each trip folder. One sitting anywhere else — written before
+ * trips had folders — is not read, which is also why `uploadAttachment` refuses a YAML file.
+ */
+export async function listCloudTrips(token: string): Promise<CloudTripFile[]> {
+    const rootId = await findOrCreateAppFolder(token);
+    const foldersQuery = `${queryLiteral(rootId)} in parents and mimeType = '${FOLDER_MIME_TYPE}' and trashed = false`;
+    const foldersRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(foldersQuery)}&fields=files(id)&pageSize=1000`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    assertDriveOk(foldersRes, "無法讀取 Google Drive 行程列表");
+    const folders = ((await foldersRes.json()) as { files?: { id: string; }[]; }).files ?? [];
+    if (folders.length === 0) return [];
+
+    const query = `(${folders.map(folder => `${queryLiteral(folder.id)} in parents`).join(" or ")}) and mimeType = '${TRIP_MIME_TYPE}' and trashed = false`;
+    const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,modifiedTime,size,md5Checksum,appProperties)&orderBy=modifiedTime+desc&pageSize=1000`;
 
     const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
@@ -486,6 +507,43 @@ export async function listCloudTrips(token: string, folderId?: string): Promise<
             contentHash: f.appProperties?.contentHash,
             shareLink: decodeShareLinkProperties(f.appProperties?.shareLink, f.appProperties?.shareLinkAt) ?? undefined,
         }));
+}
+
+function tripFolderName(tripName: string, startDate: string | null): string {
+    const name = tripName.trim() || "未命名行程";
+    return startDate ? `${startDate.slice(0, 4)}${startDate.slice(5, 7)} ${name}` : name;
+}
+
+/** A Drive query string literal; trip ids come from YAML other people wrote. */
+function queryLiteral(value: string): string {
+    return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+}
+
+async function tripFolderFor(token: string, tripId: string, name: string): Promise<string> {
+    const query = `mimeType = '${FOLDER_MIME_TYPE}' and trashed = false and appProperties has { key='showmewayTripId' and value=${queryLiteral(tripId)} }`;
+    const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id)&orderBy=createdTime`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    assertDriveOk(searchRes, "無法搜尋行程的雲端資料夾");
+    const found = ((await searchRes.json()) as { files?: { id: string; }[]; }).files?.[0];
+    if (found) return found.id;
+
+    const res = await fetch("https://www.googleapis.com/drive/v3/files", {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            name,
+            mimeType: FOLDER_MIME_TYPE,
+            parents: [await findOrCreateAppFolder(token)],
+            appProperties: { showmewayTripId: tripId },
+        }),
+    });
+    assertDriveOk(res, "無法建立行程的雲端資料夾");
+    const created = await res.json() as { id: string; };
+    return created.id;
 }
 
 /** The two properties as Drive wants them: the pair, or a pair of nulls that clears it. */
@@ -512,7 +570,7 @@ function buildMultipartBody(boundary: string, metadata: Record<string, unknown>,
 }
 
 /**
- * Upload a new trip or update an existing one in Google Drive.
+ * Upload a new trip into its own folder, or update an existing one in place.
  *
  * Pure API client: it writes no local sync state. The caller owns the file-map binding
  * and the md5 merge base, because only the caller knows whether the copy it just sent
@@ -522,7 +580,7 @@ export async function uploadOrUpdateCloudTrip(
     token: string,
     tripName: string,
     yamlContent: string,
-    options: { fileId?: string; tripId?: string; folderId?: string; shareLink?: ShareLinkRecord | null; } = {},
+    options: { fileId?: string; tripId?: string; shareLink?: ShareLinkRecord | null; } = {},
 ): Promise<CloudTripFile> {
     const boundary = `-------ShowMeWayBoundary${Date.now()}`;
     const fileName = `${tripName.trim() || "未命名行程"}.yaml`;
@@ -561,10 +619,10 @@ export async function uploadOrUpdateCloudTrip(
         metadata = { name: fileName, appProperties };
         errorMessage = "無法更新 Google Drive 行程檔案";
     } else {
-        const parentFolderId = options.folderId || await findOrCreateAppFolder(token);
+        const parentFolderId = options.tripId ? await tripFolderFor(token, options.tripId, tripFolderName(tripName, startDate)) : await findOrCreateAppFolder(token);
         method = "POST";
         url = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime,size,md5Checksum,appProperties";
-        metadata = { name: fileName, parents: [parentFolderId], mimeType: "text/yaml", appProperties };
+        metadata = { name: fileName, parents: [parentFolderId], mimeType: TRIP_MIME_TYPE, appProperties };
         errorMessage = "無法上傳行程至 Google Drive";
     }
 
@@ -590,6 +648,42 @@ export async function uploadOrUpdateCloudTrip(
         md5Checksum: data.md5Checksum,
         contentHash,
     };
+}
+
+/**
+ * Uploads `content` into the trip's folder as `YYMMDD 名稱.ext`, `date` being the day it
+ * belongs to, and reports what the YAML keeps of it. `label` defaults to the source file's
+ * name without its extension. Resumable rather than multipart, which Drive caps at 5 MB —
+ * less than a photographed ticket can be.
+ */
+export async function uploadAttachment(
+    token: string,
+    trip: { id: string; name: string; start: string; },
+    attachment: { date: string; sourceName: string; content: Blob; label?: string; },
+): Promise<{ fileId: string; label: string; fileName: string; }> {
+    const extension = /\.[^./]+$/.exec(attachment.sourceName)?.[0] ?? "";
+    if (/^\.ya?ml$/i.test(extension)) throw new Error("YAML 檔不能當附件：雲端會把它當成一份行程");
+    const label = attachment.label?.trim() || attachment.sourceName.slice(0, attachment.sourceName.length - extension.length);
+    const fileName = `${attachment.date.slice(2).replaceAll("-", "")} ${label}${extension}`;
+    const folderId = await tripFolderFor(token, trip.id, tripFolderName(trip.name, trip.start));
+
+    const session = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json; charset=UTF-8",
+            ...(attachment.content.type ? { "X-Upload-Content-Type": attachment.content.type } : {}),
+        },
+        body: JSON.stringify({ name: fileName, parents: [folderId] }),
+    });
+    assertDriveOk(session, "無法上傳附件到 Google Drive");
+    const location = session.headers.get("Location");
+    if (!location) throw new Error("無法上傳附件到 Google Drive：沒有拿到上傳位址");
+    const res = await fetch(location, { method: "PUT", body: attachment.content });
+    assertDriveOk(res, "無法上傳附件到 Google Drive");
+    const data = await res.json() as { id?: string; };
+    if (!data.id) throw new Error("無法上傳附件到 Google Drive：沒有拿到檔案 ID");
+    return { fileId: data.id, label, fileName };
 }
 
 /**

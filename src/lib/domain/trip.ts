@@ -23,7 +23,7 @@ import {
     isCalendarDateTime,
 } from "./utils";
 
-export type { ChecklistItem, HotelInfo, TimelineEvent } from "./trip-schema";
+export type { Attachment, ChecklistItem, HotelInfo, TimelineEvent } from "./trip-schema";
 
 type AuthoredDay = ItineraryDocument["days"][number];
 

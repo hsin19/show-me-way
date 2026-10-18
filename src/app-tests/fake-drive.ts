@@ -18,6 +18,16 @@ export interface FakeFile {
     tripId?: string;
     /** 上傳／PATCH 寫進來的其他 appProperties（分享連結就走這裡），null 代表清掉 */
     props?: Record<string, string>;
+    /** 所在的資料夾；沒指定的初始檔案會各自放進一個屬於它那趟行程的資料夾 */
+    parents?: string[];
+}
+
+/** 每趟行程自己的資料夾：靠 appProperties.showmewayTripId 找，不是靠名稱 */
+interface FakeFolder {
+    id: string;
+    name: string;
+    parents: string[];
+    tripId?: string;
 }
 
 export interface FakeDrive {
@@ -29,6 +39,8 @@ export interface FakeDrive {
     counts: () => { uploads: number; downloads: number; listings: number; };
     /** 檔案上被寫進去的 appProperties —— 分享連結是 metadata，不在內容裡 */
     props: (id: string) => Record<string, string>;
+    /** ShowMeWay 底下的行程資料夾，包括替預先放好的檔案建的 */
+    folders: () => FakeFolder[];
 }
 
 /**
@@ -47,7 +59,14 @@ function json(body: unknown, status = 200): Response {
 
 /** 在 `page` 上接手 googleapis.com。要在 `goto` 之前裝：app 一開啟就會列清單。 */
 export function installFakeDrive(page: AppPage, initial: FakeFile[] = []): FakeDrive {
-    const files = new Map(initial.map(f => [f.id, { ...f }]));
+    const folders = new Map<string, FakeFolder>();
+    // app 只讀行程資料夾裡的 YAML，所以預先放好的檔案也要在一個裡面，跟真的 Drive 一樣。
+    const files = new Map(initial.map(f => {
+        if (f.parents) return [f.id, { ...f }];
+        const folder = { id: `folder-of-${f.id}`, name: f.name.replace(/\.yaml$/, ""), parents: [FAKE_FOLDER_ID], tripId: f.tripId };
+        folders.set(folder.id, folder);
+        return [f.id, { ...f, parents: [folder.id] }];
+    }));
     let nextId = 1;
     let uploads = 0;
     let downloads = 0;
@@ -84,10 +103,10 @@ export function installFakeDrive(page: AppPage, initial: FakeFile[] = []): FakeD
     const parseMultipart = (body: string, boundary: string) => {
         const parts = body.split(`--${boundary}`);
         const head = parts[1]!;
-        const metadata = JSON.parse(head.slice(head.indexOf("{"), head.lastIndexOf("}") + 1)) as { name?: string; appProperties?: Record<string, string | null>; };
+        const metadata = JSON.parse(head.slice(head.indexOf("{"), head.lastIndexOf("}") + 1)) as { name?: string; parents?: string[]; appProperties?: Record<string, string | null>; };
         const media = parts[2]!;
         const content = media.slice(media.indexOf("\r\n\r\n") + 4).replace(/\r\n$/, "");
-        return { name: metadata.name ?? "未命名行程.yaml", content, appProperties: metadata.appProperties };
+        return { name: metadata.name ?? "未命名行程.yaml", parents: metadata.parents, content, appProperties: metadata.appProperties };
     };
 
     page.route("https://www.googleapis.com/", async request => {
@@ -101,26 +120,37 @@ export function installFakeDrive(page: AppPage, initial: FakeFile[] = []): FakeD
         if (url.pathname.startsWith("/upload/drive/v3/files")) {
             uploads++;
             const boundary = (request.headers.get("content-type") ?? "").split("boundary=")[1]!;
-            const { name, content, appProperties } = parseMultipart(await request.text(), boundary);
+            const { name, parents, content, appProperties } = parseMultipart(await request.text(), boundary);
             const id = method === "PATCH" ? url.pathname.split("/").pop()! : `file-new-${nextId++}`;
-            files.set(id, { ...files.get(id), id, name, content });
+            files.set(id, { ...files.get(id), id, name, content, ...(parents ? { parents } : {}) });
             mergeProps(files.get(id)!, appProperties);
             return json(meta(files.get(id)!));
         }
 
-        // 資料夾搜尋與行程列表共用 files?q=。要用 "in parents" 分辨而不是 mimeType ——
-        // 列表的查詢字串裡也有 `mimeType != '…folder'`，用後者會把列表誤判成資料夾搜尋。
+        // 行程 YAML、ShowMeWay 底下的資料夾、某趟行程的資料夾、ShowMeWay 本身，四種搜尋共用 files?q=。
         if (url.pathname === "/drive/v3/files" && url.searchParams.has("q")) {
             const q = url.searchParams.get("q")!;
-            if (q.includes("in parents")) {
+            const parents = [...q.matchAll(/'([^']+)' in parents/g)].map(m => m[1]!);
+            if (q.includes("mimeType = 'text/yaml'")) {
                 listings++;
-                return json({ files: [...files.values()].filter(f => !f.trashed).map(meta) });
+                return json({ files: [...files.values()].filter(f => !f.trashed && f.parents?.some(p => parents.includes(p))).map(meta) });
+            }
+            if (parents.length > 0) {
+                return json({ files: [...folders.values()].filter(f => f.parents.some(p => parents.includes(p))).map(f => ({ id: f.id })) });
+            }
+            const tripId = /key='showmewayTripId' and value='([^']*)'/.exec(q)?.[1];
+            if (tripId !== undefined) {
+                return json({ files: [...folders.values()].filter(f => f.tripId === tripId).map(f => ({ id: f.id })) });
             }
             return json({ files: [{ id: FAKE_FOLDER_ID, name: "ShowMeWay" }] });
         }
 
         if (url.pathname === "/drive/v3/files" && method === "POST") {
-            return json({ id: FAKE_FOLDER_ID });
+            const body = JSON.parse(await request.text()) as { name: string; parents?: string[]; appProperties?: { showmewayTripId?: string; }; };
+            if (!body.appProperties?.showmewayTripId) return json({ id: FAKE_FOLDER_ID });
+            const folder = { id: `folder-trip-${nextId++}`, name: body.name, parents: body.parents ?? [], tripId: body.appProperties.showmewayTripId };
+            folders.set(folder.id, folder);
+            return json({ id: folder.id });
         }
 
         const fileId = url.pathname.replace("/drive/v3/files/", "");
@@ -150,5 +180,6 @@ export function installFakeDrive(page: AppPage, initial: FakeFile[] = []): FakeD
         list: () => [...files.values()],
         counts: () => ({ uploads, downloads, listings }),
         props: id => files.get(id)?.props ?? {},
+        folders: () => [...folders.values()],
     };
 }

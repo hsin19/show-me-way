@@ -29,6 +29,7 @@ const ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?$/;
 const MARKDOWN_HINT = "支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`";
 const LOCAL_NAME_DESC = "地點的當地語言名稱，作為地圖搜尋關鍵字 (點擊按鈕開啟地圖/複製)";
 const MAP_LINK_DESC = "地圖直接連結 (如 naver.me / maps.app.goo.gl 短網址)。有設定時會優先使用，比關鍵字搜尋更精準。";
+const ATTACHMENTS_HINT = "檔案放在 Google Drive 上這趟行程的資料夾，用 `pnpm run trip:sync attach <檔案> --date <那天>` 上傳。只有自己的 Google 帳號打得開；分享連結的收件人點了會看到 Drive 的「要求存取權」。";
 const ADDRESS_DESC = "當地語言的地址 (選填)，放大時顯示給計程車司機看。導航靠 mapLink 就夠，這欄是給人看的。";
 
 function text(description: string) {
@@ -46,6 +47,11 @@ function isoDateTime(description: string) {
 const linkSchema = v.object({
     label: text("連結顯示文字"),
     url: text("連結網址：http(s)、mailto:、tel:、sms:、geo: 或裸網域 (會自動補 https://)。其他 scheme 不會顯示連結"),
+});
+
+const attachmentSchema = v.object({
+    label: text("附件顯示文字"),
+    fileId: text("Google Drive 檔案 ID，由 trip:sync attach 上傳後印出，照抄即可。點了用 Google Drive 開啟"),
 });
 
 // No `note` on purpose, so a stop stays one row; commentary goes in the event's `desc` / `bullets`.
@@ -92,6 +98,10 @@ const eventEntries = {
     links: v.optional(v.pipe(
         v.array(linkSchema),
         v.description("同一事件的補充連結 (選填)，例如官網、攻略文、訂房確認信。地圖連結會自動顯示對應的品牌 icon。若要列出本事件走訪的多個地點請改用 stops (每站會有地圖與放大按鈕)；若是「擇一前往」的備選地點 (如備案餐廳) 請改用 alternatives。"),
+    )),
+    attachments: v.optional(v.pipe(
+        v.array(attachmentSchema),
+        v.description(`這個事件的附件 (選填)，例如電子票、訂房確認。${ATTACHMENTS_HINT}整趟行程共用的文件 (保險、簽證) 請改放 trip.attachments。`),
     )),
     alternatives: v.optional(v.pipe(
         v.array(alternativeSchema),
@@ -151,6 +161,10 @@ const tripSchema = v.object({
     )),
     city: v.optional(text("目的地城市，用於查詢每日天氣預報 (選填，未設定或留空字串時不顯示天氣)。建議使用英文名稱 (例如: Tokyo, Seoul, Osaka)；中文名稱僅部分可查 (東京、京都可，首爾、大阪、釜山等查不到或比對錯國家)。同名城市可加兩碼國碼後綴消歧 (例如: 'Springfield, US')。可在個別 day 以 city 覆蓋 (多城市行程)。")),
     hotels: v.array(hotelSchema),
+    attachments: v.optional(v.pipe(
+        v.array(attachmentSchema),
+        v.description(`整趟行程的附件 (選填)，例如保險證明、簽證，顯示在行程總覽。${ATTACHMENTS_HINT}屬於某個事件或住宿的 (電子票、訂房確認) 請放在那個事件的 attachments。`),
+    )),
 });
 
 /** The whole authored document. Parse with `abortEarly` and hand the first issue to `describeIssue` for the user-facing message. */
@@ -163,6 +177,7 @@ export const itinerarySchema = v.object({
 
 export type ItineraryDocument = v.InferOutput<typeof itinerarySchema>;
 export type HotelInfo = v.InferOutput<typeof hotelSchema>;
+export type Attachment = v.InferOutput<typeof attachmentSchema>;
 
 export interface TimelineEvent extends v.InferOutput<typeof timelineEventSchema> {
     /** Runtime-only `{#each}` key and edit handle; `serializeToYaml` strips it, so it never reaches saved YAML. */

@@ -55,10 +55,12 @@ function createDriveStub(routes: {
             return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(routes.download ?? "") });
         }
         if (url.includes("drive/v3/files?q=")) {
-            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ files: routes.list ?? [] }) });
+            // A trip's own folder is never found, so a new file's upload creates one below.
+            const files = decodeURIComponent(url).includes("appProperties has") ? [] : routes.list ?? [];
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ files }) });
         }
-        // The app folder: a create with no id in the path, reached when the folder search
-        // above came back empty.
+        // A folder: a create with no id in the path, reached when a folder search above came
+        // back empty.
         if (url.endsWith("/drive/v3/files") && method === "POST") {
             return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ id: "folder-1" }) });
         }
@@ -945,14 +947,10 @@ describe("remoteStatusFor", () => {
 describe("refreshFiles", () => {
     const CLOUD = { id: "file-1", name: "東京.yaml", modifiedTime: "2026-06-11T00:00:00Z" };
 
-    /** How many list round-trips actually went out — the folder is pre-seeded, so one per refresh. */
+    /** How many list round-trips actually went out. */
     function listCalls(calls: { url: string; }[]): number {
-        return calls.filter(c => c.url.includes("in+parents") || c.url.includes("in%20parents")).length;
+        return calls.filter(c => decodeURIComponent(c.url).includes("mimeType = 'text/yaml'")).length;
     }
-
-    beforeEach(() => {
-        gdrive.saveGdriveFolderId("folder-1");
-    });
 
     it("serves the cached list inside the TTL and refetches once past it", async () => {
         await loadSync();

@@ -150,6 +150,11 @@ test("連線 Google：走完 GIS 流程並把行程建立成雲端檔", async ()
 
     expect(drive.list()).toHaveLength(1);
     expect(drive.list()[0]?.content).toContain("name: 測試行程");
+    // 放在這趟行程自己的資料夾裡，資料夾用出發年月開頭，靠 trip.id 認。
+    expect(drive.folders()).toHaveLength(1);
+    const [folder] = drive.folders();
+    expect(folder).toMatchObject({ name: "209901 測試行程", parents: ["folder-showmeway"], tripId: "t-fixture" });
+    expect(drive.list()[0]?.parents).toEqual([folder?.id]);
     // 只有連線那一下彈過視窗：上傳用的是連線時拿到、存起來的 token。
     expect(gis.popups()).toBe(1);
 

@@ -114,6 +114,39 @@ test("links 的 tel: 仍可用（改用白名單後不能把電話 chip 弄不�
     expect(tel.getAttribute("href")).toBe("tel:+81312345678");
 });
 
+test("附件連到 Drive 的檢視頁，fileId 怎麼寫都只落在網址路徑裡", async () => {
+    await openDayOne(FIXTURE_YAML.replace(
+        "        desc: 第一天的測試事件",
+        [
+            "        desc: 第一天的測試事件",
+            "        attachments:",
+            "          - label: 電子票",
+            "            fileId: 1juB6WFuxH-cCvKaMGW_M4CBRs-cVyA1n",
+            "          - label: 怪檔",
+            "            fileId: 'x/../../?q=1#h'",
+        ].join("\n"),
+    ));
+
+    const ticket = await screen.findByRole("link", { name: "電子票" });
+    expect(ticket.getAttribute("href")).toBe("https://drive.google.com/file/d/1juB6WFuxH-cCvKaMGW_M4CBRs-cVyA1n/view");
+    expect(screen.getByRole("link", { name: "怪檔" }).getAttribute("href")).toBe("https://drive.google.com/file/d/x%2F..%2F..%2F%3Fq%3D1%23h/view");
+});
+
+test("整趟行程的附件在總覽頁列出，同樣連到 Drive", async () => {
+    await launchApp(FIXTURE_YAML.replace(
+        "  hotels: []",
+        [
+            "  hotels: []",
+            "  attachments:",
+            "    - label: 保險 英文證明",
+            "      fileId: f-insurance",
+        ].join("\n"),
+    ));
+
+    const insurance = await screen.findByRole("link", { name: "保險 英文證明" });
+    expect(insurance.getAttribute("href")).toBe("https://drive.google.com/file/d/f-insurance/view");
+});
+
 test("links 缺少 url 時在載入這關就被擋下，而不是渲染時炸掉", async () => {
     // 開機路徑把訊息收斂成一句通用文案（確切訊息由 src/lib/domain/trip.test.ts 斷言），這裡要證的
     // 是「擋在 validateYaml，不是讓 undefined 走到 sanitizeLinkHref」。

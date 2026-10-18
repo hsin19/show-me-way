@@ -148,6 +148,28 @@
                 },
                 "description": "同一事件的補充連結 (選填)，例如官網、攻略文、訂房確認信。地圖連結會自動顯示對應的品牌 icon。若要列出本事件走訪的多個地點請改用 stops (每站會有地圖與放大按鈕)；若是「擇一前往」的備選地點 (如備案餐廳) 請改用 alternatives。"
               },
+              "attachments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "description": "附件顯示文字"
+                    },
+                    "fileId": {
+                      "type": "string",
+                      "description": "Google Drive 檔案 ID，由 trip:sync attach 上傳後印出，照抄即可。點了用 Google Drive 開啟"
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "fileId"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "這個事件的附件 (選填)，例如電子票、訂房確認。檔案放在 Google Drive 上這趟行程的資料夾，用 `pnpm run trip:sync attach <檔案> --date <那天>` 上傳。只有自己的 Google 帳號打得開；分享連結的收件人點了會看到 Drive 的「要求存取權」。整趟行程共用的文件 (保險、簽證) 請改放 trip.attachments。"
+              },
               "alternatives": {
                 "type": "array",
                 "items": {
@@ -185,6 +207,28 @@
             ],
             "additionalProperties": false
           }
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "附件顯示文字"
+              },
+              "fileId": {
+                "type": "string",
+                "description": "Google Drive 檔案 ID，由 trip:sync attach 上傳後印出，照抄即可。點了用 Google Drive 開啟"
+              }
+            },
+            "required": [
+              "label",
+              "fileId"
+            ],
+            "additionalProperties": false
+          },
+          "description": "整趟行程的附件 (選填)，例如保險證明、簽證，顯示在行程總覽。檔案放在 Google Drive 上這趟行程的資料夾，用 `pnpm run trip:sync attach <檔案> --date <那天>` 上傳。只有自己的 Google 帳號打得開；分享連結的收件人點了會看到 Drive 的「要求存取權」。屬於某個事件或住宿的 (電子票、訂房確認) 請放在那個事件的 attachments。"
         }
       },
       "required": [
@@ -327,6 +371,28 @@
                     "additionalProperties": false
                   },
                   "description": "同一事件的補充連結 (選填)，例如官網、攻略文、訂房確認信。地圖連結會自動顯示對應的品牌 icon。若要列出本事件走訪的多個地點請改用 stops (每站會有地圖與放大按鈕)；若是「擇一前往」的備選地點 (如備案餐廳) 請改用 alternatives。"
+                },
+                "attachments": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string",
+                        "description": "附件顯示文字"
+                      },
+                      "fileId": {
+                        "type": "string",
+                        "description": "Google Drive 檔案 ID，由 trip:sync attach 上傳後印出，照抄即可。點了用 Google Drive 開啟"
+                      }
+                    },
+                    "required": [
+                      "label",
+                      "fileId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "description": "這個事件的附件 (選填)，例如電子票、訂房確認。檔案放在 Google Drive 上這趟行程的資料夾，用 `pnpm run trip:sync attach <檔案> --date <那天>` 上傳。只有自己的 Google 帳號打得開；分享連結的收件人點了會看到 Drive 的「要求存取權」。整趟行程共用的文件 (保險、簽證) 請改放 trip.attachments。"
                 },
                 "alternatives": {
                   "type": "array",

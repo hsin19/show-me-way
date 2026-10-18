@@ -14,6 +14,7 @@ import Flame from "@lucide/svelte/icons/flame";
 import MapPin from "@lucide/svelte/icons/map-pin";
 import Play from "@lucide/svelte/icons/play";
 import SkipForward from "@lucide/svelte/icons/skip-forward";
+import AttachmentChip from "./AttachmentChip.svelte";
 import LinkChip from "./LinkChip.svelte";
 import PlaceActions from "./PlaceActions.svelte";
 
@@ -127,11 +128,14 @@ let altsOpen = $state(false);
         </ul>
     {/if}
 
-    {#if event.localName || event.mapLink || event.address || (event.links && event.links.length > 0)}
+    {#if event.localName || event.mapLink || event.address || (event.links && event.links.length > 0) || (event.attachments && event.attachments.length > 0)}
         <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-line">
             <PlaceActions title={event.title} localName={event.localName} address={event.address} mapLink={event.mapLink} {driverPrompt} {mapProvider} {onEnlarge} />
             {#each event.links ?? [] as link, k (`${k}-${link.url}`)}
                 <LinkChip label={link.label} url={link.url} />
+            {/each}
+            {#each event.attachments ?? [] as attachment, k (`${k}-${attachment.fileId}`)}
+                <AttachmentChip {attachment} />
             {/each}
         </div>
     {/if}

@@ -17,11 +17,17 @@ trip:
       links:
         - label: 訂房確認信
           url: https://www.example.com/booking
+      attachments:
+        - label: 訂房確認 PDF
+          fileId: example-booking-pdf
     - start: '2026-10-03'
       end: '2026-10-04'
       title: 灣岸景觀飯店
       localName: お台場ベイビューホテル
       address: 東京都港區台場 2-2-2
+  attachments:
+    - label: 旅平險英文證明
+      fileId: example-insurance-pdf
 days:
   - date: '2026-10-01'
     title: 抵達 · 新宿

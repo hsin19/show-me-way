@@ -117,6 +117,8 @@ function buildSystemInstruction(itineraryYaml: string, currentDateTime: string):
         // docs and comments refer to by number, keep their numbers. applyAiEdit restores
         // trip.id regardless — this only saves the model from inventing one.
         "11. trip.id 是 App 自動產生的行程識別碼，請原封不動照抄，不要修改、刪除或自行產生。",
+        // A fileId names a file already in the owner's Drive; one the model invents is a dead chip.
+        "12. attachments 的 fileId 指向雲端上已存在的檔案，請原封不動照抄，不要修改或自行產生；搬動事件時附件跟著一起搬。",
         "",
         "=== 行程資料 (YAML) ===",
         itineraryYaml,

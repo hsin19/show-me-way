@@ -6,6 +6,7 @@ import {
     serializeToYaml,
     validateYaml,
 } from "$lib/domain/trip";
+import { isCalendarDate } from "$lib/domain/utils";
 import {
     clearDeadShareLink,
     type CloudTripFile,
@@ -19,6 +20,7 @@ import {
     saveTripSyncMap,
     setCachedAccessToken,
     type TripSyncRecord,
+    uploadAttachment,
 } from "$lib/infra/http/gdrive";
 import {
     PERSISTENT_LINK_TTL_SECONDS,
@@ -39,6 +41,7 @@ import {
     planCloudSync,
     rebindFor,
 } from "$lib/services/drive-sync";
+import { dump as dumpYaml } from "js-yaml";
 import { spawn } from "node:child_process";
 import {
     createHash,
@@ -77,8 +80,12 @@ import { parseArgs } from "node:util";
  * own code — `planCloudSync` for the direction and the transfer, the record map and token
  * cache it keeps through `appStorage`, backed here by `.trip-sync/state.json` rather than a
  * browser's localStorage — so a rule changed in the app reaches this tool without a second
- * edit. Like the app it transfers only on an explicit checkout, pull or push. The `$lib`
- * imports resolve through `resolve-hooks.ts`, which the script preloads.
+ * edit. Like the app it transfers only on an explicit checkout, pull, push or attach. The
+ * `$lib` imports resolve through `resolve-hooks.ts`, which the script preloads.
+ *
+ * `attach` is the one upload the app has no counterpart for yet. It puts the file in the
+ * trip's Drive folder and prints the entry for the YAML instead of writing it: which event
+ * it belongs to is the editor's call, and the working copy may be mid-edit.
  *
  * A push first rewrites the working copy into the canonical form the app stores — the
  * original goes to a backup — so this machine, Drive and every phone hold the same bytes.
@@ -644,6 +651,27 @@ async function push(): Promise<void> {
     else await refreshShareLink(token, file.id, link, yaml);
 }
 
+/** Uploads `path` into the checked-out trip's Drive folder and prints the `attachments` entry to paste. */
+async function attach(path: string): Promise<void> {
+    const date = flags.date;
+    if (!date || !isCalendarDate(date)) usageError("attach 要用 --date YYYY-MM-DD 指定附件屬於哪一天（事件那天；住宿用入住日），檔名會用它開頭");
+    const { tripId, yaml } = checkedOut();
+    if (!existsSync(path) || !lstatSync(path).isFile()) throw new Error(`找不到檔案 ${path}`);
+    // The folder is found by trip.id and named from the trip, so both have to be readable.
+    const blocker = pushBlocker(tripId, yaml);
+    if (blocker) throw new Error(`沒有上傳：${blocker}`);
+    const { trip } = validateYaml(yaml);
+    const uploaded = await uploadAttachment(await accessToken(), trip, {
+        date,
+        sourceName: basename(path),
+        content: new Blob([readFileSync(path)]),
+        label: flags.label,
+    });
+    console.log(`已上傳到「${trip.name}」的雲端資料夾：${uploaded.fileName}`);
+    console.log(`加到 ${date} 那個事件或住宿的 attachments 底下（保險、簽證這類整趟的文件放 trip.attachments），再 push：`);
+    console.log(dumpYaml([{ label: uploaded.label, fileId: uploaded.fileId }], { quoteStyle: "single", lineWidth: -1 }).trimEnd());
+}
+
 const RESHARE_HINT = "要更新時，手機載入新版後到「工具 → 行程管理」按「更新分享連結」";
 
 /** Replaces the ciphertext behind `link` with `yaml` (canonical, as the app shares it), keeping its id and key, so the URL already handed out shows this version. */
@@ -686,11 +714,16 @@ const USAGE = `用法：pnpm run trip:sync <指令> [選項]
   push [--force] [--no-share]
                              把本機版本整理成 app 的格式後上傳到雲端（原稿先備份），
                              有分享連結就一起更新
+  attach <檔案> --date <YYYY-MM-DD> [--label <名稱>]
+                             把檔案上傳到這趟行程的雲端資料夾，檔名是「YYMMDD 名稱」，
+                             印出要貼進 attachments 的那一段（不會改工作副本）
 
 選項：
   --force                    pull：捨棄本機的修改、改用雲端版本（會先備份）
                              push：兩邊都改過時以本機為準（只用來解衝突）
   --no-share                 push 時不更新分享連結
+  --date                     attach：附件屬於哪一天（事件那天；住宿用入住日）
+  --label                    attach：顯示在行程上的名稱，預設是原本的檔名
   -h, --help                 顯示這份說明`;
 
 const CLI_OPTIONS = {
@@ -698,6 +731,8 @@ const CLI_OPTIONS = {
     options: {
         "force": { type: "boolean", default: false },
         "no-share": { type: "boolean", default: false },
+        "date": { type: "string" },
+        "label": { type: "string" },
         "help": { type: "boolean", short: "h" },
     },
 } as const;
@@ -716,7 +751,7 @@ function parseCli() {
         const quoted = /'([^']+)'/.exec(String(error))?.[1];
         const option = quoted?.match(/--[\w-]+/)?.[0] ?? quoted;
         if (option && code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") return usageError(`沒有 ${option} 這個選項`);
-        if (option && code === "ERR_PARSE_ARGS_INVALID_OPTION_VALUE") return usageError(`${option} 不接值`);
+        if (option && code === "ERR_PARSE_ARGS_INVALID_OPTION_VALUE") return usageError(`${option} ${option === "--date" || option === "--label" ? "要接一個值" : "不接值"}`);
         return usageError(error instanceof Error ? error.message : String(error));
     }
 }
@@ -730,13 +765,15 @@ function describeError(error: unknown): string {
     return cause && !error.message.includes(cause) ? `${error.message}（${cause}）` : error.message;
 }
 
-const COMMANDS: Record<string, { run: (arg: string) => Promise<void>; takesArg?: boolean; takesForce?: boolean; takesNoShare?: boolean; }> = {
+/** `takesArg` is what to say when the one argument is missing or doubled. */
+const COMMANDS: Record<string, { run: (arg: string) => Promise<void>; takesArg?: string; takesForce?: boolean; takesNoShare?: boolean; takesAttachOptions?: boolean; }> = {
     login: { run: login },
     list: { run: list },
-    checkout: { run: checkout, takesArg: true },
+    checkout: { run: checkout, takesArg: "checkout 要接一個行程名或 tripId（名稱有空白就加引號）" },
     status: { run: status },
     pull: { run: pull, takesForce: true },
     push: { run: push, takesForce: true, takesNoShare: true },
+    attach: { run: attach, takesArg: "attach 要接一個檔案路徑（有空白就加引號）", takesAttachOptions: true },
 };
 
 const { positionals, values: flags } = parseCli();
@@ -750,10 +787,11 @@ if (!command) usageError(name ? `沒有「${name}」這個指令` : "少了指�
 // Refused rather than ignored: a stray word is usually a trip name that needed quotes, and
 // a --force nothing reads was meant for another command. An empty argument (an unset shell
 // variable) would prefix-match every trip.
-if (command.takesArg && (args.length !== 1 || !args[0]?.trim())) usageError(`${name} 要接一個行程名或 tripId（名稱有空白就加引號）`);
+if (command.takesArg && (args.length !== 1 || !args[0]?.trim())) usageError(command.takesArg);
 if (!command.takesArg && args.length > 0) usageError(`${name} 不接參數`);
 if (flags.force && !command.takesForce) usageError("--force 只能用在 pull / push");
 if (flags["no-share"] && !command.takesNoShare) usageError("--no-share 只能用在 push");
+if ((flags.date !== undefined || flags.label !== undefined) && !command.takesAttachOptions) usageError("--date / --label 只能用在 attach");
 // chmod rather than mkdir's mode, which applies only to a directory it creates: this one
 // holds the refresh token and, in the state file, a live access token.
 mkdirSync(SYNC_DIR, { recursive: true });

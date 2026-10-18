@@ -22,6 +22,7 @@ import Hourglass from "@lucide/svelte/icons/hourglass";
 import Loader2 from "@lucide/svelte/icons/loader-2";
 import Maximize2 from "@lucide/svelte/icons/maximize-2";
 import Share2 from "@lucide/svelte/icons/share-2";
+import AttachmentChip from "./AttachmentChip.svelte";
 import HotelCards from "./HotelCards.svelte";
 import WeatherBadge from "./WeatherBadge.svelte";
 
@@ -256,5 +257,16 @@ let langConfig = $derived(getLanguageConfig(trip.lang));
     <div class="mt-6">
         <h3 class="text-[11px] font-bold text-text-muted mb-2 px-1">住宿</h3>
         <HotelCards hotels={hotelList} {todayIso} driverPrompt={langConfig.driverPrompt} mapProvider={trip.mapProvider} {onEnlarge} />
+    </div>
+{/if}
+
+{#if trip.attachments && trip.attachments.length > 0}
+    <div class="mt-6">
+        <h3 class="text-[11px] font-bold text-text-muted mb-2 px-1">附件</h3>
+        <div class="flex flex-wrap gap-2">
+            {#each trip.attachments as attachment, k (`${k}-${attachment.fileId}`)}
+                <AttachmentChip {attachment} />
+            {/each}
+        </div>
     </div>
 {/if}

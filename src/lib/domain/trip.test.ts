@@ -571,6 +571,40 @@ describe("validateYaml — links 形狀", () => {
     });
 });
 
+describe("validateYaml — attachments 形狀", () => {
+    it("接受附件，存出來排在 links 之後、alternatives 之前，再存一次位元組不變", () => {
+        const data = validateYaml(timelineYaml([
+            bookedEvent,
+            "        alternatives:",
+            "          - title: '備案'",
+            "        attachments:",
+            "          - label: '電子票'",
+            "            fileId: '1juB6WFuxH-cCvKaMGW_M4CBRs-cVyA1n'",
+            "        links:",
+            "          - label: '官網'",
+            "            url: 'https://example.com'",
+        ].join("\n")));
+        expect(data.days[0]?.timeline[0]?.attachments).toEqual([{ label: "電子票", fileId: "1juB6WFuxH-cCvKaMGW_M4CBRs-cVyA1n" }]);
+        const saved = serializeToYaml(data);
+        expect(saved.indexOf("links:")).toBeLessThan(saved.indexOf("attachments:"));
+        expect(saved.indexOf("attachments:")).toBeLessThan(saved.indexOf("alternatives:"));
+        expect(serializeToYaml(validateYaml(saved))).toBe(saved);
+    });
+
+    it("整趟行程的附件掛在 trip 底下，存出來排在 hotels 之後", () => {
+        const data = validateYaml(timelineYaml(bookedEvent).replace("trip:\n", "trip:\n  attachments:\n    - label: '保險證明'\n      fileId: 'f-insurance'\n"));
+        expect(data.trip.attachments).toEqual([{ label: "保險證明", fileId: "f-insurance" }]);
+        const saved = serializeToYaml(data);
+        expect(saved.indexOf("  hotels:")).toBeLessThan(saved.indexOf("  attachments:"));
+        expect(serializeToYaml(validateYaml(saved))).toBe(saved);
+    });
+
+    it("拒絕缺少 fileId 的附件", () => {
+        expect(() => validateYaml(timelineYaml(`${bookedEvent}\n        attachments:\n          - label: '電子票'`)))
+            .toThrow("days 第 1 項的 timeline 第 1 項的 attachments 第 1 項缺少 fileId 屬性");
+    });
+});
+
 describe("serializeToYaml 與 round-trip", () => {
     const richEvent = [
         "",
