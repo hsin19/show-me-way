@@ -16,10 +16,15 @@ interface Props {
 
 let { day, date = "", active, isToday = false, onSelect }: Props = $props();
 
-// One copy for both variants — they differ only in width and the 今天 dot's
-// `relative` — so the two chips cannot drift apart.
+// One copy for both variants — they differ only in width — so the two chips
+// cannot drift apart.
 const SHAPE = "h-full flex flex-col items-center justify-center p-2 rounded-xl border transition duration-200 cursor-pointer";
-let tone = $derived(active ? "bg-accent/15 border-transparent" : "bg-tint-1 border-card-border hover:bg-tint-2");
+// Selection is a fill and today an accent edge — the outline that also marks the
+// current event and the current stay — so one chip can be both. The edge recolors
+// the chip's own border rather than adding a ring, which would draw a second line.
+let fill = $derived(active ? "bg-accent/15" : "bg-tint-1 hover:bg-tint-2");
+let edge = $derived(isToday ? "border-accent/50" : active ? "border-transparent" : "border-card-border");
+let tone = $derived(`${fill} ${edge}`);
 
 // The weekday belongs on the date line, at the same size and weight: it is part
 // of the date, and next to the day number a bare 一/二/三 reads as a second digit.
@@ -36,12 +41,11 @@ let parts = $derived(splitDayDate(date));
 {:else}
     <button
         data-day
-        class="relative w-[88px] {SHAPE} {tone}"
+        class="w-[88px] {SHAPE} {tone}"
         aria-current={isToday ? "date" : undefined}
         onclick={() => onSelect(day)}
     >
         {#if isToday}
-            <span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-must" aria-hidden="true"></span>
             <span class="sr-only">今天</span>
         {/if}
         <span class="text-[11px] font-medium {active ? 'text-accent' : 'text-text-muted'}">

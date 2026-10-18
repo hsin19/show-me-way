@@ -220,10 +220,14 @@ let langConfig = $derived(getLanguageConfig(trip.lang));
         <button
             onclick={() => onSelectDay(day.day)}
             aria-current={isToday ? "date" : undefined}
-            class="w-full panel rounded-xl p-3.5 flex items-center gap-3 text-left hover:bg-tint-2 transition cursor-pointer {isToday ? 'outline outline-accent/40' : ''}"
+            class="w-full panel rounded-xl p-3.5 flex items-center gap-3 text-left hover:bg-tint-2 transition cursor-pointer {isToday ? 'ring-1 ring-accent/40' : ''}"
         >
-            <!-- Same two lines as DayChip, so the list and the strip read as one
-                 thing; keep them in step. -->
+            <!-- Same two lines as DayChip, and today marked by an accent edge alone
+                 as there, so the list and the strip read as one thing; keep them in
+                 step. -->
+            {#if isToday}
+                <span class="sr-only">今天</span>
+            {/if}
             <div class="shrink-0 w-[68px] flex flex-col items-center">
                 <span class="text-[11px] font-bold text-accent">DAY {String(day.day).padStart(2, "0")}</span>
                 <span class="text-sm font-bold text-text-primary mt-0.5 whitespace-nowrap">
@@ -231,12 +235,7 @@ let langConfig = $derived(getLanguageConfig(trip.lang));
                 </span>
             </div>
             <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-1.5">
-                    <p class="min-w-0 text-sm font-semibold text-text-primary truncate">{day.title}</p>
-                    {#if isToday}
-                        <span class="shrink-0 text-[10px] font-bold text-must bg-must/12 px-1.5 py-0.5 rounded-full">今天</span>
-                    {/if}
-                </div>
+                <p class="text-sm font-semibold text-text-primary truncate">{day.title}</p>
                 {#if weather}
                     <div class="mt-1">
                         <WeatherBadge {weather} />

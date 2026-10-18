@@ -144,10 +144,15 @@ body {
 }
 
 /* Raised surface shared by cards and dialogs: solid fill plus a hairline top
-   light — no drop shadows or glows anywhere in this theme. */
-.panel {
-    background: var(--color-card-bg);
-    box-shadow: var(--panel-shadow);
+   light — no drop shadows or glows anywhere in this theme. Layered for the same
+   reason as the focus ring below: un-layered, its box-shadow outranked every
+   `ring-*` on a card, so the current event and the current stay were never
+   outlined. A ring replaces the elevation shadow rather than adding to it. */
+@layer components {
+    .panel {
+        background: var(--color-card-bg);
+        box-shadow: var(--panel-shadow);
+    }
 }
 
 ::-webkit-scrollbar {

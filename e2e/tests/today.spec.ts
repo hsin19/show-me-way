@@ -16,8 +16,8 @@ test.use({ viewport: { width: 390, height: 844 } });
 // overview — is covered by src/app-tests/smoke.test.ts with the far-future fixture.
 //
 // Neither test has an app-test counterpart: each ends on layout happy-dom does not
-// compute (the chip scrolled into view; the title ellipsed on the switcher's row),
-// and there every rect is zero, so those checks would pass without testing anything.
+// compute (the chip scrolled into view; the event line ellipsed), and there every
+// rect is zero, so those checks would pass without testing anything.
 function build(eventTitle = "") {
     // Today per Asia/Taipei, matching playwright.config.ts's timezoneId, so the
     // fixture and the app agree on which day is today. The offsets are then
@@ -59,7 +59,10 @@ test("開啟時自動定位到今天：面板、今天標記與 chip 進入視�
         const sr = scroller.getBoundingClientRect();
         return {
             markedLabel: marked?.textContent?.replace(/\s+/g, " ").trim() ?? null,
-            hasDot: !!marked?.querySelector(".bg-must"),
+            // Today's edge is its own border recolored, so it has to differ from both
+            // a selected chip's (transparent) and an idle one's.
+            edge: marked ? getComputedStyle(marked).borderColor : null,
+            idleEdge: getComputedStyle(document.querySelector("button[data-day]:not([aria-current])")!).borderColor,
             srOnly: marked?.textContent?.includes("今天") ?? false,
             // Fully inside the scroller = it was scrolled into view.
             inView: !!r && r.left >= sr.left - 1 && r.right <= sr.right + 1,
@@ -69,7 +72,8 @@ test("開啟時自動定位到今天：面板、今天標記與 chip 進入視�
     // latched onto the wrong day cannot pass.
     expect(state.markedLabel).toContain("DAY 04");
     expect(state.markedLabel).toContain(todayIso.slice(5).replace("-", "/"));
-    expect(state.hasDot).toBe(true);
+    expect(state.edge).not.toBe("rgba(0, 0, 0, 0)");
+    expect(state.edge).not.toBe(state.idleEdge);
     expect(state.srOnly).toBe(true);
     expect(state.inView).toBe(true);
 });
