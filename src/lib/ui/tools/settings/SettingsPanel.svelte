@@ -258,7 +258,7 @@ async function handleLoadFromCloud(fileId: string, cloudName: string) {
     if (applyLanding(await tripStore.loadCloudTrip(fileId, cloudName))) onDone();
 }
 
-let activeConflict = $derived(gdriveSync.conflictFor(activeTripId));
+let activeConflict = $derived(gdriveSync.conflictFor(activeTripId, yamlInput));
 // A cloud conflict outranks it in the markup: that one holds the trip's sync, this one only
 // offers someone else's newer copy.
 let sharedUpdate = $derived(tripStore.sharedUpdate);

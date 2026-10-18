@@ -209,6 +209,14 @@ class GDriveSyncState {
     private adopt(tripId: string, record: TripSyncRecord) {
         this.writeRecord(tripId, record);
         delete this.conflicts[tripId];
+        // Until the refresh that follows a transfer lands, the listing still describes the
+        // file as it was before it. Read against the record just written, that would turn
+        // this device's own push into the cloud moving on, and its own pull into a conflict.
+        this.cloudFiles = this.cloudFiles.map(file =>
+            file.id === record.fileId
+                ? { ...file, md5Checksum: record.remoteMd5 ?? file.md5Checksum, contentHash: record.remoteHash ?? file.contentHash }
+                : file
+        );
     }
 
     /** Forgets a trip's Drive binding and everything remembered about it. */
@@ -291,7 +299,7 @@ class GDriveSyncState {
      */
     hasUnpushedEdits(tripId: string, localYaml: string): boolean {
         if (!this.isConnected || !this.cloudFileId(tripId)) return false;
-        if (this.conflictFor(tripId)) return false;
+        if (this.conflictFor(tripId, localYaml)) return false;
         return this.tripSyncState(tripId, localYaml) === "dirty";
     }
 
@@ -311,7 +319,7 @@ class GDriveSyncState {
         const fileId = this.cloudFileId(tripId);
         if (!fileId) return "none";
         if (this.cloudListState === "ready" && !this.cloudFiles.some(file => file.id === fileId)) return "none";
-        if (this.conflictFor(tripId)) return "behind";
+        if (this.conflictFor(tripId, localYaml)) return "behind";
         return this.tripSyncState(tripId, localYaml) === "dirty" ? "behind" : "kept";
     }
 
@@ -333,11 +341,13 @@ class GDriveSyncState {
         const record = this.trips[tripId] ?? null;
         if (!record) return null;
         const file = this.cloudFiles.find(candidate => candidate.id === record.fileId);
-        if (!file) return null;
+        // A listing entry without a checksum says nothing about whether the file moved, and
+        // this answer raises 行程管理's conflict strip, so it must not guess.
+        if (!file?.md5Checksum) return null;
         const decision = decideSyncAction({
             record,
             remoteExists: true,
-            remoteMd5: file.md5Checksum ?? null,
+            remoteMd5: file.md5Checksum,
             remoteHash: file.contentHash ?? null,
             localHash: yamlFingerprint(localYaml),
         });
@@ -345,18 +355,22 @@ class GDriveSyncState {
     }
 
     /**
-     * The unresolved conflict on `tripId`, if any — what 行程管理 renders its decision strip
-     * from, and what every path that could transfer checks before acting.
+     * The unresolved conflict on `tripId` holding `localYaml`, if any — what 行程管理 renders
+     * its decision strip from, and what every path that could transfer checks before acting.
      *
-     * A `diverged` record is reported even with nothing in `conflicts`: that is the state
-     * a reload leaves behind, and without it the strip would disappear while the record
-     * that raised it still decides `push`.
+     * Three things raise one. A sync that ran into it this session. A `diverged` record,
+     * which is the state a reload leaves behind; without it the strip would disappear while
+     * the record that raised it still decides `push`. And a divergence the last listing
+     * already shows, so the strip is up when 行程管理 opens rather than after a tap on a
+     * button that offered 上傳; the answers in the strip all force a side, so none of them
+     * needs a sync to have raised the conflict first.
      */
-    conflictFor(tripId: string): SyncConflict | null {
+    conflictFor(tripId: string, localYaml: string): SyncConflict | null {
         const raised = this.conflicts[tripId];
         if (raised) return raised;
         const record = this.trips[tripId];
-        if (!record?.diverged) return null;
+        if (!record) return null;
+        if (!record.diverged && this.remoteStatusFor(tripId, localYaml) !== "conflict") return null;
         return {
             tripId,
             // From the last listing, which is where the divergence was found; the fallback
@@ -371,15 +385,16 @@ class GDriveSyncState {
      *
      * A conflict and a signed-out user are unambiguous. Otherwise `tripSyncState` tells
      * "unbound"/"dirty" — both an upload — apart from "clean" without asking Drive; a
-     * clean trip only offers a direction once a `checkOnly` sync has actually asked and
-     * armed `pendingTransfer` (an upload from there means the cloud copy is gone, not
-     * that this device edited anything). Until then its tap is `check` — the ambiguous
-     * resting state that only a real fetch can resolve.
+     * clean trip offers a direction once a `checkOnly` sync has actually asked and armed
+     * `pendingTransfer` (an upload from there means the cloud copy is gone, not that this
+     * device edited anything), or once the last listing already shows a newer cloud copy.
+     * Until then its tap is `check` — the ambiguous resting state that only a real fetch
+     * can resolve.
      */
     cloudActionFor(tripId: string, localYaml: string): CloudAction {
         if (this.isConnecting) return { kind: "connecting" };
         if (this.isSyncing) return { kind: "busy", phase: this.syncPhase ?? "checking" };
-        if (this.conflictFor(tripId)) return { kind: "conflict" };
+        if (this.conflictFor(tripId, localYaml)) return { kind: "conflict" };
         if (!this.isConnected) return { kind: "login" };
         if (this.tripSyncState(tripId, localYaml) !== "clean") {
             return { kind: "upload", overwrite: this.boundFileIdsFor([tripId]).size > 0 };
@@ -389,6 +404,7 @@ class GDriveSyncState {
                 ? { kind: "download" }
                 : { kind: "upload", overwrite: false };
         }
+        if (this.remoteStatusFor(tripId, localYaml) === "pull") return { kind: "download" };
         return { kind: "check" };
     }
 

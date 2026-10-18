@@ -199,14 +199,16 @@ test("按一下同步：雲端較新時先給下載按鈕，再按一次才真�
     const cloudYaml = yamlNamed("雲端版行程");
     const page = createPage();
     const drive = installFakeDrive(page, [CLOUD_COPY]);
-    // 上次同步時雙方一致；接著只有雲端動了。
+    // 上次同步時雙方一致。
     seedConnected({ record: IN_SYNC });
     await gotoLoaded(page);
-    drive.write(CLOUD_FILE_ID, cloudYaml);
     const { user } = page;
 
     await openTripManagement(user);
-    await user.click(screen.getByRole("button", { name: "同步行程 (比對本地與雲端內容差異)" }));
+    const syncButton = await screen.findByRole("button", { name: "同步行程 (比對本地與雲端內容差異)" });
+    // 行程管理打開、清單也抓過之後雲端才動：按鈕還不知道，只能靠這一下去問。
+    drive.write(CLOUD_FILE_ID, cloudYaml);
+    await user.click(syncButton);
 
     // 第一下只是檢查：按鈕換成「下載」，還沒真的動到本機內容。
     await screen.findByText(/有新版本，可以下載更新/);
@@ -264,11 +266,13 @@ test("按一下上傳：本機與雲端都改過時停下來問，且兩側都�
     const drive = installFakeDrive(page, [CLOUD_COPY]);
     seedConnected({ record: LOCALLY_EDITED });
     await gotoLoaded(page);
-    drive.write(CLOUD_FILE_ID, yamlNamed("雲端版行程"));
     const { user } = page;
 
     await openTripManagement(user);
-    await user.click(await screen.findByRole("button", { name: "上傳本機異動到 Google Drive (覆蓋雲端版本)" }));
+    const uploadButton = await screen.findByRole("button", { name: "上傳本機異動到 Google Drive (覆蓋雲端版本)" });
+    // 清單抓過之後雲端才動，所以按鈕還是上傳；按下去才發現兩邊都改過。
+    drive.write(CLOUD_FILE_ID, yamlNamed("雲端版行程"));
+    await user.click(uploadButton);
 
     await screen.findByRole("alertdialog", { name: /都改過/ });
     // 沒有上傳、雲端內容原封不動。
@@ -284,15 +288,16 @@ test("按一下上傳：本機與雲端都改過時停下來問，且兩側都�
 
 test("衝突時選擇保留本機：雲端內容被本機取代", async () => {
     const page = createPage();
-    const drive = installFakeDrive(page, [CLOUD_COPY]);
+    // 開啟前雲端就被另一台裝置改過，本機也有沒上傳的修改。
+    const drive = installFakeDrive(page, [{ ...CLOUD_COPY, content: yamlNamed("雲端版行程") }]);
     seedConnected({ record: LOCALLY_EDITED });
     await gotoLoaded(page);
-    drive.write(CLOUD_FILE_ID, yamlNamed("雲端版行程"));
     const { user } = page;
 
+    // 背景清單已經看出兩邊都改過：行程管理一打開就是衝突，不會先給一個按了才說衝突的上傳鈕。
     await openTripManagement(user);
-    await user.click(await screen.findByRole("button", { name: "上傳本機異動到 Google Drive (覆蓋雲端版本)" }));
     await screen.findByRole("alertdialog", { name: /都改過/ });
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "請先在下方解決雲端衝突" }).disabled).toBe(true);
 
     await user.click(screen.getByRole("button", { name: "保留本機版本" }));
     await user.click(screen.getByRole("button", { name: "覆蓋雲端" }));
@@ -303,14 +308,12 @@ test("衝突時選擇保留本機：雲端內容被本機取代", async () => {
 
 test("衝突時兩份都留：雲端版成為這趟行程，本機版另存成新行程", async () => {
     const page = createPage();
-    const drive = installFakeDrive(page, [CLOUD_COPY]);
+    const drive = installFakeDrive(page, [{ ...CLOUD_COPY, content: yamlNamed("雲端版行程") }]);
     seedConnected({ record: LOCALLY_EDITED });
     await gotoLoaded(page);
-    drive.write(CLOUD_FILE_ID, yamlNamed("雲端版行程"));
     const { user } = page;
 
     await openTripManagement(user);
-    await user.click(await screen.findByRole("button", { name: "上傳本機異動到 Google Drive (覆蓋雲端版本)" }));
     await screen.findByRole("alertdialog", { name: /都改過/ });
 
     await user.click(screen.getByRole("button", { name: /兩份都留/ }));
@@ -503,6 +506,23 @@ test("背景檢查：一開啟就發現雲端有新版，按下載才換掉行�
     await page.user.click(await screen.findByRole("button", { name: "下載" }));
 
     await screen.findByRole("heading", { name: "雲端版行程" });
+});
+
+test("背景檢查已知雲端有新版：行程管理的按鈕直接是下載，不用先按同步", async () => {
+    const page = createPage();
+    const drive = installFakeDrive(page, [{ ...CLOUD_COPY, content: yamlNamed("雲端版行程") }]);
+    seedConnected({ record: IN_SYNC });
+    await gotoLoaded(page);
+    const { user } = page;
+
+    await openTripManagement(user);
+    await user.click(await screen.findByRole("button", { name: "下載雲端最新版本 (覆蓋本機)" }));
+
+    await screen.findByText(/已載入雲端版本/);
+    expect(drive.counts().downloads).toBe(1);
+    // 剛下載完清單還沒重抓：按鈕不能把自己剛做的下載又讀成雲端有新版或衝突。
+    expect(screen.queryByRole("alertdialog", { name: /都改過/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "下載雲端最新版本 (覆蓋本機)" })).toBeNull();
 });
 
 test("背景檢查：token 過期時提示重新連線，連上後才說雲端有新版", async () => {

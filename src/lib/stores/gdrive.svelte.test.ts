@@ -285,7 +285,7 @@ describe("sync: content equality", () => {
         const res = await sync.sync(YAML_B, TRIP);
 
         expect(res?.action).toBe("up_to_date");
-        expect(sync.conflictFor(TRIP)).toBeNull();
+        expect(sync.conflictFor(TRIP, YAML_B)).toBeNull();
         // Neither side moves, and no bytes travel in either direction.
         expect(calls.some(c => c.url.includes("alt=media") || c.url.includes("/upload/"))).toBe(false);
         // The base has to advance too, or the next real edit reads as "both changed".
@@ -323,7 +323,7 @@ describe("sync: checkOnly", () => {
 
         expect(res?.action).toBe("pull_ready");
         expect(sync.cloudActionFor(TRIP, YAML_A)).toEqual({ kind: "download" });
-        expect(sync.conflictFor(TRIP)).toBeNull();
+        expect(sync.conflictFor(TRIP, YAML_A)).toBeNull();
         expect(calls.some(c => c.url.includes("alt=media"))).toBe(false);
         expect(gdrive.loadTripSyncMap()[TRIP]?.remoteMd5).toBe("md5-1");
     });
@@ -424,7 +424,7 @@ describe("sync: conflict", () => {
         const res = await sync.sync(YAML_A, TRIP);
 
         expect(res?.action).toBe("conflict");
-        expect(sync.conflictFor(TRIP)).toEqual({ tripId: TRIP, fileName: "東京" });
+        expect(sync.conflictFor(TRIP, YAML_A)).toEqual({ tripId: TRIP, fileName: "東京" });
         // No upload, no download, and the record untouched — this is the property the
         // "never destructive on its own" contract rests on.
         expect(calls.some(c => c.url.includes("/upload/"))).toBe(false);
@@ -440,12 +440,12 @@ describe("sync: conflict", () => {
             upload: { id: "file-1", name: "東京.yaml", md5Checksum: "md5-3" },
         });
         await sync.sync(YAML_A, TRIP);
-        expect(sync.conflictFor(TRIP)).not.toBeNull();
+        expect(sync.conflictFor(TRIP, YAML_A)).not.toBeNull();
 
         const res = await sync.sync(YAML_A, TRIP, { force: "local" });
 
         expect(res?.action).toBe("pushed");
-        expect(sync.conflictFor(TRIP)).toBeNull();
+        expect(sync.conflictFor(TRIP, YAML_A)).toBeNull();
         expect(calls.filter(c => c.url.includes("/upload/")).length).toBe(1);
         expect(gdrive.loadTripSyncMap()[TRIP]?.remoteMd5).toBe("md5-3");
     });
@@ -465,9 +465,9 @@ describe("sync: conflict", () => {
         expect(res?.yaml).toBe(YAML_B);
         // The conflict outlives the download and is cleared by the commit, so a pull the
         // caller could not land leaves the decision strip up rather than looking settled.
-        expect(sync.conflictFor(TRIP)).not.toBeNull();
+        expect(sync.conflictFor(TRIP, YAML_A)).not.toBeNull();
         res?.commit?.();
-        expect(sync.conflictFor(TRIP)).toBeNull();
+        expect(sync.conflictFor(TRIP, YAML_A)).toBeNull();
     });
 
     it("offers no push for a trip whose conflict is unresolved", async () => {
@@ -475,7 +475,7 @@ describe("sync: conflict", () => {
         await loadSync();
         createDriveStub({ meta: { body: { id: "file-1", name: "東京.yaml", md5Checksum: "md5-2" } } });
         await sync.sync(YAML_A, TRIP);
-        expect(sync.conflictFor(TRIP)).not.toBeNull();
+        expect(sync.conflictFor(TRIP, YAML_A)).not.toBeNull();
 
         // A prompt to upload would compete with the decision strip for the same answer.
         expect(sync.hasUnpushedEdits(TRIP, YAML_B)).toBe(false);
@@ -561,7 +561,7 @@ describe("rebinding after the local state is lost", () => {
             remoteHash: yamlFingerprint(YAML_ID),
             localHash: yamlFingerprint(YAML_ID),
         });
-        expect(sync.conflictFor(profileId)).toBeNull();
+        expect(sync.conflictFor(profileId, YAML_ID)).toBeNull();
     });
 
     // The file was deleted and another device has since uploaded the trip again.
@@ -575,7 +575,7 @@ describe("rebinding after the local state is lost", () => {
         await sync.refreshFiles({ force: true });
 
         expect(sync.cloudFileId(profileId)).toBe("file-2");
-        expect(sync.conflictFor(profileId)).toBeNull();
+        expect(sync.conflictFor(profileId, YAML_ID)).toBeNull();
     });
 
     it("binds but asks when the two copies have drifted apart", async () => {
@@ -589,7 +589,7 @@ describe("rebinding after the local state is lost", () => {
         // Bound, so nothing creates a second file — but with no local agreement recorded.
         expect(sync.cloudFileId(profileId)).toBe("file-1");
         expect(gdrive.loadTripSyncMap()[profileId]?.localHash).toBeUndefined();
-        expect(sync.conflictFor(profileId)).toEqual({ tripId: profileId, fileName: "東京" });
+        expect(sync.conflictFor(profileId, YAML_ID_EDITED)).toEqual({ tripId: profileId, fileName: "東京" });
     });
 
     it("holds the drifted trip on that conflict, since the record alone would push", async () => {
@@ -616,7 +616,7 @@ describe("rebinding after the local state is lost", () => {
         await loadSync();
         const calls = createDriveStub({ meta: { body: { id: "file-1", name: "東京", md5Checksum: "md5-1" } } });
 
-        expect(sync.conflictFor(profileId)).not.toBeNull();
+        expect(sync.conflictFor(profileId, YAML_ID_EDITED)).not.toBeNull();
         expect(await sync.sync(YAML_ID_EDITED, profileId)).toMatchObject({ action: "conflict" });
         expect(calls.some(c => c.url.includes("/upload/"))).toBe(false);
     });
@@ -635,7 +635,7 @@ describe("rebinding after the local state is lost", () => {
         await sync.sync(YAML_ID_EDITED, profileId, { force: "local" });
 
         expect(gdrive.loadTripSyncMap()[profileId]?.diverged).toBeUndefined();
-        expect(sync.conflictFor(profileId)).toBeNull();
+        expect(sync.conflictFor(profileId, YAML_ID_EDITED)).toBeNull();
     });
 
     it("leaves a trip that is already bound alone", async () => {
