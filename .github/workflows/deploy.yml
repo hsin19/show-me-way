@@ -10,11 +10,17 @@ on:
 permissions:
   contents: read
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+# A newer push cancels the run in progress instead of queueing behind it. A deploy
+# job can hang in `waiting` on the github-pages environment with no rule left to
+# satisfy; with cancel-in-progress off it holds this group until GitHub expires it
+# at 30 days, and every push meanwhile is queued, then cancelled by the next one.
+# Cancelling mid-deploy is harmless: Pages keeps serving the last finished
+# deployment, and the run that cancelled it ships a newer tree. Workflow-level
+# rather than on the deploy job so a run is superseded whole -- per job, an older
+# run whose build finished late could deploy over a newer one.
 concurrency:
   group: 'pages'
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   # Same definition pr.yml gates a PR with, so a direct push to `main` is held to
