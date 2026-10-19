@@ -59,8 +59,13 @@ class AiChat {
     /** The composer's draft, kept with the thread it was being written for. */
     input = $state("");
     isSending = $state(false);
+    /** When the turn in flight was sent, for the waiting bubble's count of seconds. */
+    sentAt = $state<number | null>(null);
+    /** What the turn in flight is doing besides waiting, when that is worth saying. */
+    status = $state<string | null>(null);
     errorText = $state<string | null>(null);
     private tripId: string | null = null;
+    private inFlight: AbortController | null = null;
     /** Bumped by every new conversation, so a reply still in flight for the last one is dropped. */
     private generation = 0;
 
@@ -71,12 +76,21 @@ class AiChat {
         this.tripId = tripId;
     }
 
+    /** Gives up on the turn in flight, handing its question back to the composer as a failure would. */
+    abort(): void {
+        this.inFlight?.abort();
+    }
+
     reset(): void {
+        // Nothing will show the reply, so do not let it spend the user's quota either.
+        this.inFlight?.abort();
         this.generation++;
         this.messages = [];
         this.input = "";
         this.errorText = null;
         this.isSending = false;
+        this.sentAt = null;
+        this.status = null;
     }
 
     /**
@@ -92,9 +106,17 @@ class AiChat {
         this.input = "";
         this.errorText = null;
         this.isSending = true;
+        this.sentAt = Date.now();
+        const controller = new AbortController();
+        this.inFlight = controller;
 
         try {
-            const turn = await sendChatMessage(apiKey, model, history.map(replayed), prompt, baseYaml);
+            const turn = await sendChatMessage(apiKey, model, history.map(replayed), prompt, baseYaml, {
+                signal: controller.signal,
+                onBusyRetry: (attempt, of) => {
+                    if (generation === this.generation) this.status = `模型忙碌中，正在重試（${attempt}/${of}）`;
+                },
+            });
             if (generation !== this.generation) return;
             const next: UiMessage = { role: "model", content: turn.text };
             if (turn.edits) {
@@ -117,9 +139,15 @@ class AiChat {
             // would render the same bubble twice.
             this.messages = history;
             this.input = prompt;
-            this.errorText = err instanceof Error ? err.message : "發生未知錯誤，請再試一次。";
+            // A stop the user asked for is not an error to show them.
+            this.errorText = controller.signal.aborted ? null : err instanceof Error ? err.message : "發生未知錯誤，請再試一次。";
         } finally {
-            if (generation === this.generation) this.isSending = false;
+            if (generation === this.generation) {
+                this.isSending = false;
+                this.sentAt = null;
+                this.status = null;
+                this.inFlight = null;
+            }
         }
     }
 }

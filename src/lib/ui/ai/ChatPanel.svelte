@@ -20,6 +20,7 @@ import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 import Send from "@lucide/svelte/icons/send";
 import Settings from "@lucide/svelte/icons/settings";
 import Sparkles from "@lucide/svelte/icons/sparkles";
+import Square from "@lucide/svelte/icons/square";
 import SquarePen from "@lucide/svelte/icons/square-pen";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import WandSparkles from "@lucide/svelte/icons/wand-sparkles";
@@ -59,6 +60,17 @@ $effect(() => {
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
 });
+
+// Ticks only while a turn is in flight, for the waiting bubble's count of seconds — the
+// one sign that a slow model is still being waited on rather than stuck.
+let now = $state(Date.now());
+$effect(() => {
+    if (!aiChat.isSending) return;
+    now = Date.now();
+    const timer = setInterval(() => (now = Date.now()), 1000);
+    return () => clearInterval(timer);
+});
+let waited = $derived(aiChat.sentAt === null ? 0 : Math.max(0, Math.floor((now - aiChat.sentAt) / 1000)));
 
 const QUICK_PROMPTS = [
     { label: "在地美食推薦", icon: "🍽️", text: "推薦這趟行程當地的必吃美食與口袋名單" },
@@ -308,8 +320,9 @@ function applyEdit(message: UiMessage) {
                 {/each}
                 {#if aiChat.isSending}
                     <div class="flex justify-start">
-                        <div class="panel rounded-2xl px-3.5 py-2.5 text-text-secondary">
-                            <Loader2 size={16} class="animate-spin" aria-hidden="true" />
+                        <div class="panel rounded-2xl px-3.5 py-2.5 text-xs text-text-secondary flex items-center gap-2">
+                            <Loader2 size={16} class="animate-spin shrink-0" aria-hidden="true" />
+                            <span>{aiChat.status ?? "等待回覆中"}…{waited > 0 ? ` ${waited} 秒` : ""}</span>
                         </div>
                     </div>
                 {/if}
@@ -373,14 +386,26 @@ function applyEdit(message: UiMessage) {
                         disabled={aiChat.isSending}
                         class="flex-1 min-w-0 min-h-[44px] resize-none bg-well-deep border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent transition disabled:opacity-50"
                     ></textarea>
-                    <button
-                        type="submit"
-                        aria-label="送出"
-                        disabled={!aiChat.input.trim() || aiChat.isSending}
-                        class="flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center bg-accent text-accent-contrast rounded-xl transition active:scale-[0.96] cursor-pointer disabled:opacity-40"
-                    >
-                        <Send size={18} class="stroke-[2.5]" aria-hidden="true" />
-                    </button>
+                    {#if aiChat.isSending}
+                        <button
+                            type="button"
+                            onclick={() => aiChat.abort()}
+                            aria-label="中止回覆"
+                            title="中止回覆"
+                            class="flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center bg-tint-2 border border-card-border text-text-primary rounded-xl transition active:scale-[0.96] cursor-pointer"
+                        >
+                            <Square size={14} class="fill-current" aria-hidden="true" />
+                        </button>
+                    {:else}
+                        <button
+                            type="submit"
+                            aria-label="送出"
+                            disabled={!aiChat.input.trim()}
+                            class="flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center bg-accent text-accent-contrast rounded-xl transition active:scale-[0.96] cursor-pointer disabled:opacity-40"
+                        >
+                            <Send size={18} class="stroke-[2.5]" aria-hidden="true" />
+                        </button>
+                    {/if}
                 </form>
             </div>
         </div>

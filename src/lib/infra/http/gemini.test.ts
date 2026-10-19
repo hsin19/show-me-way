@@ -396,6 +396,27 @@ describe("sendChatMessage", () => {
         expect(fetchMock).toHaveBeenCalledOnce();
     });
 
+    it("stops on abort, while waiting out a busy model as well, and says it is retrying", async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 503, json: () => Promise.resolve({}) });
+        vi.stubGlobal("fetch", fetchMock);
+        const controller = new AbortController();
+        const retries: [number, number][] = [];
+
+        const turn = sendChatMessage("key", "gemini-3.6-flash", [], "hi", buildContext(), {
+            signal: controller.signal,
+            onBusyRetry: (attempt, of) => retries.push([attempt, of]),
+        });
+        const stopped = expect(turn).rejects.toMatchObject({ name: "AbortError" });
+        await vi.advanceTimersByTimeAsync(500);
+        controller.abort();
+        await stopped;
+        expect(retries).toEqual([[1, 2]]);
+        expect(fetchMock).toHaveBeenCalledOnce();
+        expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].signal).toBe(controller.signal);
+        vi.useRealTimers();
+    });
+
     it("waits out a busy model and sends again before giving up", async () => {
         vi.useFakeTimers();
         const busy = { ok: false, status: 503, json: () => Promise.resolve({ error: { message: "gemini-3.6-flash is currently experiencing high demand." } }) };

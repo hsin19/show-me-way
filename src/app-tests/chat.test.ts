@@ -318,6 +318,57 @@ test("AI 聊天：下一輪送出的對話紀錄告訴模型它上一輪的修�
     expect(screen.queryByText(/App 紀錄/)).toBeNull();
 });
 
+test("AI 聊天：等回覆時切到別的分頁，請求照常跑完；切回來先看到等待中，回覆到了就出現", async () => {
+    const page = createPage();
+    window.localStorage.setItem("showmeway_gemini_api_key", "test-key");
+    page.route(MODELS_URL_PREFIX, keyed("test-key", () => json(ONE_MODEL)));
+    let release!: () => void;
+    const answered = new Promise<void>(resolve => (release = resolve));
+    page.route(
+        INTERACTIONS_URL,
+        keyed("test-key", async () => {
+            await answered;
+            return json({ steps: [{ type: "model_output", content: [{ type: "text", text: "第二天去明洞。" }] }] });
+        }),
+    );
+    await page.goto("/");
+    const { user } = page;
+
+    await user.click(navTab("AI"));
+    await page.fill(await screen.findByLabelText("輸入問題"), "第二天去哪？");
+    await user.click(screen.getByRole("button", { name: "送出" }));
+    await user.click(navTab("工具"));
+    await user.click(navTab("AI"));
+
+    screen.getByText("第二天去哪？");
+    expect(composer().disabled).toBe(true);
+    expect(screen.getByRole("button", { name: "開新對話" }).hasAttribute("disabled")).toBe(true);
+
+    release();
+    await screen.findByText("第二天去明洞。");
+    await waitFor(() => expect(composer().disabled).toBe(false));
+});
+
+test("AI 聊天：等待中顯示正在做什麼；按中止就停，問題放回輸入框、不算錯誤", async () => {
+    const page = createPage();
+    window.localStorage.setItem("showmeway_gemini_api_key", "test-key");
+    page.route(MODELS_URL_PREFIX, keyed("test-key", () => json(ONE_MODEL)));
+    page.route(INTERACTIONS_URL, keyed("test-key", () => new Promise<Response>(() => {})));
+    await page.goto("/");
+    const { user } = page;
+
+    await user.click(navTab("AI"));
+    await page.fill(await screen.findByLabelText("輸入問題"), "第二天去哪？");
+    await user.click(screen.getByRole("button", { name: "送出" }));
+    await screen.findByText(/^等待回覆中…/);
+
+    await user.click(screen.getByRole("button", { name: "中止回覆" }));
+    await waitFor(() => expect(composer().value).toBe("第二天去哪？"));
+    expect(screen.queryByText(/等待回覆中/)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    screen.getByRole("button", { name: "送出" });
+});
+
 test("AI 聊天：Gemini 無法連線時顯示錯誤並保留提問", async () => {
     // 金鑰已存在且模型清單抓得到 → 直接進入聊天畫面，只有送出會失敗。
     // 模型清單必須 mock：抓不到會被當成金鑰不可用而擋掉整個分頁（見下一個測試）。

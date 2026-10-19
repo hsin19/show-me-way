@@ -66,6 +66,16 @@ globalThis.setInterval = ((...args: Parameters<typeof setInterval>) => {
     return id;
 }) as typeof setInterval;
 
+/** As a browser's fetch does: a request whose signal aborts rejects then, whatever the server is still doing. */
+function abortable<T>(signal: AbortSignal | null | undefined, response: T | Promise<T>): Promise<T> {
+    if (!signal) return Promise.resolve(response);
+    if (signal.aborted) return Promise.reject(signal.reason as Error);
+    return new Promise<T>((resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason as Error), { once: true });
+        Promise.resolve(response).then(resolve, reject);
+    });
+}
+
 /** A string matches every URL that starts with it. */
 type RouteMatcher = string | RegExp | ((url: URL) => boolean);
 export type RouteHandler = (request: Request) => Response | Promise<Response>;
@@ -176,7 +186,7 @@ export function createPage(options: PageOptions = {}): AppPage {
         const request = toRequest(input, init);
         const url = new URL(request.url);
         const route = routes.findLast(r => matches(r.match, url));
-        if (route) return await route.handler(request);
+        if (route) return await abortable(init?.signal ?? request.signal, route.handler(request));
         if (url.origin !== ORIGIN) throw new TypeError(`blocked: ${url.href}`);
         const body = PUBLIC_FILES[`/public${url.pathname}`];
         return body === undefined ? new Response("not found", { status: 404 }) : new Response(body, { status: 200 });

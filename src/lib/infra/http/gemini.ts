@@ -378,6 +378,16 @@ export function pickDefaultModel(models: GeminiModel[]): string | null {
 // is lost by sending again, since an edit only ever lands on the user's own tap.
 const BUSY_RETRY_DELAYS_MS = [2000, 5000];
 
+function wait(ms: number, signal: AbortSignal | undefined): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, ms);
+        signal?.addEventListener("abort", () => {
+            clearTimeout(timer);
+            reject(signal.reason as Error);
+        }, { once: true });
+    });
+}
+
 function isBusy(status: number): boolean {
     return status === 500 || status === 502 || status === 503 || status === 504;
 }
@@ -403,7 +413,14 @@ export async function sendChatMessage(
     history: ChatMessage[],
     userText: string,
     itineraryYaml: string,
+    options: {
+        /** Aborting rejects with the signal's reason, through a retry's wait as well. */
+        signal?: AbortSignal;
+        /** Called before each wait out of a busy model, so the UI can say what it is doing. */
+        onBusyRetry?: (attempt: number, of: number) => void;
+    } = {},
 ): Promise<ChatTurn> {
+    const { signal, onBusyRetry } = options;
     const now = new Date();
     const nowIso = toLocalIsoDate(now);
     const { weekday } = splitDayDate(nowIso);
@@ -432,14 +449,17 @@ export async function sendChatMessage(
                 method: "POST",
                 headers: { ...authHeaders(apiKey), "Content-Type": "application/json" },
                 body,
+                signal,
             });
         } catch (e) {
+            if (signal?.aborted) throw e;
             console.error("Gemini request failed", e);
             throw new Error("無法連線到 Gemini，請檢查網路連線。", { cause: e });
         }
         const delay = BUSY_RETRY_DELAYS_MS[attempt];
         if (!isBusy(res.status) || delay === undefined) break;
-        await new Promise(resolve => setTimeout(resolve, delay));
+        onBusyRetry?.(attempt + 1, BUSY_RETRY_DELAYS_MS.length);
+        await wait(delay, signal);
     }
 
     if (!res.ok) {
