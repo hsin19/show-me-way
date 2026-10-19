@@ -1,17 +1,17 @@
 <script lang="ts">
-import {
-    applyItineraryEdits,
-    type ItineraryEdit,
-} from "$lib/domain/itinerary-edits";
+import { applyItineraryEdits } from "$lib/domain/itinerary-edits";
 import type { TripData } from "$lib/domain/trip";
 import {
     buildItineraryContext,
-    type ChatMessage,
     loadGeminiApiKey,
-    sendChatMessage,
 } from "$lib/infra/http/gemini";
+import {
+    aiChat,
+    type UiMessage,
+} from "$lib/stores/ai-chat.svelte";
 import { createModelPicker } from "$lib/stores/gemini-models.svelte";
 import { edgeFade } from "$lib/ui/shared/edge-fade";
+import RichText from "$lib/ui/shared/RichText.svelte";
 import Check from "@lucide/svelte/icons/check";
 import ChevronDown from "@lucide/svelte/icons/chevron-down";
 import KeyRound from "@lucide/svelte/icons/key-round";
@@ -20,6 +20,7 @@ import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 import Send from "@lucide/svelte/icons/send";
 import Settings from "@lucide/svelte/icons/settings";
 import Sparkles from "@lucide/svelte/icons/sparkles";
+import SquarePen from "@lucide/svelte/icons/square-pen";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import WandSparkles from "@lucide/svelte/icons/wand-sparkles";
 import { tick } from "svelte";
@@ -34,28 +35,9 @@ interface Props {
 
 let { tripData, onApplyEdit, onOpenAppSettings }: Props = $props();
 
-// Only `content` is replayed to Gemini as history — prose and edit summaries,
-// never YAML, since the current itinerary is re-sent in the system prompt. The
-// rest is UI state for the suggestion card.
-interface UiMessage extends ChatMessage {
-    /** Set only once they have applied cleanly to `baseYaml`. */
-    edits?: ItineraryEdit[];
-    /** The itinerary as it was when the edits were proposed, so the card's diff stays stable once another lands. */
-    baseYaml?: string;
-    /** `baseYaml` with the edits applied: what the diff shows. */
-    editYaml?: string;
-    editApplied?: boolean;
-    editError?: string;
-    /** Why the edits no longer apply to the trip as it now stands. */
-    applyError?: string;
-}
-
-// The conversation lives only as long as the tab is mounted; leaving it is how
-// you clear it.
-let messages = $state<UiMessage[]>([]);
-let input = $state("");
-let isSending = $state(false);
-let errorText = $state<string | null>(null);
+$effect.pre(() => {
+    aiChat.bindTrip(tripData.trip.id);
+});
 
 // Mirrors the stored key as a rune, so saving or clearing it in App 設定 is
 // reflected here without a reload.
@@ -73,7 +55,7 @@ let composerEl = $state<HTMLTextAreaElement>();
 $effect(() => {
     const el = composerEl;
     if (!el) return;
-    void input;
+    void aiChat.input;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
 });
@@ -86,59 +68,25 @@ const QUICK_PROMPTS = [
 ];
 
 async function triggerSend(promptText: string) {
-    const text = promptText.trim();
-    if (!text || isSending || !apiKey) return;
-
-    const history = messages;
-    messages = [...history, { role: "user", content: text }];
-    input = "";
-    errorText = null;
-    isSending = true;
-    await scrollToBottom();
-
+    if (!apiKey) return;
     // Snapshotted, not re-read later: this is what the model edits against, and
     // what its diff must keep being compared to once another edit is applied.
-    const baseYaml = buildItineraryContext(tripData);
-
-    try {
-        const turn = await sendChatMessage(apiKey, modelPicker.activeModel, history, text, baseYaml);
-        const next: UiMessage = { role: "model", content: turn.text };
-        if (turn.edits) {
-            next.content = turn.text || "我已幫你準備好行程修改，請確認下方的變更。";
-            // Applied and validated here, before an apply is even offered — one of the
-            // gates between the model and the user's trip.
-            try {
-                next.editYaml = applyItineraryEdits(baseYaml, turn.edits);
-                next.edits = turn.edits;
-                next.baseYaml = baseYaml;
-            } catch (e) {
-                next.editError = e instanceof Error ? e.message : "AI 給的修改格式有誤。";
-            }
-        }
-        messages = [...messages, next];
-    } catch (err) {
-        // Pop the failed user turn and hand the text back to the composer: left
-        // in the thread it would be replayed to the model as an unanswered turn,
-        // and the retry would render the same bubble twice.
-        messages = history;
-        input = text;
-        errorText = err instanceof Error ? err.message : "發生未知錯誤，請再試一次。";
-    } finally {
-        isSending = false;
-        await scrollToBottom();
-    }
+    const sending = aiChat.send(promptText, apiKey, modelPicker.activeModel, buildItineraryContext(tripData));
+    await scrollToBottom();
+    await sending;
+    await scrollToBottom();
 }
 
 async function send(e: SubmitEvent) {
     e.preventDefault();
-    await triggerSend(input);
+    await triggerSend(aiChat.input);
 }
 
 // Enter inserts a newline, so desktop needs some way to send.
 function onComposerKeydown(e: KeyboardEvent) {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
-        void triggerSend(input);
+        void triggerSend(aiChat.input);
     }
 }
 
@@ -237,18 +185,19 @@ function applyEdit(message: UiMessage) {
     {:else}
         <div class="shrink-0 px-5 pt-[calc(16px+var(--safe-top))] pb-3 border-b border-line flex items-center justify-between gap-3">
             <h2 class="text-lg font-extrabold text-text-primary tracking-tight flex items-center gap-2 min-w-0">
-                <Sparkles size={20} class="text-accent shrink-0" aria-hidden="true" /><span class="truncate">AI 行程小幫手</span>
+                <Sparkles size={20} class="text-accent shrink-0" aria-hidden="true" /><span class="truncate">AI 助手</span>
             </h2>
             <div class="flex items-center gap-2 shrink-0">
                 <!-- appearance-none because WebKit ignores min-height and vertical padding on a
                      native select: on the installed iOS PWA it stayed 20px tall. The chevron
-                     the native control would draw is drawn here instead. -->
-                <div class="relative max-w-[9rem]">
+                     the native control would draw is drawn here instead. Styled as the
+                     overview's 切換行程 pill; the list it opens is still the native one. -->
+                <div class="relative max-w-[10rem]">
                     <select
                         bind:value={modelPicker.selected}
                         disabled={modelPicker.loading}
                         aria-label="選擇 AI 模型"
-                        class="appearance-none w-full min-h-[44px] bg-well-deep border border-card-border rounded-lg pl-2 pr-7 py-1.5 text-xs text-text-primary outline-none focus:border-accent transition cursor-pointer disabled:opacity-50"
+                        class="appearance-none w-full min-h-[44px] bg-tint-1 border border-card-border hover:border-accent/40 rounded-full pl-3.5 pr-8 py-2 text-xs font-bold text-text-primary hover:text-accent outline-none focus:border-accent transition cursor-pointer disabled:opacity-50"
                     >
                         {#if modelPicker.list.length === 0}
                             <option value={modelPicker.selected}>{modelPicker.selected || (modelPicker.loading ? "載入模型中…" : "自動選擇")}</option>
@@ -258,23 +207,45 @@ function applyEdit(message: UiMessage) {
                             {/each}
                         {/if}
                     </select>
-                    <ChevronDown size={14} class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden="true" />
+                    <ChevronDown size={13} class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden="true" />
                 </div>
-                {#if onOpenAppSettings}
+                <!-- 44px hot zones butted together and pulled into the header's padding: the
+                     icons sit as close as the touch targets allow, and the last one lines up
+                     with the edge the title starts from. -->
+                <div class="flex items-center -mr-3">
                     <button
-                        onclick={onOpenAppSettings}
-                        aria-label="前往 App 設定管理 AI 金鑰"
-                        title="前往 App 設定管理 AI 金鑰"
-                        class="text-text-muted hover:text-accent transition cursor-pointer flex items-center justify-center min-w-[44px] min-h-[44px] rounded-lg shrink-0"
+                        type="button"
+                        onclick={() => aiChat.reset()}
+                        disabled={aiChat.isSending || aiChat.messages.length === 0}
+                        aria-label="開新對話"
+                        title="開新對話"
+                        class="text-text-muted hover:text-accent transition cursor-pointer flex items-center justify-center min-w-[44px] min-h-[44px] rounded-lg disabled:opacity-40 disabled:cursor-default"
                     >
-                        <Settings size={18} aria-hidden="true" />
+                        <SquarePen size={18} aria-hidden="true" />
                     </button>
-                {/if}
+                    {#if onOpenAppSettings}
+                        <button
+                            onclick={onOpenAppSettings}
+                            aria-label="前往 App 設定管理 AI 金鑰"
+                            title="前往 App 設定管理 AI 金鑰"
+                            class="text-text-muted hover:text-accent transition cursor-pointer flex items-center justify-center min-w-[44px] min-h-[44px] rounded-lg"
+                        >
+                            <Settings size={18} aria-hidden="true" />
+                        </button>
+                    {/if}
+                </div>
             </div>
         </div>
-        <div bind:this={scrollEl} class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4">
+        <!-- A thread kept from an earlier visit opens where it left off: at its latest message. -->
+        <div
+            bind:this={scrollEl}
+            {@attach node => {
+                node.scrollTop = node.scrollHeight;
+            }}
+            class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4"
+        >
             <div class="max-w-3xl mx-auto w-full space-y-3">
-                {#if messages.length === 0}
+                {#if aiChat.messages.length === 0}
                     <div class="text-center text-text-muted text-sm py-10">
                         <Sparkles size={28} class="text-text-muted mx-auto mb-3" aria-hidden="true" />
                         <p>試著問問看，或直接用說的編輯行程：</p>
@@ -283,17 +254,18 @@ function applyEdit(message: UiMessage) {
                         <p class="text-text-secondary">「把待辦加上『換日幣』」</p>
                     </div>
                 {/if}
-                {#each messages as message, i (i)}
+                {#each aiChat.messages as message, i (i)}
                     <div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
+                        <!-- The model's reply is Markdown it wrote; the user's own text is shown as typed. -->
                         <div
                             class="
-                                max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words
+                                max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed break-words
                                 {message.role === 'user'
-                                ? 'bg-accent text-accent-contrast font-medium'
+                                ? 'bg-accent text-accent-contrast font-medium whitespace-pre-wrap'
                                 : 'panel text-text-primary'}
                             "
                         >
-                            {message.content}
+                            {#if message.role === "user"}{message.content}{:else}<RichText text={message.content} />{/if}
                         </div>
                     </div>
                     {#if message.editError}
@@ -334,23 +306,23 @@ function applyEdit(message: UiMessage) {
                         </div>
                     {/if}
                 {/each}
-                {#if isSending}
+                {#if aiChat.isSending}
                     <div class="flex justify-start">
                         <div class="panel rounded-2xl px-3.5 py-2.5 text-text-secondary">
                             <Loader2 size={16} class="animate-spin" aria-hidden="true" />
                         </div>
                     </div>
                 {/if}
-                {#if errorText}
+                {#if aiChat.errorText}
                     <div role="alert" class="text-xs text-danger bg-danger/10 border border-danger/20 p-2.5 rounded-lg space-y-2">
                         <div class="flex items-start gap-1.5">
                             <TriangleAlert size={14} class="shrink-0 mt-px" aria-hidden="true" />
-                            <span class="whitespace-pre-line">{errorText}</span>
+                            <span class="whitespace-pre-line">{aiChat.errorText}</span>
                         </div>
                         <button
                             type="button"
-                            disabled={!input.trim() || isSending}
-                            onclick={() => triggerSend(input)}
+                            disabled={!aiChat.input.trim() || aiChat.isSending}
+                            onclick={() => triggerSend(aiChat.input)}
                             class="flex items-center gap-1.5 font-bold text-danger hover:opacity-80 transition cursor-pointer disabled:opacity-40"
                         >
                             <RefreshCw size={12} aria-hidden="true" />重試
@@ -377,7 +349,7 @@ function applyEdit(message: UiMessage) {
                         {#each QUICK_PROMPTS as p (p.label)}
                             <button
                                 type="button"
-                                disabled={isSending}
+                                disabled={aiChat.isSending}
                                 onclick={() => triggerSend(p.text)}
                                 class="flex-none min-h-[44px] px-3 py-1.5 rounded-xl bg-tint-1 border border-card-border text-xs font-bold text-text-secondary hover:text-accent hover:bg-tint-2 transition duration-200 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                             >
@@ -391,20 +363,20 @@ function applyEdit(message: UiMessage) {
                 <form onsubmit={send} class="flex items-end gap-2">
                     <textarea
                         bind:this={composerEl}
-                        bind:value={input}
+                        bind:value={aiChat.input}
                         onkeydown={onComposerKeydown}
                         aria-label="輸入問題"
                         autocomplete="off"
                         rows="1"
                         enterkeyhint="enter"
-                        placeholder="詢問或用說的編輯行程…（Enter 換行）"
-                        disabled={isSending}
+                        placeholder="詢問或用說的編輯行程…"
+                        disabled={aiChat.isSending}
                         class="flex-1 min-w-0 min-h-[44px] resize-none bg-well-deep border border-card-border rounded-xl px-3 py-2.5 text-sm text-text-primary outline-none focus:border-accent transition disabled:opacity-50"
                     ></textarea>
                     <button
                         type="submit"
                         aria-label="送出"
-                        disabled={!input.trim() || isSending}
+                        disabled={!aiChat.input.trim() || aiChat.isSending}
                         class="flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center bg-accent text-accent-contrast rounded-xl transition active:scale-[0.96] cursor-pointer disabled:opacity-40"
                     >
                         <Send size={18} class="stroke-[2.5]" aria-hidden="true" />

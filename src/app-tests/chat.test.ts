@@ -152,8 +152,7 @@ test("AI 聊天：先套用後一則建議，再套用較早的那則，兩個�
     await user.click(screen.getByRole("button", { name: "送出" }));
     await waitFor(() => expect(screen.getAllByRole("button", { name: "套用變更" })).toHaveLength(2));
 
-    // 先套用第二張，行程就跟第一張的快照不一樣了。離開 AI 分頁會卸掉對話，所以
-    // 套上去的是不是被按的那一張，只能從存檔看。
+    // 先套用第二張，行程就跟第一張的快照不一樣了。套上去的是不是被按的那一張，從存檔看。
     await user.click(screen.getAllByRole("button", { name: "套用變更" })[1]!);
     await screen.findByText("已套用變更");
     expect(window.localStorage.getItem("showmeway_user_yaml")).toContain("text: 買轉接頭");
@@ -222,6 +221,101 @@ test("AI 聊天：修改對不到行程時直接說明，不給套用按鈕", as
 
     await screen.findByText(/AI 給的修改無法套用。第 1 項修改（刪除事件）沒辦法套用：2099-01-01 找不到「不存在的事件」/);
     expect(screen.queryByRole("button", { name: "套用變更" })).toBeNull();
+});
+
+test("AI 聊天：回覆裡的 Markdown 排成標題、條列與連結，提問照打的樣子顯示", async () => {
+    const page = createPage();
+    window.localStorage.setItem("showmeway_gemini_api_key", "test-key");
+    page.route(MODELS_URL_PREFIX, keyed("test-key", () => json(ONE_MODEL)));
+    page.route(
+        INTERACTIONS_URL,
+        keyed("test-key", () =>
+            json({
+                steps: [{
+                    type: "model_output",
+                    content: [{ type: "text", text: "### 交通時間\n* **去程**：約 13.5 小時\n  * 華航 CI075\n* 報到看 [Etihad](https://www.etihad.com)\n* [惡意](javascript:alert(1))" }],
+                }],
+            })),
+    );
+    await page.goto("/");
+    const { user } = page;
+
+    await user.click(navTab("AI"));
+    await page.fill(await screen.findByLabelText("輸入問題"), "交通要多久？**很趕**嗎");
+    await user.click(screen.getByRole("button", { name: "送出" }));
+
+    await screen.findByRole("heading", { name: "交通時間" });
+    expect(screen.getAllByRole("listitem")).toHaveLength(4);
+    expect(screen.getByText("去程").tagName).toBe("STRONG");
+    // 縮排的那項排在「去程」底下，不是跟它同一層。
+    expect(screen.getByText("華航 CI075").closest("ul")?.closest("li")?.textContent).toContain("去程");
+    expect(screen.getByRole("link", { name: "Etihad" }).getAttribute("href")).toBe("https://www.etihad.com");
+    expect(document.querySelectorAll("a[href^='javascript:']")).toHaveLength(0);
+    // 使用者自己打的字不當成 Markdown。
+    screen.getByText("交通要多久？**很趕**嗎");
+});
+
+test("AI 聊天：切到別的分頁再回來，對話和還沒送出的草稿都在；按開新對話才清掉", async () => {
+    const page = createPage();
+    window.localStorage.setItem("showmeway_gemini_api_key", "test-key");
+    page.route(MODELS_URL_PREFIX, keyed("test-key", () => json(ONE_MODEL)));
+    page.route(INTERACTIONS_URL, keyed("test-key", () => json({ steps: [{ type: "model_output", content: [{ type: "text", text: "第二天去明洞。" }] }] })));
+    await page.goto("/");
+    const { user } = page;
+
+    await user.click(navTab("AI"));
+    const newChat = () => screen.getByRole("button", { name: "開新對話" });
+    await screen.findByLabelText("輸入問題");
+    expect(newChat().hasAttribute("disabled")).toBe(true);
+    await page.fill(composer(), "第二天去哪？");
+    await user.click(screen.getByRole("button", { name: "送出" }));
+    await screen.findByText("第二天去明洞。");
+    await page.fill(composer(), "那第三天");
+
+    await user.click(navTab("工具"));
+    await user.click(navTab("AI"));
+    await screen.findByText("第二天去明洞。");
+    screen.getByText("第二天去哪？");
+    expect(composer().value).toBe("那第三天");
+
+    await user.click(newChat());
+    expect(screen.queryByText("第二天去明洞。")).toBeNull();
+    expect(composer().value).toBe("");
+    screen.getByText("試著問問看，或直接用說的編輯行程：");
+});
+
+test("AI 聊天：下一輪送出的對話紀錄告訴模型它上一輪的修改有沒有套用，畫面上不顯示", async () => {
+    const page = createPage();
+    window.localStorage.setItem("showmeway_gemini_api_key", "test-key");
+    page.route(MODELS_URL_PREFIX, keyed("test-key", () => json(ONE_MODEL)));
+    const sent: { input: { type: string; content: { text: string; }[]; }[]; }[] = [];
+    page.route(
+        INTERACTIONS_URL,
+        keyed("test-key", async request => {
+            sent.push(await request.json() as typeof sent[number]);
+            return json(
+                sent.length === 1
+                    ? { steps: [{ type: "model_output", content: [{ type: "text", text: "加好了。" }] }, addTodo("換日幣")] }
+                    : { steps: [{ type: "model_output", content: [{ type: "text", text: "還有呢？" }] }] },
+            );
+        }),
+    );
+    await page.goto("/");
+    const { user } = page;
+
+    await user.click(navTab("AI"));
+    await page.fill(await screen.findByLabelText("輸入問題"), "待辦加換日幣");
+    await user.click(screen.getByRole("button", { name: "送出" }));
+    await user.click(await screen.findByRole("button", { name: "套用變更" }));
+    await screen.findByText("已套用變更");
+    await page.fill(composer(), "還有要準備的嗎");
+    await user.click(screen.getByRole("button", { name: "送出" }));
+    await screen.findByText("還有呢？");
+
+    const replayedReply = sent[1]!.input[1]!.content[0]!.text;
+    expect(replayedReply).toContain("加好了。");
+    expect(replayedReply).toContain("（App 紀錄：修改提案為 add_item todo「換日幣」。使用者已套用，目前的行程資料已包含這些變更。）");
+    expect(screen.queryByText(/App 紀錄/)).toBeNull();
 });
 
 test("AI 聊天：Gemini 無法連線時顯示錯誤並保留提問", async () => {

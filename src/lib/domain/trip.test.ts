@@ -497,7 +497,7 @@ describe("validateYaml — stops 形狀", () => {
     });
 });
 
-describe("validateYaml — 行內 Markdown 欄位的形狀", () => {
+describe("validateYaml — Markdown 欄位的形狀", () => {
     // 這些欄位交給 markdown.ts 渲染，非文字會被靜靜丟掉而不是報錯，
     // 所以驗證這一關要替作者攔下來。缺欄位仍然合法：一直都只是少一行字。
     const plainEvent = [

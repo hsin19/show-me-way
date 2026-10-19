@@ -147,6 +147,23 @@ test("整趟行程的附件在總覽頁列出，同樣連到 Drive", async () =>
     expect(insurance.getAttribute("href")).toBe("https://drive.google.com/file/d/f-insurance/view");
 });
 
+test("用 | 寫成多行的說明會排成段落與條列", async () => {
+    await openDayOne(FIXTURE_YAML.replace(
+        "        desc: 第一天的測試事件",
+        [
+            "        desc: |-",
+            "          先寄行李再出發：",
+            "          - 櫃台在 **B1**",
+            "          - 寄到 18:00",
+        ].join("\n"),
+    ));
+
+    const items = await screen.findAllByRole("listitem");
+    expect(items.map(item => item.textContent)).toEqual(["櫃台在 B1", "寄到 18:00"]);
+    expect(screen.getByText("B1").tagName).toBe("STRONG");
+    screen.getByText("先寄行李再出發：");
+});
+
 test("links 缺少 url 時在載入這關就被擋下，而不是渲染時炸掉", async () => {
     // 開機路徑把訊息收斂成一句通用文案（確切訊息由 src/lib/domain/trip.test.ts 斷言），這裡要證的
     // 是「擋在 validateYaml，不是讓 undefined 走到 sanitizeLinkHref」。

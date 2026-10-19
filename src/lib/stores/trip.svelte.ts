@@ -361,8 +361,8 @@ export class TripStore {
 
     /**
      * Land the trip the AI's edits produced (`applyItineraryEdits`, run on the trip as it
-     * stood). Assigns `this.data` in place rather than through `load()`, which would unmount
-     * the AI tab and lose its conversation. Also the one path that regenerates every `_id`
+     * stood). Assigns `this.data` in place rather than through `load()`, whose loading screen
+     * would replace the AI tab under the user. Also the one path that regenerates every `_id`
      * without remounting, so anything keyed by `_id` goes stale in place.
      */
     applyAiEdit(yaml: string): boolean {

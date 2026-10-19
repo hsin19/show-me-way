@@ -72,7 +72,7 @@
               },
               "desc": {
                 "type": "string",
-                "description": "詳細說明描述，支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`"
+                "description": "詳細說明描述，支援 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`；用 | 寫成多行時也可以用條列（- 或 1.）、標題（#）與分隔線（---）"
               },
               "status": {
                 "enum": [
@@ -87,7 +87,7 @@
                 "items": {
                   "type": "string"
                 },
-                "description": "備註條列式項目，例如訂位確認碼、入住須知。支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`（不支援 HTML）"
+                "description": "備註條列式項目，例如訂位確認碼、入住須知。支援 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`；用 | 寫成多行時也可以用條列（- 或 1.）、標題（#）與分隔線（---）（不支援 HTML）"
               },
               "localName": {
                 "type": "string",
@@ -189,7 +189,7 @@
                     },
                     "note": {
                       "type": "string",
-                      "description": "換點決策備註 (選填)，例如「排隊超過 30 分鐘就換」。支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`"
+                      "description": "換點決策備註 (選填)，例如「排隊超過 30 分鐘就換」。支援 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`；用 | 寫成多行時也可以用條列（- 或 1.）、標題（#）與分隔線（---）"
                     }
                   },
                   "required": [
@@ -296,7 +296,7 @@
                 },
                 "desc": {
                   "type": "string",
-                  "description": "詳細說明描述，支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`"
+                  "description": "詳細說明描述，支援 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`；用 | 寫成多行時也可以用條列（- 或 1.）、標題（#）與分隔線（---）"
                 },
                 "status": {
                   "enum": [
@@ -311,7 +311,7 @@
                   "items": {
                     "type": "string"
                   },
-                  "description": "備註條列式項目，例如訂位確認碼、入住須知。支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`（不支援 HTML）"
+                  "description": "備註條列式項目，例如訂位確認碼、入住須知。支援 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`；用 | 寫成多行時也可以用條列（- 或 1.）、標題（#）與分隔線（---）（不支援 HTML）"
                 },
                 "localName": {
                   "type": "string",
@@ -413,7 +413,7 @@
                       },
                       "note": {
                         "type": "string",
-                        "description": "換點決策備註 (選填)，例如「排隊超過 30 分鐘就換」。支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`"
+                        "description": "換點決策備註 (選填)，例如「排隊超過 30 分鐘就換」。支援 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`；用 | 寫成多行時也可以用條列（- 或 1.）、標題（#）與分隔線（---）"
                       }
                     },
                     "required": [
@@ -448,7 +448,7 @@
         "properties": {
           "text": {
             "type": "string",
-            "description": "項目文字，支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`"
+            "description": "項目文字，支援 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`；用 | 寫成多行時也可以用條列（- 或 1.）、標題（#）與分隔線（---）"
           },
           "checked": {
             "type": "boolean",
@@ -466,7 +466,7 @@
         "properties": {
           "text": {
             "type": "string",
-            "description": "項目文字，支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`"
+            "description": "項目文字，支援 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`；用 | 寫成多行時也可以用條列（- 或 1.）、標題（#）與分隔線（---）"
           },
           "checked": {
             "type": "boolean",

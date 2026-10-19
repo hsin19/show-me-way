@@ -118,7 +118,7 @@ let altsOpen = $state(false);
         <span class="text-[15px] font-bold {event.status ? 'text-text-muted line-through' : 'text-text-primary'}">{event.title}</span>
     </div>
 
-    <p class="text-xs text-text-secondary leading-relaxed"><RichText text={event.desc} /></p>
+    <div class="text-xs text-text-secondary leading-relaxed"><RichText text={event.desc} /></div>
 
     {#if event.bullets && event.bullets.length > 0}
         <ul class="list-disc list-inside mt-2.5 pl-2 text-xs text-text-secondary space-y-1">
@@ -185,7 +185,7 @@ let altsOpen = $state(false);
                             <div class="min-w-0">
                                 <span class="text-xs font-bold text-text-primary">{alt.title}</span>
                                 {#if alt.note}
-                                    <p class="text-[11px] text-text-muted leading-relaxed"><RichText text={alt.note} /></p>
+                                    <div class="text-[11px] text-text-muted leading-relaxed"><RichText text={alt.note} /></div>
                                 {/if}
                             </div>
                             {#if alt.localName || alt.mapLink}

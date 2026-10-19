@@ -4,7 +4,10 @@ import {
     expect,
     it,
 } from "vitest";
-import { applyItineraryEdits } from "./itinerary-edits";
+import {
+    applyItineraryEdits,
+    describeEdits,
+} from "./itinerary-edits";
 import {
     serializeToYaml,
     validateYaml,
@@ -106,6 +109,20 @@ describe("applyItineraryEdits", () => {
     it("reports a result that fails validation in validateYaml's words", () => {
         expect(() => applyItineraryEdits(BASE, [{ op: "update_event", date: DAY_1, title: "測試事件一", yaml: "start: '2099-03-01T09:00'" }]))
             .toThrow("days 第 1 項的 timeline 第 1 項的 start (2099-03-01T09:00) 要在當天 (2099-01-01) 或隔天");
+    });
+
+    it("describes edits by what they touched and which fields they set, shortening a long target", () => {
+        expect(describeEdits([
+            { op: "update_event", date: "2026-10-15", title: "補齊伴手禮", yaml: "time: 13:30 - 17:00\ndesc: 下午採買" },
+            { op: "add_event", date: "2026-10-15", yaml: "time: 10:00 - 13:00\ntitle: 達文西科技博物館" },
+            { op: "move_event", date: "2026-10-05", title: "咖啡廳", toDate: "2026-10-06" },
+            { op: "update_item", list: "todo", text: "10/1 前後＋10/5 晚或 10/6（在羅馬）｜查義鐵罷工（sciopero）公告", yaml: "checked: true" },
+        ])).toBe([
+            "update_event 2026-10-15「補齊伴手禮」改了 time、desc",
+            "add_event 2026-10-15「達文西科技博物館」",
+            "move_event 2026-10-05「咖啡廳」→ 2026-10-06",
+            "update_item todo「10/1 前後＋10/5 晚或 10/6（在羅馬）｜查義鐵罷…」改了 checked",
+        ].join("；"));
     });
 
     it("returns the app's canonical form, unquoted dates in a fragment included", () => {

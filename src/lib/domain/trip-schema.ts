@@ -26,7 +26,7 @@ import * as v from "valibot";
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?$/;
 
-const MARKDOWN_HINT = "支援行內 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`";
+const MARKDOWN_HINT = "支援 Markdown：[說明](https://…)、**粗體**、*斜體*、`等寬`；用 | 寫成多行時也可以用條列（- 或 1.）、標題（#）與分隔線（---）";
 const LOCAL_NAME_DESC = "地點的當地語言名稱，作為地圖搜尋關鍵字 (點擊按鈕開啟地圖/複製)";
 const MAP_LINK_DESC = "地圖直接連結 (如 naver.me / maps.app.goo.gl 短網址)。有設定時會優先使用，比關鍵字搜尋更精準。";
 const ATTACHMENTS_HINT = "檔案放在 Google Drive 上這趟行程的資料夾，用 `pnpm run trip:sync attach <檔案> --date <那天>` 上傳。只有自己的 Google 帳號打得開；分享連結的收件人點了會看到 Drive 的「要求存取權」。";

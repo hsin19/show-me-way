@@ -1,8 +1,9 @@
 /**
- * Inline Markdown for itinerary prose: `[label](href)`, `**strong**`, `*em*`,
- * `***both***`, `` `code` ``, a `\` escape for their delimiters — and nothing
- * else. No block level (the field is already one line of a YAML list) and no raw
- * HTML, ever.
+ * The Markdown the app renders, in itinerary prose and the AI's replies alike: inline
+ * `[label](href)`, `**strong**`, `*em*`, `***both***`, `` `code` ``, a `\` escape for
+ * their delimiters; and, once text spans several lines, headings (`#`), lists (`-`,
+ * `1.`), rules (`---`) and paragraphs. Nothing else — tables and quotes stay literal
+ * text — and no raw HTML, ever.
  *
  * The output is a node tree rather than an HTML string because share links import
  * *other people's* YAML: rendering a stranger's prose through `{@html}` would
@@ -274,4 +275,96 @@ function parse(src: string, allowLink: boolean): InlineNode[] {
  */
 export function parseInline(text: string | undefined): InlineNode[] {
     return typeof text === "string" && text ? parse(text, true) : [];
+}
+
+/** A list item's own lines, and the list nested under it — one level only. */
+export interface ListItem {
+    /** One entry per source line, as in a paragraph. */
+    lines: InlineNode[][];
+    sublist?: ListBlock;
+}
+
+export interface ListBlock {
+    ordered: boolean;
+    start: number;
+    items: ListItem[];
+}
+
+export type BlockNode =
+    /** One entry per source line: a single newline is a line break, the way the text was typed. */
+    | { type: "paragraph"; lines: InlineNode[][]; }
+    | { type: "heading"; level: 1 | 2 | 3; children: InlineNode[]; }
+    | ({ type: "list"; } & ListBlock)
+    | { type: "rule"; };
+
+const HEADING = /^(#{1,6})\s+(.*)$/;
+const LIST_ITEM = /^(\s*)(?:[-*+]|(\d{1,9})[.)])\s+(.*)$/;
+const RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
+
+/**
+ * Parse prose into blocks. Line-based on purpose, and forgiving the way a model's reply
+ * needs: a list may start without a blank line before it, an indented item nests under
+ * the one above — one level deep, anything deeper joining that nested list, which is as
+ * far as a phone's width goes — and an indented line continues the item above it. Never
+ * throws, like `parseInline`.
+ */
+export function parseMarkdown(text: string | undefined): BlockNode[] {
+    if (typeof text !== "string" || !text.trim()) return [];
+    const blocks: BlockNode[] = [];
+    let paragraph: InlineNode[][] | null = null;
+    let list: Extract<BlockNode, { type: "list"; }> | null = null;
+    let listIndent = 0;
+    let lastItem: ListItem | null = null;
+    for (const line of text.replace(/\r\n?/g, "\n").split("\n")) {
+        if (!line.trim()) {
+            paragraph = null;
+            list = null;
+            continue;
+        }
+        if (RULE.test(line)) {
+            paragraph = null;
+            list = null;
+            blocks.push({ type: "rule" });
+            continue;
+        }
+        const heading = HEADING.exec(line);
+        if (heading) {
+            paragraph = null;
+            list = null;
+            blocks.push({ type: "heading", level: Math.min(heading[1]!.length, 3) as 1 | 2 | 3, children: parseInline(heading[2]) });
+            continue;
+        }
+        const marker = LIST_ITEM.exec(line);
+        if (marker) {
+            const indent = marker[1]!.length;
+            const ordered = marker[2] !== undefined;
+            const start = ordered ? Number(marker[2]) : 1;
+            const item: ListItem = { lines: [parseInline(marker[3])] };
+            const parent = list?.items.at(-1);
+            if (list && parent && indent > listIndent) {
+                (parent.sublist ??= { ordered, start, items: [] }).items.push(item);
+            } else {
+                if (!list || list.ordered !== ordered) {
+                    paragraph = null;
+                    list = { type: "list", ordered, start, items: [] };
+                    listIndent = indent;
+                    blocks.push(list);
+                }
+                list.items.push(item);
+            }
+            lastItem = item;
+            continue;
+        }
+        if (list && lastItem && /^\s/.test(line)) {
+            lastItem.lines.push(parseInline(line.trim()));
+            continue;
+        }
+        list = null;
+        if (!paragraph) {
+            paragraph = [];
+            blocks.push({ type: "paragraph", lines: paragraph });
+        }
+        paragraph.push(parseInline(line.trim()));
+    }
+    return blocks;
 }

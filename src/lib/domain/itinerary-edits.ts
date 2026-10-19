@@ -251,6 +251,34 @@ function applyOne(doc: Doc, edit: ItineraryEdit): void {
     }
 }
 
+/** At most this many characters of a target's title or text, in `describeEdits`. */
+const TARGET_PREVIEW = 30;
+
+/**
+ * The edits in one line for the model to read back on a later turn: what each one touched
+ * and which fields it set, not the values — those it can read off the trip it is sent.
+ */
+export function describeEdits(edits: readonly ItineraryEdit[]): string {
+    return edits.map(edit => {
+        let fields: Mapping | null = null;
+        try {
+            const parsed = typeof edit.yaml === "string" ? parseYaml(edit.yaml) : edit.yaml;
+            if (isMapping(parsed)) fields = parsed;
+        } catch {
+            // Described without its fields; the edit itself was judged where it was applied.
+        }
+        const named = edit.title ?? edit.text ?? fields?.title ?? fields?.text;
+        const target = typeof named === "string" && named.trim()
+            ? `「${named.length > TARGET_PREVIEW ? `${named.slice(0, TARGET_PREVIEW)}…` : named}」`
+            : "";
+        const changed = edit.op.startsWith("update_") && fields ? `改了 ${Object.keys(fields).join("、")}` : "";
+        // Spaced between words, but not against the 「」, as Chinese is written.
+        return [[edit.op, edit.list, edit.date].filter(Boolean).join(" "), target, edit.toDate && `→ ${edit.toDate}`, changed]
+            .filter((part): part is string => !!part)
+            .reduce((line, part) => (line.endsWith("」") || part.startsWith("「") ? line + part : `${line} ${part}`));
+    }).join("；");
+}
+
 /**
  * `baseYaml` with `edits` applied, canonical. Throws a zh-TW message: which edit did not
  * land and why, or what the edited trip fails validation on.

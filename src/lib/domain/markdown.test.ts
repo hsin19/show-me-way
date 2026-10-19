@@ -4,8 +4,11 @@ import {
     it,
 } from "vitest";
 import {
+    type BlockNode,
     type InlineNode,
+    type ListBlock,
     parseInline,
+    parseMarkdown,
     sanitizeHref,
     sanitizeLinkHref,
 } from "./markdown";
@@ -141,6 +144,66 @@ describe("parseInline", () => {
         for (const bad of notStrings) {
             expect(parseInline(bad as string)).toEqual([]);
         }
+    });
+});
+
+/** Blocks in the same compact notation as `shape`, one per line, lines of a paragraph or item joined by ⏎. */
+function blocks(text: string): string[] {
+    const walk = (nodes: InlineNode[]): string => nodes.map(n => (n.type === "text" || n.type === "code" ? n.value : n.type === "link" ? `A(${walk(n.children)}→${n.href})` : `${n.type === "strong" ? "B" : "I"}(${walk(n.children)})`)).join("");
+    const lines = (list: InlineNode[][]) => list.map(walk).join("⏎");
+    const list = (block: ListBlock): string => `${block.ordered ? `ol@${block.start}` : "ul"}: ${block.items.map(item => lines(item.lines) + (item.sublist ? ` [${list(item.sublist)}]` : "")).join(" | ")}`;
+    return parseMarkdown(text).map((block: BlockNode) => {
+        switch (block.type) {
+            case "paragraph":
+                return `p: ${lines(block.lines)}`;
+            case "heading":
+                return `h${block.level}: ${walk(block.children)}`;
+            case "list":
+                return list(block);
+            case "rule":
+                return "hr";
+        }
+    });
+}
+
+describe("parseMarkdown", () => {
+    it("reads one line of prose as one paragraph, which is all an existing field is", () => {
+        expect(blocks("先到 **Gate 2** 排安檢")).toEqual(["p: 先到 B(Gate 2) 排安檢"]);
+        expect(parseMarkdown("")).toEqual([]);
+        expect(parseMarkdown(undefined)).toEqual([]);
+    });
+
+    it("splits paragraphs on a blank line and keeps a single newline as a line break", () => {
+        expect(blocks("第一行\n第二行\n\n另一段")).toEqual(["p: 第一行⏎第二行", "p: 另一段"]);
+    });
+
+    it("reads headings, lists and rules the way a model writes them, without blank lines between", () => {
+        expect(blocks("### 1. 國際長途飛行\n* **去程**：約 13.5 小時\n* **回程**：約 6.75 小時\n---\n2. 搭火車\n3. 搭船")).toEqual([
+            "h3: 1. 國際長途飛行",
+            "ul: B(去程)：約 13.5 小時 | B(回程)：約 6.75 小時",
+            "hr",
+            "ol@2: 搭火車 | 搭船",
+        ]);
+    });
+
+    it("nests an indented item one level under the item above, and continues an item with an indented line", () => {
+        expect(blocks("- 羅馬\n  - 競技場\n  先寄行李\n- 佛羅倫斯")).toEqual(["ul: 羅馬 [ul: 競技場⏎先寄行李] | 佛羅倫斯"]);
+        // The shape gemini-3.6-flash wrote for 五漁村's rainy-day options.
+        expect(blocks("* **搭火車串村**\n  村落之間多在隧道\n  * **品嚐白酒**\n  * **海景咖啡館**\n* **教堂巡禮**")).toEqual([
+            "ul: B(搭火車串村)⏎村落之間多在隧道 [ul: B(品嚐白酒) | B(海景咖啡館)] | B(教堂巡禮)",
+        ]);
+    });
+
+    it("keeps nesting one level deep, folding anything deeper into the nested list", () => {
+        expect(blocks("1. 去程\n   - 桃園\n     - T2 報到\n2. 回程")).toEqual(["ol@1: 去程 [ul: 桃園 | T2 報到] | 回程"]);
+    });
+
+    it("parses inline Markdown inside every block, unsafe links included", () => {
+        expect(blocks("- [官網](https://example.com)\n- [惡意](javascript:alert(1))")).toEqual(["ul: A(官網→https://example.com) | [惡意](javascript:alert(1))"]);
+    });
+
+    it("leaves tables and quotes as literal paragraph text", () => {
+        expect(blocks("| 天 | 城市 |\n> 引言")).toEqual(["p: | 天 | 城市 |⏎> 引言"]);
     });
 });
 

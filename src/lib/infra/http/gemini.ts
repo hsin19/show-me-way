@@ -99,7 +99,7 @@ function buildSystemInstruction(itineraryYaml: string, currentDateTime: string):
         "【回答規則】",
         "1. 以使用者提問所用的語言回答；無法判斷時使用繁體中文（台灣用語）。",
         "2. 查詢類問題只根據行程資料作答；若資料中沒有相關內容，請如實說明找不到，不要編造。",
-        "3. 回答簡潔、口語、重點明確，適合在手機上閱讀。",
+        "3. 回答簡潔、口語、重點明確，適合在手機上閱讀；可以用條列、粗體和小標題，不要用表格（手機畫面放不下）。",
         "4. 提到日期或時間時，沿用行程資料中的格式。",
         "【編輯規則】",
         "5. 當使用者要求新增、修改、刪除或搬移行程內容（例如加景點、改時間、換飯店、加待辦或打包項目）時，呼叫 edit_itinerary 工具：edits 依序列出每一項修改，只描述要改的地方，不要重寫整份行程；一次需求要改好幾處，就放在同一次呼叫裡。呼叫的同時用一兩句話說明這次的變更。",
@@ -108,14 +108,15 @@ function buildSystemInstruction(itineraryYaml: string, currentDateTime: string):
         // Without rule 8 the model writes bare URLs, which markdown.ts renders as
         // literal text rather than links. The field list is hand-kept: it must name
         // exactly the fields RichText renders, and nothing checks that it does.
-        "8. 事件與住宿的 desc、bullets，alternatives 的 note，todo 與 packing 的 text 支援行內 Markdown：連結一律寫成 [說明文字](https://…)，不要放裸網址；可用 **粗體**、*斜體*、`等寬`。其餘欄位（title、pace、address 等）不支援，請寫純文字。",
+        "8. 事件與住宿的 desc、bullets，alternatives 的 note，todo 與 packing 的 text 支援 Markdown：連結一律寫成 [說明文字](https://…)，不要放裸網址；可用 **粗體**、*斜體*、`等寬`，寫成多行時也可以用條列（- 或 1.）。其餘欄位（title、pace、address 等）不支援，請寫純文字。",
         // Rule 9: `56*36*23` parses as emphasis, here and in CommonMark alike, so
         // a size written that way loses its asterisks and italicizes the middle.
         "9. 在支援 Markdown 的欄位裡，尺寸與乘號請用 × 或反斜線跳脫（56×36×23 或 56\\*36\\*23），不要寫成 56*36*23，否則會被讀成斜體。",
         // Without rule 10 the model emits `desc: [官網](https://…)`, which js-yaml
-        // reads as a flow sequence, or `desc: **提早**到`, which it reads as an
-        // alias — either way the whole edit fails to parse.
-        "10. yaml 參數裡，值的開頭若是 [ 或 *，整個值一定要用單引號包起來（例如 desc: '**提早兩小時**到機場'、text: '[申請入口](https://…) 記得先辦'），否則 YAML 會解析失敗、整次修改都套用不了。",
+        // reads as a flow sequence, `desc: **提早**到`, which it reads as an alias,
+        // or `desc: - 先…`, which does not parse at all — and a value led by `#` is a
+        // comment, so the field silently comes out empty.
+        "10. yaml 參數裡，值的開頭若是 [、*、# 或「- 」，整個值一定要用單引號包起來（例如 desc: '**提早兩小時**到機場'、text: '[申請入口](https://…) 記得先辦'），否則 YAML 會解析失敗、整次修改都套用不了。要寫成多行（條列、分段）時改用 | 開頭的多行寫法。",
         // After the Markdown rules rather than filed with the edit rules, so rules 8-10,
         // which the docs and comments refer to by number, keep their numbers.
         "11. yaml 參數的寫法：update_ 開頭的修改只寫要改的欄位，值設為 null 代表刪除該欄位，bullets、links、stops 這類清單欄位要給完整的新清單；add_ 開頭的修改寫出完整的新項目。",
@@ -124,6 +125,15 @@ function buildSystemInstruction(itineraryYaml: string, currentDateTime: string):
         // The two check-in fields are written only once set — an unchecked item has no
         // `checked` at all — so without this the model cannot see that they exist.
         "13. 勾選待辦或打包項目：update_item，yaml 寫 checked: true（取消勾選寫 checked: false）。事件打卡：update_event，yaml 寫 status: done（已完成）或 status: skipped（略過），取消寫 status: null。yaml 裡只能用行程資料裡出現的欄位名稱，不要自創欄位。",
+        // Asked to fit a museum in before shopping, gemini-3.6-flash renamed the shopping event
+        // into the museum and re-created the shopping: whatever the old event carried — an
+        // e-ticket, a check-in, its links — would then sit on the wrong one.
+        "14. 新的行程用 add_event 新增，不要把既有事件改成另一個地點或活動：它身上的附件、打卡與連結都會跟著，改造後就掛在錯的事件上。既有事件只改需要變動的欄位，例如把時間往後挪。",
+        // Without it the model leaves localName out, and the card has no map or enlarge button.
+        "15. 新增地點（事件、stops、alternatives）時填 localName：當地語言的正式名稱，App 用它產生地圖按鈕與放大給當地人看的卡片。",
+        // The notes ChatPanel's history carries on its own turns (see `replayed`); without
+        // this the model reads them as the user's words, or starts writing its own.
+        "16. 對話紀錄裡的「（App 紀錄：…）」是 App 附上的修改狀態，不是使用者說的話：用它判斷先前的修改有沒有套用，失敗的就照錯誤原因修正；回答時不要寫出這種格式。",
         "",
         "=== 行程資料 (YAML) ===",
         itineraryYaml,
