@@ -69,6 +69,11 @@ its repository access list includes this repo. Fine-grained PATs expire (max
 stays green, so track the expiry date. A red Dependabot PR (typically
 peer-dependency skew) is left for a human; there is no auto-repair job.
 
+A green PR merges only if `main` has not moved since its check ran; otherwise the
+job comments `@dependabot rebase` and the rebased PR goes through the gate again. Merging anyway would land a tree no
+check saw — two bumps of one transitive package can merge as clean text into a
+broken lockfile.
+
 ## Coverage → Codecov
 
 The `test:ci` step writes two reports — `coverage/lcov.info` and
