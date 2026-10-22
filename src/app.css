@@ -153,6 +153,19 @@ body {
         background: var(--color-card-bg);
         box-shadow: var(--panel-shadow);
     }
+
+    /* The app's two buttons, each defined once so they cannot drift apart: the filled one
+       for the action a section is for, the quiet one for an action beside the content
+       rather than leading it — the trip switcher, a card's ⋯ row, ＋ 新增…. Utilities
+       still win over both, so a caller adds w-full, border-dashed for an "add", a danger
+       hover, or its own disabled look. */
+    .btn-primary {
+        @apply min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-accent text-accent-contrast text-xs font-bold transition cursor-pointer hover:opacity-90 active:scale-[0.98];
+    }
+
+    .btn-secondary {
+        @apply min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-tint-1 border border-card-border text-text-secondary text-xs font-bold transition cursor-pointer hover:text-accent hover:bg-tint-2;
+    }
 }
 
 ::-webkit-scrollbar {

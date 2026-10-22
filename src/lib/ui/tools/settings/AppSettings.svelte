@@ -214,7 +214,7 @@ function handleFullReset() {
                     <button
                         type="button"
                         onclick={() => gdriveSync.disconnect()}
-                        class="min-h-[44px] text-xs font-bold px-3 py-1.5 rounded-lg bg-tint-1 border border-card-border text-text-secondary hover:text-danger hover:bg-danger/10 transition cursor-pointer flex items-center gap-1 shrink-0"
+                        class="btn-secondary shrink-0 hover:text-danger hover:bg-danger/10"
                     >
                         <LogOut size={13} aria-hidden="true" /> 登出
                     </button>
@@ -223,7 +223,7 @@ function handleFullReset() {
                         type="button"
                         disabled={signIn.disabled}
                         onclick={() => void gdriveSync.connect()}
-                        class="min-h-[44px] text-xs font-bold px-3.5 py-1.5 rounded-lg bg-accent text-accent-contrast transition active:scale-[0.98] cursor-pointer flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                        class="btn-primary shrink-0 disabled:opacity-50"
                     >
                         {#if signIn.busy}
                             <RefreshCw size={13} class="animate-spin" aria-hidden="true" />
@@ -280,7 +280,7 @@ function handleFullReset() {
                 <button
                     type="submit"
                     disabled={!keyInput.trim() || keyInput.trim() === apiKey}
-                    class="min-h-[44px] bg-accent text-accent-contrast font-bold px-3 py-2 rounded-xl text-xs transition active:scale-[0.98] cursor-pointer disabled:opacity-40 shrink-0"
+                    class="btn-primary shrink-0 disabled:opacity-40"
                 >
                     儲存
                 </button>
@@ -290,7 +290,7 @@ function handleFullReset() {
                         onclick={() => (confirming = "apiKey")}
                         aria-label="清除 API 金鑰"
                         title="清除 API 金鑰"
-                        class="min-w-[44px] min-h-[44px] bg-tint-1 border border-card-border hover:bg-danger/10 hover:border-danger/40 text-text-secondary hover:text-danger font-bold rounded-xl transition active:scale-[0.98] cursor-pointer flex items-center justify-center shrink-0"
+                        class="btn-secondary min-w-[44px] px-0 shrink-0 hover:text-danger hover:bg-danger/10 hover:border-danger/40 active:scale-[0.98]"
                     >
                         <Trash2 size={16} aria-hidden="true" />
                     </button>
@@ -418,11 +418,7 @@ function handleFullReset() {
             <button
                 type="button"
                 onclick={() => (confirming = "reset")}
-                class="
-                    w-full min-h-[44px] px-3 rounded-xl bg-tint-1 border border-card-border text-text-muted
-                    text-xs font-bold transition duration-200 cursor-pointer
-                    hover:text-danger hover:border-danger/40 hover:bg-danger/10
-                "
+                class="btn-secondary w-full text-text-muted hover:text-danger hover:border-danger/40 hover:bg-danger/10"
             >
                 重置全部本機資料
             </button>
@@ -461,11 +457,7 @@ function handleFullReset() {
             <button
                 type="button"
                 onclick={() => void promptPwaInstall()}
-                class="
-                    w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-accent text-accent-contrast
-                    text-xs font-bold transition duration-200 cursor-pointer
-                    flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98]
-                "
+                class="btn-primary w-full gap-2"
             >
                 <Download size={16} aria-hidden="true" />
                 立即安裝 App

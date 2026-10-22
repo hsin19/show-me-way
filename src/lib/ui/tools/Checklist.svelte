@@ -101,7 +101,7 @@ function submitNew(e: SubmitEvent) {
         <button
             type="submit"
             aria-label="新增項目"
-            class="flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center bg-accent text-accent-contrast rounded-xl transition active:scale-[0.96] cursor-pointer disabled:opacity-40"
+            class="btn-primary shrink-0 min-w-[44px] px-0 disabled:opacity-40"
             disabled={!newText.trim()}
         >
             <Plus size={18} class="stroke-[3]" aria-hidden="true" />

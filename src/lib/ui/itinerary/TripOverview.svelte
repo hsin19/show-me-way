@@ -120,7 +120,6 @@ function setMap(edited: TripData["trip"], value: string) {
 
 const field = "bg-transparent border-b border-dashed border-line-emphasis outline-none focus:border-solid focus:border-accent placeholder:text-text-muted placeholder:font-normal";
 const rowLabel = "shrink-0 w-14 text-[11px] font-bold text-text-muted";
-const addButton = "w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-tint-1 border border-dashed border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-xs font-bold";
 </script>
 
 {#snippet editingHeader(edited: TripData["trip"])}
@@ -179,7 +178,7 @@ const addButton = "w-full min-h-[44px] flex items-center justify-center gap-1.5 
                     onRemove={() => edited.hotels.splice(i, 1)}
                 />
             {/each}
-            <button type="button" onclick={() => edited.hotels.push(newHotel(edited.hotels.at(-1)?.end.slice(0, 10) || trip.start))} class={addButton}>
+            <button type="button" onclick={() => edited.hotels.push(newHotel(edited.hotels.at(-1)?.end.slice(0, 10) || trip.start))} class="btn-secondary w-full border-dashed">
                 <Plus size={14} aria-hidden="true" />新增住宿
             </button>
         </div>
@@ -234,7 +233,7 @@ const addButton = "w-full min-h-[44px] flex items-center justify-center gap-1.5 
                 <button
                     type="button"
                     onclick={toggleSwitcher}
-                    class="inline-flex items-center gap-1.5 min-h-[44px] bg-tint-1 border border-card-border hover:border-accent/40 text-text-primary hover:text-accent text-xs font-bold px-3.5 py-2 rounded-full transition cursor-pointer active:scale-95 shrink-0"
+                    class="btn-secondary shrink-0 active:scale-95"
                     aria-expanded={isSwitcherOpen}
                     aria-label="切換行程選單"
                 >

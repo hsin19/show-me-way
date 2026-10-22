@@ -331,7 +331,7 @@ function discardDraft() {
             onclick={handleCloudAction}
             aria-label={cloudButton.label}
             title={cloudButton.label}
-            class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer disabled:opacity-40"
+            class="btn-secondary min-w-[44px] px-0 disabled:opacity-40"
         >
             <cloudButton.icon size={18} class={cloudButton.iconClass} aria-hidden="true" />
         </button>
@@ -462,14 +462,14 @@ function discardDraft() {
                 onclick={() => void save()}
                 disabled={saving}
                 aria-busy={saving}
-                class="flex-1 min-h-[44px] bg-accent text-accent-contrast font-bold py-2.5 px-4 rounded-xl hover:opacity-90 transition active:scale-[0.98] cursor-pointer shadow-sm text-center disabled:opacity-40 disabled:cursor-wait"
+                class="btn-primary flex-1 disabled:opacity-40 disabled:cursor-wait"
             >
                 {saving ? "解析中…" : "儲存並解析"}
             </button>
             {#if yamlInput !== yamlSnapshot}
                 <button
                     onclick={discardDraft}
-                    class="min-h-[44px] bg-tint-1 border border-card-border text-text-secondary hover:text-text-primary font-bold py-2.5 px-4 rounded-xl hover:bg-tint-2 transition active:scale-[0.98] cursor-pointer text-center"
+                    class="btn-secondary active:scale-[0.98]"
                 >
                     放棄變更
                 </button>

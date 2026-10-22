@@ -143,7 +143,7 @@ function applyEdit(message: UiMessage) {
                     <button
                         type="button"
                         onclick={onOpenAppSettings}
-                        class="w-full bg-accent text-accent-contrast font-bold py-3 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                        class="btn-primary w-full gap-2"
                     >
                         <Settings size={16} aria-hidden="true" />
                         前往 App 設定
@@ -172,7 +172,7 @@ function applyEdit(message: UiMessage) {
                         <button
                             type="button"
                             onclick={onOpenAppSettings}
-                            class="w-full bg-accent text-accent-contrast font-bold py-3 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                            class="btn-primary w-full gap-2"
                         >
                             <Settings size={16} aria-hidden="true" />
                             前往 App 設定
@@ -182,7 +182,7 @@ function applyEdit(message: UiMessage) {
                         type="button"
                         onclick={() => modelPicker.retry()}
                         disabled={modelPicker.loading}
-                        class="w-full min-h-[44px] bg-tint-1 border border-card-border text-text-secondary hover:bg-tint-2 font-bold py-2.5 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer disabled:opacity-40 flex items-center justify-center gap-2"
+                        class="btn-secondary w-full gap-2 active:scale-[0.98] disabled:opacity-40"
                     >
                         {#if modelPicker.loading}
                             <Loader2 size={16} class="animate-spin" aria-hidden="true" />
@@ -202,14 +202,14 @@ function applyEdit(message: UiMessage) {
             <div class="flex items-center gap-2 shrink-0">
                 <!-- appearance-none because WebKit ignores min-height and vertical padding on a
                      native select: on the installed iOS PWA it stayed 20px tall. The chevron
-                     the native control would draw is drawn here instead. Styled as the
-                     overview's 切換行程 pill; the list it opens is still the native one. -->
+                     the native control would draw is drawn here instead. A .btn-secondary, as
+                     the overview's 切換行程 is; the list it opens is still the native one. -->
                 <div class="relative max-w-[10rem]">
                     <select
                         bind:value={modelPicker.selected}
                         disabled={modelPicker.loading}
                         aria-label="選擇 AI 模型"
-                        class="appearance-none w-full min-h-[44px] bg-tint-1 border border-card-border hover:border-accent/40 rounded-full pl-3.5 pr-8 py-2 text-xs font-bold text-text-primary hover:text-accent outline-none focus:border-accent transition cursor-pointer disabled:opacity-50"
+                        class="btn-secondary block appearance-none w-full pr-8 outline-none focus:border-accent disabled:opacity-50"
                     >
                         {#if modelPicker.list.length === 0}
                             <option value={modelPicker.selected}>{modelPicker.selected || (modelPicker.loading ? "載入模型中…" : "自動選擇")}</option>
@@ -306,7 +306,7 @@ function applyEdit(message: UiMessage) {
                                 {:else}
                                     <button
                                         onclick={() => applyEdit(message)}
-                                        class="w-full min-h-[44px] bg-accent text-accent-contrast font-bold py-2.5 px-4 rounded-xl text-sm transition active:scale-[0.98] cursor-pointer"
+                                        class="btn-primary w-full"
                                     >
                                         套用變更
                                     </button>
@@ -364,7 +364,7 @@ function applyEdit(message: UiMessage) {
                                 type="button"
                                 disabled={aiChat.isSending}
                                 onclick={() => triggerSend(p.text)}
-                                class="flex-none min-h-[44px] px-3 py-1.5 rounded-xl bg-tint-1 border border-card-border text-xs font-bold text-text-secondary hover:text-accent hover:bg-tint-2 transition duration-200 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                                class="btn-secondary flex-none disabled:opacity-50"
                             >
                                 <span>{p.icon}</span>
                                 <span>{p.label}</span>
@@ -392,7 +392,7 @@ function applyEdit(message: UiMessage) {
                             onclick={() => aiChat.abort()}
                             aria-label="中止回覆"
                             title="中止回覆"
-                            class="flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center bg-tint-2 border border-card-border text-text-primary rounded-xl transition active:scale-[0.96] cursor-pointer"
+                            class="btn-secondary shrink-0 min-w-[44px] px-0 bg-tint-2 text-text-primary active:scale-[0.98]"
                         >
                             <Square size={14} class="fill-current" aria-hidden="true" />
                         </button>
@@ -401,7 +401,7 @@ function applyEdit(message: UiMessage) {
                             type="submit"
                             aria-label="送出"
                             disabled={!aiChat.input.trim()}
-                            class="flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center bg-accent text-accent-contrast rounded-xl transition active:scale-[0.96] cursor-pointer disabled:opacity-40"
+                            class="btn-primary shrink-0 min-w-[44px] px-0 disabled:opacity-40"
                         >
                             <Send size={18} class="stroke-[2.5]" aria-hidden="true" />
                         </button>

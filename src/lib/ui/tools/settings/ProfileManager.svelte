@@ -324,7 +324,7 @@ async function handleDeleteCloud(fileId: string) {
                     <button
                         type="button"
                         onclick={() => (showEarlierCloudTrips = true)}
-                        class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-tint-1 border border-card-border text-text-muted hover:text-accent hover:bg-tint-2 transition cursor-pointer text-xs font-bold"
+                        class="btn-secondary w-full text-text-muted"
                     >
                         <History size={14} class="shrink-0" aria-hidden="true" /> 載入更早的 {earlierCloudFiles.length} 筆行程
                     </button>
@@ -338,7 +338,7 @@ async function handleDeleteCloud(fileId: string) {
                     type="button"
                     disabled={reconnectButton.disabled}
                     onclick={() => void gdriveSync.connect()}
-                    class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-xs font-bold disabled:opacity-50"
+                    class="btn-secondary w-full disabled:opacity-50"
                 >
                     <CloudOff size={14} class="shrink-0 text-text-muted" aria-hidden="true" />
                     {reconnectButton.label}
@@ -348,7 +348,7 @@ async function handleDeleteCloud(fileId: string) {
                     type="button"
                     disabled={signInRow.disabled}
                     onclick={() => void gdriveSync.connect()}
-                    class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-xs font-bold disabled:opacity-50"
+                    class="btn-secondary w-full disabled:opacity-50"
                 >
                     <LogIn size={14} class="shrink-0 text-accent" aria-hidden="true" />
                     {signInRow.label}
@@ -359,7 +359,7 @@ async function handleDeleteCloud(fileId: string) {
             <button
                 type="button"
                 onclick={handleCreate}
-                class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-tint-1 border border-dashed border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-xs font-bold"
+                class="btn-secondary w-full border-dashed"
             >
                 <Plus size={14} aria-hidden="true" /> 新增行程
             </button>

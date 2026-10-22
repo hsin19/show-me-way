@@ -61,7 +61,7 @@ function commit(choice: Choice) {
                 type="button"
                 {disabled}
                 onclick={() => (confirming = takeRemote)}
-                class="flex-1 min-h-[44px] rounded-lg bg-accent text-accent-contrast text-xs font-bold cursor-pointer hover:opacity-90 transition duration-200 disabled:opacity-40"
+                class="btn-primary flex-1 disabled:opacity-40"
             >
                 {takeRemote.label}
             </button>
@@ -69,7 +69,7 @@ function commit(choice: Choice) {
                 type="button"
                 {disabled}
                 onclick={() => (confirming = keepLocal)}
-                class="flex-1 min-h-[44px] rounded-lg bg-tint-2 text-text-secondary text-xs font-bold border border-card-border hover:bg-tint-3 transition duration-200 cursor-pointer disabled:opacity-40"
+                class="btn-secondary flex-1 bg-tint-2 hover:bg-tint-3 disabled:opacity-40"
             >
                 {keepLocal.label}
             </button>
@@ -80,7 +80,7 @@ function commit(choice: Choice) {
                 type="button"
                 {disabled}
                 onclick={() => (confirming = keepBoth)}
-                class="mt-2 w-full min-h-[44px] rounded-lg bg-tint-1 text-text-secondary text-xs font-bold border border-card-border hover:bg-tint-2 transition duration-200 cursor-pointer disabled:opacity-40"
+                class="btn-secondary mt-2 w-full disabled:opacity-40"
             >
                 {keepBoth.label}
             </button>

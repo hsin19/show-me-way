@@ -137,7 +137,7 @@ const field = "bg-transparent border-b border-dashed border-line-emphasis outlin
             <button
                 type="button"
                 onclick={() => day.timeline.push(newEvent(day.date))}
-                class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-tint-1 border border-dashed border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-xs font-bold"
+                class="btn-secondary w-full border-dashed"
             >
                 <Plus size={14} aria-hidden="true" />新增事件
             </button>
