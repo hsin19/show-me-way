@@ -24,6 +24,7 @@ import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 import Share2 from "@lucide/svelte/icons/share-2";
 import Trash2 from "@lucide/svelte/icons/trash-2";
 import UsersRound from "@lucide/svelte/icons/users-round";
+import { signInButton } from "./sign-in-button";
 
 // Rendered by two hosts, so an edit here changes both: collapsed at the top of
 // 行程管理, where it owns `expanded`, and forced open in TripOverview's drawer,
@@ -118,6 +119,9 @@ let shownCloudFiles = $derived(showEarlierCloudTrips ? [...currentCloudFiles, ..
  * Whichever single thing the cloud slot shows. Collapsing it to one value here is what
  * keeps the markup from rendering, say, a stale list next to a reconnect prompt.
  */
+let reconnectButton = $derived(signInButton("雲端連線中斷，點此重新連線"));
+let signInRow = $derived(signInButton("登入 Google 取得雲端行程"));
+
 let cloudSlot = $derived.by((): "signin" | "loading" | "list" | "reconnect" => {
     if (!gdriveSync.isConnected) return "signin";
     if (gdriveSync.cloudListState === "failed") return "reconnect";
@@ -332,22 +336,22 @@ async function handleDeleteCloud(fileId: string) {
             {:else if cloudSlot === "reconnect"}
                 <button
                     type="button"
-                    disabled={gdriveSync.isConnecting}
+                    disabled={reconnectButton.disabled}
                     onclick={() => void gdriveSync.connect()}
                     class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-xs font-bold disabled:opacity-50"
                 >
                     <CloudOff size={14} class="shrink-0 text-text-muted" aria-hidden="true" />
-                    {gdriveSync.isConnecting ? "連線中…" : "雲端連線中斷，點此重新連線"}
+                    {reconnectButton.label}
                 </button>
             {:else}
                 <button
                     type="button"
-                    disabled={gdriveSync.isConnecting}
+                    disabled={signInRow.disabled}
                     onclick={() => void gdriveSync.connect()}
                     class="w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-tint-1 border border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-xs font-bold disabled:opacity-50"
                 >
                     <LogIn size={14} class="shrink-0 text-accent" aria-hidden="true" />
-                    {gdriveSync.isConnecting ? "連線中…" : "登入 Google 取得雲端行程"}
+                    {signInRow.label}
                 </button>
             {/if}
 

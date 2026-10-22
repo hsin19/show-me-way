@@ -538,7 +538,7 @@ export class TripStore {
      */
     async checkForUpdates(openTripManagement: () => void): Promise<void> {
         await gdriveSync.refreshFiles();
-        if (!this.promptCloudReconnect(openTripManagement)) {
+        if (!await this.promptCloudReconnect(openTripManagement)) {
             this.promptCloudUpdate(openTripManagement);
             // Asked again against the listing just fetched: a prompt raised from an older one
             // stands aside for a cloud change that may since have turned out to be this
@@ -557,8 +557,11 @@ export class TripStore {
      * Shown at most once a day. The day is stamped when it shows, not when it is let go: an
      * app killed on the way out fires neither the ✕ nor the expiry. A token found valid
      * clears the stamp, so the expiry after a reconnect is announced again.
+     *
+     * Raised only once GIS is in: its button is a sign-in tap, which cannot open the popup
+     * while GIS is still on its way. Not raised if GIS cannot load — the switcher's row says why.
      */
-    private promptCloudReconnect(openTripManagement: () => void): boolean {
+    private async promptCloudReconnect(openTripManagement: () => void): Promise<boolean> {
         if (!gdriveSync.needsReconnect()) {
             stampReconnectPrompt(null);
             return false;
@@ -566,6 +569,8 @@ export class TripStore {
         if (!this.data || !navigator.onLine || reconnectPromptShownToday()) return false;
         const profileId = ensureActiveProfileId();
         if (!gdriveSync.cloudFileId(profileId)) return false;
+        await gdriveSync.prepareSignIn();
+        if (gdriveSync.signInReadiness !== "ready") return false;
         showToast({
             message: "Google 雲端登入已過期，無法檢查行程更新",
             actionLabel: "重新連線",

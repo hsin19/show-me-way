@@ -224,12 +224,20 @@ const GIS_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
 // returned a promise that could never settle, latching every caller's loading flag on.
 let gisLoadPromise: Promise<void> | null = null;
 
-/** Loads the Google Identity Services SDK. Rejects (rather than hanging) when offline. */
-function loadGisScript(): Promise<void> {
-    if (typeof window === "undefined") return Promise.resolve();
-    if (typeof (window as unknown as { google?: { accounts?: { oauth2?: unknown; }; }; }).google?.accounts?.oauth2 !== "undefined") {
-        return Promise.resolve();
-    }
+/** Whether GIS is in, which a sign-in popup needs before the tap that opens it (see `loadGoogleSignIn`). */
+export function isGoogleSignInLoaded(): boolean {
+    return typeof window !== "undefined"
+        && typeof (window as unknown as { google?: { accounts?: { oauth2?: unknown; }; }; }).google?.accounts?.oauth2 !== "undefined";
+}
+
+/**
+ * Loads the Google Identity Services SDK, ahead of the tap that signs in — never on it.
+ * A popup opens only while the tap's user activation lasts, and a download spends it:
+ * the popup was then blocked (`popup_failed_to_open`). Rejects (rather than hanging)
+ * when offline.
+ */
+export function loadGoogleSignIn(): Promise<void> {
+    if (typeof window === "undefined" || isGoogleSignInLoaded()) return Promise.resolve();
     if (gisLoadPromise) return gisLoadPromise;
 
     const attempt = new Promise<void>((resolve, reject) => {
@@ -251,18 +259,6 @@ function loadGisScript(): Promise<void> {
     });
     gisLoadPromise = attempt;
     return attempt;
-}
-
-/**
- * Starts loading GIS ahead of the tap that will need it. A popup may open only while the
- * tap's user activation lasts, and `requestGoogleAccessToken` cannot open one before the
- * SDK is in, so a tap that has to download it first can find its popup blocked
- * (`popup_failed_to_open`). Google caches the SDK for 30 minutes and a token lasts an
- * hour, so by the time a reconnect is due the download is usually back. Never rejects:
- * a failed load is retried by the tap itself.
- */
-export function preloadGoogleSignIn(): void {
-    loadGisScript().catch(() => {});
 }
 
 interface TokenResponse {
@@ -287,6 +283,11 @@ export type GoogleAuthPrompt = "" | "consent" | "select_account";
 /** The prompts whose whole purpose is to re-ask, so a cached token would defeat them. */
 const CACHE_BYPASSING_PROMPTS: GoogleAuthPrompt[] = ["consent", "select_account"];
 
+/** Whether `requestGoogleAccessToken` with this prompt opens a popup rather than answering from the cache. */
+export function signInNeedsPopup(prompt: GoogleAuthPrompt): boolean {
+    return CACHE_BYPASSING_PROMPTS.includes(prompt) || !getCachedAccessToken();
+}
+
 /**
  * How long a `popup_closed` waits for the token before it counts. GIS polls the popup's
  * `closed` every 500 ms and leaves the request open when it reports it, so a popup that
@@ -307,8 +308,6 @@ export async function requestGoogleAccessToken(
         return { token: cached, expiresIn: 3600 };
     }
 
-    await loadGisScript();
-
     const google = (window as unknown as {
         google?: {
             accounts?: {
@@ -325,8 +324,9 @@ export async function requestGoogleAccessToken(
         };
     }).google;
 
+    // Not loaded here: from this point to the popup has to stay inside the caller's tap.
     if (!google?.accounts?.oauth2) {
-        throw new Error("Google Identity Services 未正確初始化");
+        throw new Error("Google 登入模組尚未載入");
     }
 
     return new Promise((resolve, reject) => {

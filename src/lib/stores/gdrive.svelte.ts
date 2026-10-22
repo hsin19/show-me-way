@@ -33,13 +33,15 @@ import {
     getCachedAccessToken,
     type GoogleAuthPrompt,
     type GoogleUser,
+    isGoogleSignInLoaded,
     listCloudTrips,
     loadGdriveUser,
+    loadGoogleSignIn,
     loadTripSyncMap,
-    preloadGoogleSignIn,
     requestGoogleAccessToken,
     saveGdriveUser,
     saveTripSyncMap,
+    signInNeedsPopup,
     trashCloudTrip,
     type TripSyncMap,
     type TripSyncRecord,
@@ -56,7 +58,10 @@ import {
     planCloudSync,
     rebindFor,
 } from "$lib/services/drive-sync";
-import { SvelteSet } from "svelte/reactivity";
+import {
+    createSubscriber,
+    SvelteSet,
+} from "svelte/reactivity";
 import { shareLinks } from "./share-link.svelte";
 import { showToast } from "./toast.svelte";
 
@@ -99,6 +104,31 @@ type TokenMode =
 type CloudListState = "idle" | "loading" | "ready" | "failed";
 
 /**
+ * Whether a sign-in tap can work right now, so the buttons say so instead of failing on
+ * the tap. GIS has to be in before the tap (see `loadGoogleSignIn`), and it is fetched
+ * only once there is a reason to: a background path found the token expired, or a tap
+ * asked to sign in. The second is why a first sign-in takes two taps, and what keeps a
+ * device that never uses Drive from fetching anything from Google.
+ */
+type SignInReadiness = "idle" | "loading" | "ready" | "offline" | "failed";
+
+// Not `svelte/reactivity/window`'s `online`: that module reads `window` on import, which
+// node-environment tests of this store do not have.
+const subscribeToConnectivity = createSubscriber(update => {
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+        window.removeEventListener("online", update);
+        window.removeEventListener("offline", update);
+    };
+});
+
+function isOffline(): boolean {
+    subscribeToConnectivity();
+    return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+/**
  * What the cloud button's next tap means, decided by `cloudActionFor` from this module's
  * own state. The panel maps each kind onto icon, label, and handler; the first three
  * kinds are the states with nothing a tap could do. `upload.overwrite` distinguishes a
@@ -135,6 +165,11 @@ class GDriveSyncState {
     /** Only meaningful while `isSyncing`. Set exclusively by `sync()`, so any other busy-locked operation (delete, load) leaves it `null`. */
     private syncPhase = $state<"checking" | "pushing" | "pulling" | null>(null);
     isConnecting = $state<boolean>(false);
+    private gisState = $state<"idle" | "loading" | "loaded" | "failed">(isGoogleSignInLoaded() ? "loaded" : "idle");
+    signInReadiness = $derived.by((): SignInReadiness => {
+        if (isOffline()) return "offline";
+        return this.gisState === "loaded" ? "ready" : this.gisState;
+    });
     cloudFiles = $state<CloudTripFile[]>([]);
     cloudListState = $state<CloudListState>("idle");
     /**
@@ -411,7 +446,7 @@ class GDriveSyncState {
 
     /**
      * Signed in, but holding no usable token — the state every background path stops at,
-     * since only a tap may reach GIS. Read at call time, not reactive: the cache is
+     * since only a tap may ask GIS for one. Read at call time, not reactive: the cache is
      * localStorage and expires on the clock.
      */
     needsReconnect(): boolean {
@@ -424,8 +459,11 @@ class GDriveSyncState {
 
         if (mode === "cache-only" || !this.isConnected) {
             // What follows a background path stopping here is a tap on 重新連線.
-            if (this.isConnected) preloadGoogleSignIn();
+            if (this.isConnected) void this.prepareSignIn();
             throw new Error("尚未登入 Google 或登入憑證已過期");
+        }
+        if (!this.canOpenSignIn()) {
+            throw new Error(isOffline() ? "目前離線，無法登入 Google" : "Google 登入還在準備中，請稍後再按一次");
         }
 
         try {
@@ -439,7 +477,42 @@ class GDriveSyncState {
     }
 
     /**
-     * Signs in, or re-authorizes an account that is already signed in.
+     * Loads GIS unless it is already in. Settles once the attempt does and never rejects:
+     * `signInReadiness` carries the outcome. A load that failed offline tries again when
+     * the device comes back online.
+     */
+    prepareSignIn(): Promise<void> {
+        if (isGoogleSignInLoaded()) {
+            this.gisState = "loaded";
+            return Promise.resolve();
+        }
+        this.gisState = "loading";
+        return loadGoogleSignIn().then(
+            () => {
+                this.gisState = "loaded";
+            },
+            () => {
+                this.gisState = "failed";
+                if (isOffline()) window.addEventListener("online", () => void this.prepareSignIn(), { once: true });
+            },
+        );
+    }
+
+    /**
+     * Whether this tap can open the sign-in popup. A tap that would have to wait for GIS
+     * has spent its activation by the time the popup could open, so it only starts the
+     * load, and the button comes back as the tap that signs in.
+     */
+    private canOpenSignIn(): boolean {
+        if (isOffline()) return false;
+        if (isGoogleSignInLoaded()) return true;
+        void this.prepareSignIn();
+        return false;
+    }
+
+    /**
+     * Signs in, or re-authorizes an account that is already signed in. Resolves `false`
+     * without a word when the popup cannot open yet: the button already shows why.
      *
      * `prompt` defaults by situation: a first sign-in has to show the consent screen,
      * but merely replacing an expired token does not — re-consenting an account that
@@ -447,9 +520,11 @@ class GDriveSyncState {
      * Pass `"select_account"` to deliberately switch accounts.
      */
     async connect(prompt?: GoogleAuthPrompt): Promise<boolean> {
+        const asked = prompt ?? (this.user ? "" : "consent");
+        if (signInNeedsPopup(asked) && !this.canOpenSignIn()) return false;
         this.isConnecting = true;
         try {
-            const { token } = await requestGoogleAccessToken(this.clientId, prompt ?? (this.user ? "" : "consent"));
+            const { token } = await requestGoogleAccessToken(this.clientId, asked);
             const userInfo = await fetchGoogleUserInfo(token);
             // The consent screen doubles as an account chooser. Records name files the
             // previous account owns, which this one has no `drive.file` grant for, so

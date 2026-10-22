@@ -29,9 +29,9 @@ import {
 // Google Drive 同步。所有 googleapis.com 端點都由 ./fake-drive.ts 的有狀態假 Drive 接手，
 // 所以 push → pull → conflict 是真的往返一輪，而不是每個呼叫各回一份罐頭。
 //
-// 除了「連線」與兩條「重新連線」，其他測試都預先把 token 快取塞進 localStorage，
-// `getValidToken` 就直接命中快取、`loadGisScript` 全程不會被呼叫；那三條才需要把 GIS 的
-// script 換成 stub。
+// 多數測試預先把有效的 token 快取塞進 localStorage，`getValidToken` 直接命中快取，GIS 全程
+// 不會被載入。登入、重新連線，以及 token 過期的測試才需要把 GIS 的 script 換成 stub：背景
+// 一發現 token 過期就會先去載 GIS，過期提示也要等它載好才跳。
 //
 // No page-error assertions: an error escaping a component fails the whole vitest run.
 
@@ -66,11 +66,11 @@ function seedConnected(options: { expiredToken?: boolean; record?: TripSyncRecor
 const GIS_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
 
 /**
- * GIS 的 SDK 換成 stub：app 注入的 GIS script 由這裡代替網路載入（定義 window.google 再觸發
- * load），initTokenClient 直接回一個含 drive.file scope 的 token，這樣 loadGisScript 與
- * requestGoogleAccessToken（含 scope 檢查）都真的被執行到。裝上之前，happy-dom 對外部 script
- * 當場觸發 error，跟被 fixture 擋掉的請求一樣。只有使用者主動按下的流程才會走到它；背景刷新
- * 一律停在快取 token。`popups` 是 token 被要了幾次 —— 真的 GIS 每要一次就彈一次視窗；
+ * GIS 的 SDK 換成 stub：app 注入的 GIS script 由這裡代替網路載入（稍等一下才定義 window.google
+ * 並觸發 load），initTokenClient 直接回一個含 drive.file scope 的 token，這樣 loadGoogleSignIn
+ * 與 requestGoogleAccessToken（含 scope 檢查）都真的被執行到。裝上之前，happy-dom 對外部 script
+ * 當場觸發 error，跟被 fixture 擋掉的請求一樣。只有使用者按下的那一下會向它要 token；背景
+ * 最多先把 SDK 載進來。`popups` 是 token 被要了幾次 —— 真的 GIS 每要一次就彈一次視窗；
  * `sdkRequested` 是 app 有沒有注入過 GIS 的 script，不管有沒有要 token。
  *
  * `popupClosed` 重現 GIS 的 `popup_closed`：`before-token` 是 iOS 上看到的競態，視窗先被
@@ -107,8 +107,11 @@ function installGisStub(options: { popupClosed?: "before-token" | "instead-of-to
     const served = vi.spyOn(head, "appendChild").mockImplementation(<T extends Node>(node: T): T => {
         if (!(node instanceof HTMLScriptElement) || node.src !== GIS_SCRIPT_SRC) return append(node);
         sdkRequested = true;
-        Object.defineProperty(window, "google", { configurable: true, value: google });
-        setTimeout(() => node.dispatchEvent(new Event("load")));
+        // A download takes a moment, and the button says 準備 Google 登入… for that long.
+        setTimeout(() => {
+            Object.defineProperty(window, "google", { configurable: true, value: google });
+            node.dispatchEvent(new Event("load"));
+        }, 50);
         return node;
     });
     // 同一個檔案的測試共用一個 window：不收掉的話，下一條還沒按就已經有 GIS。
@@ -152,7 +155,12 @@ test("連線 Google：走完 GIS 流程並把行程建立成雲端檔", async ()
     await user.click(navTab("工具"));
     await user.click(screen.getByRole("button", { name: "App 設定" }));
     await screen.findByText("未連線");
+    // 第一次登入時 GIS 還沒載：這一下只去載它 —— 等它載完再開視窗，點擊的時效早就過了，
+    // 視窗會被擋掉。載好之後的那一下才開視窗。
     await user.click(screen.getByRole("button", { name: "登入 Google" }));
+    await screen.findByRole("button", { name: "準備 Google 登入…" });
+    expect(gis.popups()).toBe(0);
+    await user.click(await screen.findByRole("button", { name: "登入 Google" }));
 
     await screen.findByText("已連線");
     screen.getByText("測試者 (tester@example.com)");
@@ -565,6 +573,8 @@ test("背景檢查：過期提示一天只問一次，回到前景或重新開�
     const page = createPage();
     installFakeDrive(page, [CLOUD_COPY]);
     seedConnected({ expiredToken: true, record: IN_SYNC });
+    // 提示的按鈕是登入的那一下，GIS 載好才會跳出來。
+    installGisStub();
     await page.goto("/");
 
     const notice = () => screen.queryByText(EXPIRED_NOTICE);
@@ -597,6 +607,7 @@ test("背景檢查：token 過期但行程沒綁雲端時不提示", async () =>
     const page = createPage();
     installFakeDrive(page);
     seedConnected({ expiredToken: true });
+    installGisStub();
     await gotoLoaded(page);
 
     // 抽屜出現重新連線列，代表背景清單已經因過期失敗過 —— 提示若要出現早該出現了。
@@ -672,6 +683,44 @@ test("重新連線：視窗真的被關掉，等不到 token 就報連線失敗"
     await screen.findByText(/連線失敗.*Popup window closed/, {}, { timeout: 4000 });
     // 沒卡在「連線中…」：按鈕放回來，可以再按一次。
     await screen.findByRole("button", { name: "雲端連線中斷，點此重新連線" });
+});
+
+test("登入：離線時按鈕直接說無法登入、不給按，恢復連線就回來", async () => {
+    const page = createPage();
+    installFakeDrive(page);
+    installGisStub();
+    await gotoLoaded(page);
+    const { user } = page;
+
+    await user.click(navTab("工具"));
+    await user.click(screen.getByRole("button", { name: "App 設定" }));
+    page.setOnline(false);
+
+    const offline = await screen.findByRole<HTMLButtonElement>("button", { name: "離線中，無法登入" });
+    expect(offline.disabled).toBe(true);
+
+    page.setOnline(true);
+    await screen.findByRole("button", { name: "登入 Google" });
+});
+
+test("登入：載不到 Google 登入模組時說明原因，按一下重試", async () => {
+    const page = createPage();
+    installFakeDrive(page);
+    await gotoLoaded(page);
+    const { user } = page;
+
+    await user.click(navTab("工具"));
+    await user.click(screen.getByRole("button", { name: "App 設定" }));
+    // 還沒裝 stub：GIS 的 script 跟被擋掉的請求一樣載不到。
+    await user.click(screen.getByRole("button", { name: "登入 Google" }));
+    const retry = await screen.findByRole("button", { name: "無法連到 Google，點此重試" });
+
+    const gis = installGisStub();
+    await user.click(retry);
+    await user.click(await screen.findByRole("button", { name: "登入 Google" }));
+
+    await screen.findByText("已連線");
+    expect(gis.popups()).toBe(1);
 });
 
 test("切換行程抽屜：一個月前的雲端行程摺起來，載入後再開又摺回去", async () => {

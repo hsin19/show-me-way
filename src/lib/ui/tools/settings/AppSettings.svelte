@@ -56,6 +56,7 @@ import SquarePlus from "@lucide/svelte/icons/square-plus";
 import Sun from "@lucide/svelte/icons/sun";
 import Trash2 from "@lucide/svelte/icons/trash-2";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+import { signInButton } from "./sign-in-button";
 
 // Everything here is a property of the device, not of a trip: nothing on this
 // page travels with a profile. Trip-level settings are 行程管理.
@@ -69,6 +70,7 @@ const THEMES: { id: ThemePref; label: string; icon: typeof Sun; hint: string; }[
 ];
 
 let activeHint = $derived(THEMES.find(t => t.id === theme.pref)?.hint ?? "");
+let signIn = $derived(signInButton("登入 Google"));
 
 let apiKey = $state<string | null>(loadGeminiApiKey());
 let keyInput = $state(loadGeminiApiKey() ?? "");
@@ -219,17 +221,16 @@ function handleFullReset() {
                 {:else}
                     <button
                         type="button"
-                        disabled={gdriveSync.isConnecting}
+                        disabled={signIn.disabled}
                         onclick={() => void gdriveSync.connect()}
                         class="min-h-[44px] text-xs font-bold px-3.5 py-1.5 rounded-lg bg-accent text-accent-contrast transition active:scale-[0.98] cursor-pointer flex items-center gap-1.5 shrink-0 disabled:opacity-50"
                     >
-                        {#if gdriveSync.isConnecting}
+                        {#if signIn.busy}
                             <RefreshCw size={13} class="animate-spin" aria-hidden="true" />
-                            連線中…
                         {:else}
                             <LogIn size={13} aria-hidden="true" />
-                            登入 Google
                         {/if}
+                        {signIn.label}
                     </button>
                 {/if}
             </div>

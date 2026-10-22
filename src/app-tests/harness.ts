@@ -113,6 +113,8 @@ export interface AppPage {
     url: () => string;
     /** Sets `document.visibilityState` and fires `visibilitychange`, as leaving or returning to the app does. */
     setVisibility: (state: DocumentVisibilityState) => void;
+    /** Sets `navigator.onLine` and fires `online` / `offline`. Only the signal: `route` still answers every request. */
+    setOnline: (online: boolean) => void;
 }
 
 export interface PageOptions {
@@ -233,6 +235,8 @@ export function createPage(options: PageOptions = {}): AppPage {
     let visibility: DocumentVisibilityState = "visible";
     Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
     Object.defineProperty(document, "hidden", { configurable: true, get: () => visibility === "hidden" });
+    let online = true;
+    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => online });
 
     const page: AppPage = {
         user,
@@ -259,6 +263,10 @@ export function createPage(options: PageOptions = {}): AppPage {
         setVisibility: state => {
             visibility = state;
             document.dispatchEvent(new Event("visibilitychange"));
+        },
+        setOnline: next => {
+            online = next;
+            window.dispatchEvent(new Event(next ? "online" : "offline"));
         },
     };
     return page;

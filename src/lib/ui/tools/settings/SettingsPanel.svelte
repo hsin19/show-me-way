@@ -42,6 +42,7 @@ import Sliders from "@lucide/svelte/icons/sliders";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import { onMount } from "svelte";
 import ProfileManager from "./ProfileManager.svelte";
+import { signInButton } from "./sign-in-button";
 import VersionChoiceStrip from "./VersionChoiceStrip.svelte";
 
 // Data flows go straight to `tripStore`; only navigation comes in as props, because the
@@ -193,8 +194,12 @@ let cloudButton = $derived.by(() => {
         }
         case "conflict":
             return { icon: CloudAlert, iconClass: "text-danger", disabled: true, label: "請先在下方解決雲端衝突", run: null };
-        case "login":
-            return { icon: CloudOff, iconClass: "", disabled: false, label: "登入 Google 雲端硬碟", run: loginToCloud };
+        case "login": {
+            const signIn = signInButton("登入 Google 雲端硬碟");
+            return signIn.busy
+                ? { icon: CloudSync, iconClass: "animate-spin text-accent", disabled: true, label: signIn.label, run: null }
+                : { icon: CloudOff, iconClass: "", disabled: signIn.disabled, label: signIn.label, run: signIn.disabled ? null : loginToCloud };
+        }
         case "upload":
             return {
                 icon: CloudUpload,
