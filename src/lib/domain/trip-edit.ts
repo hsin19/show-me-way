@@ -1,11 +1,17 @@
 import { eventStartMinutes } from "./timeline";
 import {
     createRuntimeId,
+    type DayItinerary,
+    DEFAULT_DAY_TITLE,
+    DEFAULT_PACE,
     type HotelInfo,
     type TimelineEvent,
     type TripData,
 } from "./trip";
-import { addDaysIso } from "./utils";
+import {
+    addDaysIso,
+    daysBetweenIso,
+} from "./utils";
 
 /*
  * Edit mode works on a copy of the whole trip that the cards change in place: an input writes
@@ -143,6 +149,38 @@ export function settleEvent(timeline: TimelineEvent[], index: number, dayDate: s
     starts.splice(index, 1);
     const later = starts.findIndex(start => (start ?? -1) > minutes);
     timeline.splice(later === -1 ? timeline.length : later, 0, event);
+}
+
+/**
+ * `days` covering `start`–`end`: a day outside goes, a date with no day gets a free one, as
+ * a gap between two authored days does when the trip loads. Numbered for the day strip;
+ * `normalizeTripData` numbers them again on save.
+ */
+export function resizeDays(days: DayItinerary[], start: string, end: string): DayItinerary[] {
+    const byDate = new Map(days.map(day => [day.date, day]));
+    const resized: DayItinerary[] = [];
+    for (let date = start; date <= end; date = addDaysIso(date, 1)) {
+        resized.push(byDate.get(date) ?? { day: 0, date, title: DEFAULT_DAY_TITLE, timeline: [], pace: DEFAULT_PACE });
+    }
+    resized.forEach((day, index) => day.day = index + 1);
+    return resized;
+}
+
+/**
+ * Moves the event at `index` of `from` onto `to`. Its `start` / `end` shift by as many days,
+ * so it keeps its time of day and stays on its day (or past midnight into the next) as
+ * validation requires; there it goes where that time belongs.
+ */
+export function moveEventToDay(from: DayItinerary, index: number, to: DayItinerary): void {
+    const [event] = from.timeline.splice(index, 1);
+    if (!event) return;
+    const days = daysBetweenIso(from.date, to.date);
+    for (const key of ["start", "end"] as const) {
+        const value = event[key];
+        if (value) event[key] = addDaysIso(dateOf(value), days) + value.slice(10);
+    }
+    to.timeline.push(event);
+    settleEvent(to.timeline, to.timeline.length - 1, to.date);
 }
 
 function isBlank(value: unknown): boolean {

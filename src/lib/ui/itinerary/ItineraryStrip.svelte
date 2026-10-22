@@ -77,7 +77,10 @@ let {
 const EVENT_SCROLL_GAP = 8;
 
 let todayIso = $derived(tripDayOf(clockNow));
-let todayData = $derived(days.find(d => d.date === todayIso) ?? null);
+// Edit mode shows the draft's days, so a day the trip gained can be opened and filled in before ✓.
+let shownDays = $derived(tripEdit.active && tripEdit.draft ? tripEdit.draft.days : days);
+
+let todayData = $derived(shownDays.find(d => d.date === todayIso) ?? null);
 let todayDay = $derived(todayData?.day ?? null);
 let nextEvent = $derived(todayData ? getNextEventInfo(todayData.timeline, todayData.date, clockNow) : null);
 let nextEventLabel = $derived(nextEvent ? formatNextEventLabel(nextEvent) : null);
@@ -85,16 +88,16 @@ let countdownText = $derived(getCountdownText(trip, clockNow));
 
 let driverPrompt = $derived(getLanguageConfig(trip.lang).driverPrompt);
 
-let panelKeys = $derived([0, ...days.map(d => d.day)]);
+let panelKeys = $derived([0, ...shownDays.map(d => d.day)]);
 // The pager's chip snippet is handed a key, not a day, so the date has to be
 // looked back up. Key 0 (the overview) has none.
-let dayDates = $derived(new Map(days.map(d => [d.day, d.date])));
-let currentDayData = $derived(days.find(d => d.day === currentDay) ?? null);
+let dayDates = $derived(new Map(shownDays.map(d => [d.day, d.date])));
+let currentDayData = $derived(shownDays.find(d => d.day === currentDay) ?? null);
 
 // Where a freshly-mounted day panel lands vertically: today opens at whatever is
 // happening now, every other day at the top.
 function positionPanel(day: number, panel: HTMLElement) {
-    const dayData = days.find(d => d.day === day);
+    const dayData = shownDays.find(d => d.day === day);
     if (!dayData) return; // the overview; a fresh panel is already at 0
     const eventIdx = findScrollTargetEventIndex(dayData.timeline, dayData.date);
     if (eventIdx === null) return;
@@ -145,7 +148,7 @@ function positionPanel(day: number, panel: HTMLElement) {
         {#if day === 0}
             <TripOverview
                 {trip}
-                {days}
+                days={shownDays}
                 {countdownText}
                 {nextEventLabel}
                 {todayIso}

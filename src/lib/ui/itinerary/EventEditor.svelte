@@ -40,9 +40,19 @@ interface Props {
     onMoveDown?: () => void;
     onInsertBelow: () => void;
     onRemove: () => void;
+    /** The other days an event can move to, labelled for the picker; absent for a hotel. */
+    moveTargets?: { date: string; label: string; }[];
+    onMoveToDay?: (date: string) => void;
 }
 
-let { entry = $bindable(), dayDate, error, onMoveUp, onMoveDown, onInsertBelow, onRemove }: Props = $props();
+let { entry = $bindable(), dayDate, error, onMoveUp, onMoveDown, onInsertBelow, onRemove, moveTargets = [], onMoveToDay }: Props = $props();
+
+function pickDay(select: HTMLSelectElement) {
+    const date = select.value;
+    // Back to the prompt: the picker is an action, not a setting that keeps its choice.
+    select.value = "";
+    if (date) onMoveToDay?.(date);
+}
 
 // 起訖時間 first, as the one to reach for: only a start the app can read drives 進行中 and a red-eye's next-day landing.
 const TIME_MODES: [TimeMode, string][] = [["clock", "起訖時間"], ["text", "文字"]];
@@ -113,6 +123,20 @@ const chip = "min-h-[44px] px-3 inline-flex items-center gap-1 rounded-xl border
         <button type="button" onclick={onMoveDown} disabled={!onMoveDown} aria-label="下移" title="下移" class={iconButton}>
             <ArrowDown size={16} aria-hidden="true" />
         </button>
+        {#if onMoveToDay && moveTargets.length > 0}
+            <!-- value + onchange as for the type picker; appearance-none for WebKit's height. A
+                 fixed width, since a select is as wide as its longest option and only the
+                 prompt shows here — the native list still names each day in full. -->
+            <div class="relative">
+                <select aria-label="移到別天" value="" onchange={e => pickDay(e.currentTarget)} class="appearance-none w-[3.75rem] min-h-[44px] pl-2 pr-5 bg-transparent text-[11px] font-bold text-text-muted hover:text-text-primary outline-none cursor-pointer">
+                    <option value="" disabled>移到…</option>
+                    {#each moveTargets as target (target.date)}
+                        <option value={target.date}>{target.label}</option>
+                    {/each}
+                </select>
+                <ChevronDown size={12} class="pointer-events-none absolute right-0.5 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden="true" />
+            </div>
+        {/if}
         <button type="button" onclick={onInsertBelow} aria-label="在下方插入{noun}" title="在下方插入{noun}" class="{iconButton} ml-auto">
             <Plus size={16} aria-hidden="true" />
         </button>

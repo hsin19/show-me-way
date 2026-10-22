@@ -120,6 +120,15 @@ function setMap(edited: TripData["trip"], value: string) {
 
 const field = "bg-transparent border-b border-dashed border-line-emphasis outline-none focus:border-solid focus:border-accent placeholder:text-text-muted placeholder:font-normal";
 const rowLabel = "shrink-0 w-14 text-[11px] font-bold text-text-muted";
+const dateField = "flex-1 min-w-0 min-h-[44px] px-2 rounded-lg bg-tint-2 text-xs font-semibold text-text-secondary tabular-nums outline-none focus:ring-2 focus:ring-accent/60";
+
+function changeRange(input: HTMLInputElement, edge: "start" | "end") {
+    const first = days[0]?.date ?? "";
+    const last = days.at(-1)?.date ?? "";
+    const accepted = tripEdit.setRange(edge === "start" ? input.value : first, edge === "end" ? input.value : last);
+    // A refused range leaves the days as they were, so the input goes back to saying so.
+    if (!accepted) input.value = edge === "start" ? first : last;
+}
 </script>
 
 {#snippet editingHeader(edited: TripData["trip"])}
@@ -127,6 +136,13 @@ const rowLabel = "shrink-0 w-14 text-[11px] font-bold text-text-muted";
     <div class="panel rounded-2xl p-6 mb-6 ring-1 ring-accent/40">
         <input aria-label="行程名稱" bind:value={edited.name} autocomplete="off" placeholder="行程名稱" class="{field} block w-full min-h-[44px] text-2xl font-extrabold text-text-primary tracking-tight" />
         <div class="mt-2">
+            <!-- value + onchange, not a binding: a range is applied whole, and may be refused. -->
+            <div class="flex items-center gap-2 text-xs mb-1">
+                <span class={rowLabel}>日期</span>
+                <input type="date" aria-label="開始日期" value={days[0]?.date} onchange={e => changeRange(e.currentTarget, "start")} class={dateField} />
+                <span class="text-text-muted" aria-hidden="true">–</span>
+                <input type="date" aria-label="結束日期" value={days.at(-1)?.date} onchange={e => changeRange(e.currentTarget, "end")} class={dateField} />
+            </div>
             <label class="flex items-center gap-2 text-xs">
                 <span class={rowLabel}>天氣城市</span>
                 <input aria-label="天氣城市" bind:value={() => edited.city ?? "", v => setText(edited, "city", v)} autocomplete="off" placeholder="英文較準，例如 Tokyo" class="{field} flex-1 min-w-0 min-h-[44px] text-text-secondary" />

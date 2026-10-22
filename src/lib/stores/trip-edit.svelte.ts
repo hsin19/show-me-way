@@ -6,13 +6,21 @@ import {
 import {
     eventIssue,
     hotelIssue,
+    resizeDays,
     settleEvent,
     tidyDraft,
 } from "$lib/domain/trip-edit";
-import { formatDayDate } from "$lib/domain/utils";
+import {
+    daysBetweenIso,
+    formatDayDate,
+    isCalendarDate,
+} from "$lib/domain/utils";
 import { SvelteMap } from "svelte/reactivity";
 import { showErrorToast } from "./toast.svelte";
 import { tripStore } from "./trip.svelte";
+
+/** Longer than any trip planned here: past it, a mistyped year would add a day for every date in between. */
+const MAX_TRIP_DAYS = 90;
 
 // The itinerary's edit mode: a copy of the whole trip, taken when it opens, that the cards
 // change in place and ✓ saves in one go — one write, one undo, and an event whose time
@@ -87,6 +95,28 @@ class TripEditStore {
             return;
         }
         this.close();
+    }
+
+    /**
+     * Resizes the trip to `start`–`end`: days outside it go, after asking when they hold
+     * events, and dates it gains become free days. False, having said why, when refused.
+     */
+    setRange(start: string, end: string): boolean {
+        const draft = this.draft;
+        if (!draft || !isCalendarDate(start) || !isCalendarDate(end)) return false;
+        if (end < start) {
+            showErrorToast("結束日不能早於開始日");
+            return false;
+        }
+        if (daysBetweenIso(start, end) + 1 > MAX_TRIP_DAYS) {
+            showErrorToast(`行程最長 ${MAX_TRIP_DAYS} 天，請確認日期有沒有打錯`);
+            return false;
+        }
+        const dropped = draft.days.filter(day => day.date < start || day.date > end);
+        const events = dropped.reduce((count, day) => count + day.timeline.length, 0);
+        if (events > 0 && !confirm(`會拿掉 ${dropped.map(day => formatDayDate(day.date)).join("、")} 這 ${dropped.length} 天，連同上面的 ${events} 個事件。確定嗎？`)) return false;
+        draft.days = resizeDays(draft.days, start, end);
+        return true;
     }
 
     /** Leaves edit mode without saving, after asking when that would lose an edit. */

@@ -10,11 +10,14 @@ import type {
     TimelineEvent,
 } from "$lib/domain/trip";
 import {
+    moveEventToDay,
     moveItem,
     newEvent,
     setText,
 } from "$lib/domain/trip-edit";
+import { formatDayDate } from "$lib/domain/utils";
 import type { DailyWeather } from "$lib/infra/http/weather";
+import { showToast } from "$lib/stores/toast.svelte";
 import { tripEdit } from "$lib/stores/trip-edit.svelte";
 import type { EnlargedCard } from "$lib/ui/shared/enlarge";
 import Plus from "@lucide/svelte/icons/plus";
@@ -47,23 +50,38 @@ let { dayData, hotels = [], driverPrompt, mapProvider, weather = null, now = nul
 
 const eventStatuses = $derived(now ? classifyTimelineEvents(dayData.timeline, dayData.date, now) : null);
 
+// In edit mode the day is the draft's, changed in place; the dates never change, so the date finds it.
+const draftDay = $derived(tripEdit.active ? tripEdit.draft?.days.find(d => d.date === dayData.date) : undefined);
+
+// The draft's stays while editing, so a check-in moved on the overview shows here before ✓;
+// one whose dates are still being typed places nothing.
+const stays = $derived(draftDay ? (tripEdit.draft?.trip.hotels ?? []).filter(h => h.start && h.end) : hotels);
+
 // Both hotel nodes below are synthesized per render and NEVER persisted into the
 // YAML — nothing dedupes, so an authored copy would show twice and the user could
 // not delete either. On a changeover day both appear: this day is the checkout of
 // one hotel and the first night of the next.
 const overnightHotel = $derived(
-    hotels.find(h => isOvernightStay(h, dayData.date)),
+    stays.find(h => isOvernightStay(h, dayData.date)),
 );
 
 const checkoutHotel = $derived(
-    hotels.find(h => isCheckoutDay(h, dayData.date)),
+    stays.find(h => isCheckoutDay(h, dayData.date)),
 );
 const checkoutClock = $derived(checkoutHotel?.end.split("T")[1]);
 
 let actionsOpen = $state(false);
 
-// In edit mode the day is the draft's, changed in place; the dates never change, so the date finds it.
-const draftDay = $derived(tripEdit.active ? tripEdit.draft?.days.find(d => d.date === dayData.date) : undefined);
+// Every other day of the draft, for an event's 移到… picker.
+const moveTargets = $derived((tripEdit.draft?.days ?? []).filter(d => d.date !== dayData.date).map(d => ({ date: d.date, label: `${formatDayDate(d.date)} ${d.title}` })));
+
+function moveToDay(day: DayItinerary, index: number, date: string) {
+    const target = tripEdit.draft?.days.find(d => d.date === date);
+    if (!target) return;
+    moveEventToDay(day, index, target);
+    // The event leaves the day on screen, so say where it went.
+    showToast(`已移到 ${formatDayDate(date)}`);
+}
 
 const field = "bg-transparent border-b border-dashed border-line-emphasis outline-none focus:border-solid focus:border-accent placeholder:text-text-muted placeholder:font-normal";
 </script>
@@ -128,6 +146,8 @@ const field = "bg-transparent border-b border-dashed border-line-emphasis outlin
                         onMoveDown={i < day.timeline.length - 1 ? () => moveItem(day.timeline, i, 1) : undefined}
                         onInsertBelow={() => day.timeline.splice(i + 1, 0, newEvent(day.date))}
                         onRemove={() => day.timeline.splice(i, 1)}
+                        {moveTargets}
+                        onMoveToDay={date => moveToDay(day, i, date)}
                     />
                 </div>
             </div>

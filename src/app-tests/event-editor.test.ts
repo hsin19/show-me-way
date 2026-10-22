@@ -3,6 +3,7 @@ import {
     validateYaml,
 } from "$lib/domain/trip";
 import {
+    fireEvent,
     screen,
     waitFor,
     within,
@@ -31,7 +32,7 @@ const HOTEL = `    - title: 測試飯店
       end: '2099-03-02T11:00'
 `;
 
-const TRIP = (timeline: string, { hotels = HOTEL, trip = "", day = "" } = {}) =>
+const TRIP = (timeline: string, { hotels = HOTEL, trip = "", day = "", laterDays = "" } = {}) =>
     canonical(`trip:
   name: 編輯測試
   id: t-edit
@@ -40,7 +41,7 @@ ${hotels}days:
   - date: '2099-03-01'
     title: 第一天
 ${day}    timeline:
-${timeline}`);
+${timeline}${laterDays}`);
 
 const BREAKFAST = (time: string) =>
     `      - time: '${time}'
@@ -299,6 +300,94 @@ test("總覽：行程名稱、城市、語言、地圖與住宿都能改，住�
             hotels: "    - title: 第二間飯店\n      start: '2099-03-02'\n      end: '2099-03-03'\n",
         }).replace("name: 編輯測試", "name: 佛羅倫斯小旅行"),
     );
+});
+
+const SECOND_DAY = (moved = "") =>
+    `  - date: '2099-03-02'
+    title: 第二天
+    timeline:
+      - time: '10:00'
+        title: 皮蒂宮
+${moved}`;
+const dayChip = (n: number) => document.querySelectorAll<HTMLElement>("button[data-day]")[n]!;
+
+test("事件可以搬到別天：時刻不變、日期跟著換，到了那天照時間就位", async () => {
+    const TWO_DAYS = TRIP(BREAKFAST("09:00") + LUNCH + FLIGHT("19:00", "2099-03-01T21:00"), { laterDays: SECOND_DAY() });
+    const page = await editMode(TWO_DAYS);
+
+    await page.user.selectOptions(within(card("晚班機")).getByLabelText("移到別天"), "2099-03-02");
+    await waitFor(() => expect(status().textContent).toContain("已移到 03/02(一)"));
+    await page.user.selectOptions(within(card("午餐")).getByLabelText("移到別天"), "2099-03-02");
+    expect(editing()).toEqual(["早餐"]);
+
+    await page.user.click(dayChip(1));
+    await screen.findByLabelText("這天的標題");
+    // 皮蒂宮 10:00 之後是午餐 12:00，晚班機 19:00 最後，不管搬過來的先後。
+    expect(editing()).toEqual(["皮蒂宮", "午餐", "晚班機"]);
+
+    await saved(page);
+    expect(stored()).toBe(TRIP(BREAKFAST("09:00"), { laterDays: SECOND_DAY(LUNCH + FLIGHT("19:00", "2099-03-02T21:00").replace("2099-03-01T19:00", "2099-03-02T19:00")) }));
+});
+
+test("編輯中改了住宿日期，每一天的「回飯店休息」馬上跟著變，取消就回到原本", async () => {
+    const page = await launchApp(ORIGINAL);
+    await screen.findByRole("heading", { level: 2, name: "編輯測試" });
+    await startEditing(page);
+
+    await page.fill(within(card("測試飯店")).getByLabelText("退房日期"), "2099-03-03");
+    await page.fill(within(card("測試飯店")).getByLabelText("入住日期"), "2099-03-02");
+    await page.user.click(firstDayChip());
+    await screen.findByLabelText("這天的標題");
+    expect(screen.queryByText("回飯店休息")).toBeNull();
+
+    page.answerDialogs(true);
+    await page.user.click(screen.getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(titleInputs()).toHaveLength(0));
+    expect(screen.getByText("回飯店休息")).toBeTruthy();
+});
+
+/** Picks a date the way the native picker hands one over: whole, in one change. */
+const pickDate = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+const dayChips = () => document.querySelectorAll("button[data-day]").length;
+
+test("總覽的起訖日期：延長會補上自由活動的空白天，編輯中就能切過去改", async () => {
+    const page = await launchApp(ORIGINAL);
+    await screen.findByRole("heading", { level: 2, name: "編輯測試" });
+    await startEditing(page);
+
+    pickDate("結束日期", "2099-03-02");
+    await waitFor(() => expect(dayChips()).toBe(2));
+    await page.user.click(dayChip(1));
+    expect(await screen.findByDisplayValue("自由活動")).toBeTruthy();
+
+    await saved(page);
+    expect(stored()).toBe(TRIP(BREAKFAST("09:00") + LUNCH + FLIGHT("19:00", "2099-03-01T21:00"), { laterDays: "  - date: '2099-03-02'\n    title: 自由活動\n    timeline: []\n" }));
+});
+
+test("總覽的起訖日期：縮短掉有事件的天要先確認，結束早於開始會擋下來", async () => {
+    const page = await launchApp(TRIP(BREAKFAST("09:00") + LUNCH + FLIGHT("19:00", "2099-03-01T21:00"), { laterDays: SECOND_DAY() }));
+    await screen.findByRole("heading", { level: 2, name: "編輯測試" });
+    await startEditing(page);
+
+    pickDate("結束日期", "2099-02-28");
+    await waitFor(() => expect(status().textContent).toContain("結束日不能早於開始日"));
+    expect(screen.getByLabelText<HTMLInputElement>("結束日期").value).toBe("2099-03-02");
+
+    page.answerDialogs(false, true);
+    pickDate("開始日期", "2099-03-02");
+    expect(page.dialogs).toEqual(["會拿掉 03/01(日) 這 1 天，連同上面的 3 個事件。確定嗎？"]);
+    expect(dayChips()).toBe(2);
+    expect(screen.getByLabelText<HTMLInputElement>("開始日期").value).toBe("2099-03-01");
+
+    pickDate("開始日期", "2099-03-02");
+    await waitFor(() => expect(dayChips()).toBe(1));
+    await saved(page);
+    expect(stored()).toBe(canonical(`trip:
+  name: 編輯測試
+  id: t-edit
+  hotels:
+${HOTEL}days:
+${SECOND_DAY()}`));
 });
 
 test("只有編輯模式才有輸入框，住宿節點不能改；草稿切分頁回來還在，取消前會先問", async () => {

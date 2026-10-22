@@ -109,8 +109,8 @@ export function parseYaml(yaml: string): unknown {
 }
 
 /** Title and pace of a gap day the author skipped, and the pace fallback for a day that omits it. */
-const DEFAULT_DAY_TITLE = "自由活動";
-const DEFAULT_PACE = "自由安排行程";
+export const DEFAULT_DAY_TITLE = "自由活動";
+export const DEFAULT_PACE = "自由安排行程";
 
 /**
  * Every skipped date between two authored days becomes a free day, so a year
