@@ -153,6 +153,12 @@ async function expectLinkVersionOnScreen(): Promise<void> {
 const REPLACE_QUESTION = "「測試行程」你已經有這趟行程了。要用連結裡的版本覆蓋原本那份嗎？（可以復原）";
 const COPY_QUESTION = "那要另外匯入成一份副本嗎？原本那份會保留。";
 
+/** 總覽 hero 卡標題旁的 ⋯ →「分享行程」。 */
+async function shareTripFromMenu({ user }: AppPage): Promise<void> {
+    await user.click(screen.getByRole("button", { name: "更多" }));
+    await user.click(screen.getByRole("button", { name: "分享行程" }));
+}
+
 /**
  * 分享自己的行程，回傳連結。收件端刻意用同一個 page 再 goto 一次，所以共用 localStorage ——
  * 那正是「連結帶進來的行程本機已經有」的情境，也就是同一個瀏覽器裡的第二個分頁。
@@ -161,9 +167,9 @@ async function shareOwnTrip(page: AppPage): Promise<string> {
     await page.goto("/");
     await screen.findByRole("heading", { level: 2, name: "測試行程" });
 
-    // 分享行程按鈕在總覽 hero 卡（與每日的分享今日行程對稱）。
+    // 分享行程收在總覽 hero 卡標題旁的 ⋯ 裡（與每日的分享今日行程對稱）。
     // harness 拿掉了 navigator.share，所以走剪貼簿 fallback 並跳 toast。
-    await page.user.click(screen.getByRole("button", { name: "分享行程" }));
+    await shareTripFromMenu(page);
     await waitFor(() => expect(status().textContent).toContain("分享連結已複製"));
 
     const sharedUrl = page.copiedText();
@@ -306,7 +312,7 @@ async function shareOwnTripShort(page: AppPage, store: HopStore): Promise<string
     await page.goto("/");
     await screen.findByRole("heading", { level: 2, name: "測試行程" });
 
-    await page.user.click(screen.getByRole("button", { name: "分享行程" }));
+    await shareTripFromMenu(page);
     await waitFor(() => expect(status().textContent).toContain("已加密上傳"));
 
     const sharedUrl = page.copiedText();
@@ -355,7 +361,7 @@ test("再次分享同一趟行程：更新同一條連結而不是換一條，�
     expect(buttonName(expander())).toMatch(/已分享連結/);
     await renameTripInEditor(page, "測試行程二版");
 
-    await page.user.click(screen.getByRole("button", { name: "分享行程" }));
+    await shareTripFromMenu(page);
     await waitFor(() => expect(status().textContent).toContain("分享連結已更新"));
 
     const secondUrl = page.copiedText();
@@ -399,7 +405,7 @@ test("收件端背景檢查：對方更新連結後，重開就問要不要更�
     // 寄件端改名再分享一次：同一條連結、同一把金鑰，密文換成新版。
     await openTripManagement(page.user);
     await renameTripInEditor(page, "測試行程二版");
-    await page.user.click(screen.getByRole("button", { name: "分享行程" }));
+    await shareTripFromMenu(page);
     await waitFor(() => expect(status().textContent).toContain("分享連結已更新"));
     const secondUpload = hop.uploaded;
 

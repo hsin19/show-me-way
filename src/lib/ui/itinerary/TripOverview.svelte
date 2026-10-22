@@ -19,10 +19,10 @@ import CalendarRange from "@lucide/svelte/icons/calendar-range";
 import ChevronDown from "@lucide/svelte/icons/chevron-down";
 import ChevronRight from "@lucide/svelte/icons/chevron-right";
 import Hourglass from "@lucide/svelte/icons/hourglass";
-import Loader2 from "@lucide/svelte/icons/loader-2";
 import Maximize2 from "@lucide/svelte/icons/maximize-2";
-import Share2 from "@lucide/svelte/icons/share-2";
 import AttachmentChip from "./AttachmentChip.svelte";
+import CardActions from "./CardActions.svelte";
+import CardActionsToggle from "./CardActionsToggle.svelte";
 import HotelCards from "./HotelCards.svelte";
 import WeatherBadge from "./WeatherBadge.svelte";
 
@@ -78,6 +78,7 @@ let {
 }: Props = $props();
 
 let isSwitcherOpen = $state(false);
+let actionsOpen = $state(false);
 
 function toggleSwitcher() {
     isSwitcherOpen = !isSwitcherOpen;
@@ -99,22 +100,14 @@ let langConfig = $derived(getLanguageConfig(trip.lang));
         <h2 class="text-2xl font-extrabold text-text-primary tracking-tight min-w-0 break-words">
             {trip.name}
         </h2>
-        <button
-            type="button"
-            onclick={onShare}
-            disabled={sharing}
-            aria-busy={sharing}
-            class="min-w-[44px] min-h-[44px] -mr-2 -mt-1 flex items-center justify-center rounded-xl text-accent hover:bg-accent/10 active:scale-95 transition cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-wait"
-            aria-label="分享行程"
-            title="分享行程"
-        >
-            {#if sharing}
-                <Loader2 size={18} class="animate-spin" aria-hidden="true" />
-            {:else}
-                <Share2 size={18} aria-hidden="true" />
-            {/if}
-        </button>
+        <!-- -mt-1.5 centres the 44px button on the title's first 32px line. -->
+        <div class="shrink-0 -mr-2 -mt-1.5">
+            <CardActionsToggle bind:open={actionsOpen} {sharing} />
+        </div>
     </div>
+    {#if actionsOpen}
+        <CardActions shareLabel="分享行程" {onShare} {sharing} onDone={() => (actionsOpen = false)} class="mt-3 mb-2" />
+    {/if}
     <div class="mt-1 flex items-center justify-between gap-2">
         <!-- `min-w-0` lets the date shrink and wrap rather than push the switcher off
              the row on a narrow phone; the two nowrap halves make it break after the

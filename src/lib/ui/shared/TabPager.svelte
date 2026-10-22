@@ -25,9 +25,11 @@ interface Props {
     panel: Snippet<[T, (key: T) => void]>;
     /** After a fresh panel has mounted AND laid out, so the consumer can measure it. */
     onPanelReady?: (key: T, panel: HTMLElement) => void;
+    /** Controls at the row's far end, outside the scroller like the pinned chips, so they stay put. */
+    trailing?: Snippet;
 }
 
-let { keys, current = $bindable(), pinnedCount = 0, chip, panel, onPanelReady }: Props = $props();
+let { keys, current = $bindable(), pinnedCount = 0, chip, panel, onPanelReady, trailing }: Props = $props();
 
 let pinnedKeys = $derived(keys.slice(0, pinnedCount));
 let scrollKeys = $derived(keys.slice(pinnedCount));
@@ -183,6 +185,11 @@ $effect(() => {
                     {/each}
                 </div>
             </div>
+            {#if trailing}
+                <div class="flex items-center gap-1 shrink-0 pl-2 py-1.5">
+                    {@render trailing()}
+                </div>
+            {/if}
         </div>
     </header>
 

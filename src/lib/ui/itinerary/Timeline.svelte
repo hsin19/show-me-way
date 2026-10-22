@@ -9,9 +9,11 @@ import type {
     HotelInfo,
 } from "$lib/domain/trip";
 import type { DailyWeather } from "$lib/infra/http/weather";
+import { eventEdit } from "$lib/stores/event-edit.svelte";
 import type { EnlargedCard } from "$lib/ui/shared/enlarge";
-import Share2 from "@lucide/svelte/icons/share-2";
 import Zap from "@lucide/svelte/icons/zap";
+import CardActions from "./CardActions.svelte";
+import CardActionsToggle from "./CardActionsToggle.svelte";
 import EventCard from "./EventCard.svelte";
 import WeatherBadge from "./WeatherBadge.svelte";
 
@@ -48,6 +50,8 @@ const checkoutHotel = $derived(
     hotels.find(h => isCheckoutDay(h, dayData.date)),
 );
 const checkoutClock = $derived(checkoutHotel?.end.split("T")[1]);
+
+let actionsOpen = $state(false);
 </script>
 
 <div class="panel rounded-2xl p-5 mb-6">
@@ -56,20 +60,20 @@ const checkoutClock = $derived(checkoutHotel?.end.split("T")[1]);
              long latin run) would refuse to shrink and make the day panel scroll
              sideways, which also fights TabPager's swipe paging. -->
         <h3 class="text-xl font-extrabold tracking-tight min-w-0 break-words">{dayData.title}</h3>
-        <button
-            type="button"
-            onclick={onShareDay}
-            class="min-w-[44px] min-h-[44px] -mr-2 flex items-center justify-center rounded-xl text-accent hover:bg-accent/10 active:scale-95 transition cursor-pointer"
-            aria-label="分享今日行程"
-            title="分享今日行程"
-        >
-            <Share2 size={18} aria-hidden="true" />
-        </button>
+        <div class="shrink-0 -mr-2">
+            <CardActionsToggle bind:open={actionsOpen} />
+        </div>
     </div>
+    {#if actionsOpen}
+        <CardActions shareLabel="分享今日行程" onShare={onShareDay} onDone={() => (actionsOpen = false)} class="mb-3" />
+    {/if}
     <p class="text-sm text-text-secondary leading-relaxed flex items-start gap-1.5">
         <Zap size={15} class="text-accent shrink-0 mt-0.5" aria-hidden="true" />
         <span><strong class="text-text-primary">今日節奏：</strong>{dayData.pace}</span>
     </p>
+    {#if eventEdit.active}
+        <p class="text-xs text-accent mt-3">點文字就能直接修改，改完按右上角 ✓ 儲存</p>
+    {/if}
     {#if weather}
         <div class="flex flex-wrap gap-4 mt-4 pt-4 border-t border-line">
             <WeatherBadge {weather} />
@@ -91,7 +95,7 @@ const checkoutClock = $derived(checkoutHotel?.end.split("T")[1]);
         {@const timeStatus = eventStatuses?.[i] ?? null}
         <!-- A manual check-in fades the card as "past" does; EventCard drops the
              "current" ring for it, so the two cannot contradict each other. -->
-        <div class="relative mb-6 {event.status || timeStatus === 'past' ? 'opacity-60' : ''}" data-event-id={event._id}>
+        <div class="relative mb-6 {!eventEdit.active && (event.status || timeStatus === 'past') ? 'opacity-60' : ''}" data-event-id={event._id}>
             <div
                 class="
                     absolute -left-[23px] top-1 w-3.5 h-3.5 rounded-full bg-bg-main border-2 z-10 transition duration-200
@@ -104,15 +108,28 @@ const checkoutClock = $derived(checkoutHotel?.end.split("T")[1]);
             </div>
 
             <div class="ml-2.5">
-                <EventCard
-                    {event}
-                    day={dayData.date}
-                    {timeStatus}
-                    {driverPrompt}
-                    {mapProvider}
-                    {onEnlarge}
-                    onSetStatus={status => onSetEventStatus(event._id!, status)}
-                />
+                {#if eventEdit.active && eventEdit.forms[event._id!]}
+                    <EventCard
+                        {event}
+                        day={dayData.date}
+                        {timeStatus}
+                        {driverPrompt}
+                        {mapProvider}
+                        {onEnlarge}
+                        bind:form={eventEdit.forms[event._id!]}
+                        error={eventEdit.errors[event._id!]}
+                    />
+                {:else}
+                    <EventCard
+                        {event}
+                        day={dayData.date}
+                        {timeStatus}
+                        {driverPrompt}
+                        {mapProvider}
+                        {onEnlarge}
+                        onSetStatus={status => onSetEventStatus(event._id!, status)}
+                    />
+                {/if}
             </div>
         </div>
     {/each}

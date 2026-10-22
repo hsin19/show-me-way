@@ -13,8 +13,11 @@ import type {
 import { tripDayOf } from "$lib/domain/utils";
 import type { DailyWeather } from "$lib/infra/http/weather";
 import type { ProfileInfo } from "$lib/infra/storage/profiles";
+import { eventEdit } from "$lib/stores/event-edit.svelte";
 import type { EnlargedCard } from "$lib/ui/shared/enlarge";
 import TabPager from "$lib/ui/shared/TabPager.svelte";
+import Check from "@lucide/svelte/icons/check";
+import X from "@lucide/svelte/icons/x";
 import DayChip from "./DayChip.svelte";
 import Timeline from "./Timeline.svelte";
 import TripOverview from "./TripOverview.svelte";
@@ -103,9 +106,38 @@ function positionPanel(day: number, panel: HTMLElement) {
 }
 </script>
 
+<!-- Edit mode's way out, in the pager's fixed row rather than on a card that scrolls, so ✓ is
+     in reach however far down the edit went. Only while editing: the row is for reading. -->
+{#snippet editControls()}
+    <button
+        type="button"
+        onclick={() => eventEdit.discard()}
+        aria-label="取消"
+        title="取消"
+        class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full text-text-secondary hover:bg-tint-2 transition active:scale-95 cursor-pointer"
+    >
+        <X size={20} strokeWidth={2.5} aria-hidden="true" />
+    </button>
+    <button
+        type="button"
+        onclick={() => eventEdit.finish()}
+        aria-label="完成"
+        title="完成"
+        class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-accent text-accent-contrast transition active:scale-95 cursor-pointer"
+    >
+        <Check size={20} strokeWidth={3} aria-hidden="true" />
+    </button>
+{/snippet}
+
 <!-- pinnedCount={1} keeps the overview chip — panelKeys[0] — reachable however far
      the day chips scroll. -->
-<TabPager keys={panelKeys} bind:current={currentDay} pinnedCount={1} onPanelReady={positionPanel}>
+<TabPager
+    keys={panelKeys}
+    bind:current={currentDay}
+    pinnedCount={1}
+    onPanelReady={positionPanel}
+    trailing={eventEdit.active ? editControls : undefined}
+>
     {#snippet chip(day, select, active)}
         <DayChip {day} date={dayDates.get(day) ?? ""} {active} isToday={todayDay === day} onSelect={select} />
     {/snippet}

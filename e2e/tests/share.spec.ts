@@ -58,6 +58,7 @@ test("短連結匯入：收件端解密後正常匯入，網址片段被清除",
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 2, name: "測試行程" })).toBeVisible();
 
+    await page.getByRole("button", { name: "更多", exact: true }).click();
     await page.getByRole("button", { name: "分享行程", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("已加密上傳");
     const sharedUrl = await readCopiedText(page);

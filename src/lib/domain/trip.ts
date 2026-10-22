@@ -340,6 +340,24 @@ export function asSameTrip(data: TripData, id: string): TripData {
     return data;
 }
 
+/**
+ * `to` with `from`'s runtime ids, entry by entry, for a trip validated from `from`'s own
+ * serialization: that keeps every day, event and item where it was, so an id held across the
+ * save still names the same entry and keyed lists keep their DOM. Left with its own ids when
+ * the two differ in shape.
+ */
+export function carryRuntimeIds(from: TripData, to: TripData): TripData {
+    const sameShape = from.days.length === to.days.length
+        && from.days.every((day, d) => day.timeline.length === to.days[d]!.timeline.length)
+        && from.todo.length === to.todo.length
+        && from.packing.length === to.packing.length;
+    if (!sameShape) return to;
+    from.days.forEach((day, d) => day.timeline.forEach((event, e) => to.days[d]!.timeline[e]!._id = event._id));
+    from.todo.forEach((item, i) => to.todo[i]!._id = item._id);
+    from.packing.forEach((item, i) => to.packing[i]!._id = item._id);
+    return to;
+}
+
 /** `_id` for an item created at runtime: unique for the session, and stripped again on save. */
 export function createChecklistItemId(prefix: "todo" | "pack"): string {
     return `${prefix}-${runtimeIdSeq++}`;

@@ -6,6 +6,7 @@
 // replaced in place through `replaceActiveTrip` — backed up, kept on the slot's id — and UI
 // only mirrors the returned outcome.
 
+import { placeEditedEvent } from "$lib/domain/event-form";
 import {
     clearShareHash,
     isShareSupported,
@@ -17,10 +18,12 @@ import {
 import { buildDayReport } from "$lib/domain/timeline";
 import {
     asSameTrip,
+    carryRuntimeIds,
     createChecklistItemId,
     type DayItinerary,
     genTripId,
     serializeToYaml,
+    type TimelineEvent,
     type TripData,
     validateYaml,
 } from "$lib/domain/trip";
@@ -357,6 +360,72 @@ export class TripStore {
             this.persist();
             return;
         }
+    }
+
+    /**
+     * Put each event in `changes` in place of the authored event its id names — edit mode's
+     * save — or delete it for `null`, and offer to undo them together. The trip goes back
+     * through `validateYaml` rather than being patched in place as a check-in is, so what
+     * derives from an event (the countdown's departure) follows the edit; every `_id` survives
+     * it. Null once it landed or when it changes nothing, otherwise the zh-TW reason it did not.
+     */
+    editEvents(changes: readonly (readonly [id: string, next: TimelineEvent | null])[]): string | null {
+        if (!this.data) return "行程還沒載入完成";
+        const draft = JSON.parse(JSON.stringify(this.data)) as TripData;
+        const titles: string[] = [];
+        for (const [id, next] of changes) {
+            const day = draft.days.find(d => d.timeline.some(e => e._id === id));
+            if (!day) return "找不到要修改的事件，行程可能已經更新";
+            const index = day.timeline.findIndex(e => e._id === id);
+            titles.push(day.timeline[index]!.title);
+            if (next) placeEditedEvent(day.timeline, index, next, day.date);
+            else day.timeline.splice(index, 1);
+        }
+
+        let edited: TripData;
+        try {
+            edited = carryRuntimeIds(draft, validateYaml(serializeToYaml(draft)));
+        } catch (err) {
+            return err instanceof Error ? err.message : "修改後的行程無效";
+        }
+        // The trip on screen, not storage: undo returns to what the user was looking at,
+        // which is ahead of storage after a refused write and absent from it on first launch.
+        const before = serializeToYaml(this.data);
+        if (serializeToYaml(edited) === before) return null;
+        const profileId = this.commitEdit(edited);
+        if (!profileId) return "儲存失敗，請稍後再試";
+
+        const title = titles[0]!;
+        const label = title.length > 10 ? `${title.slice(0, 10)}…` : title;
+        const removed = changes[0]?.[1] === null;
+        showToast({
+            message: changes.length > 1 ? `已更新 ${changes.length} 個事件` : removed ? `已刪除「${label}」` : `已更新「${label}」`,
+            actionLabel: "復原",
+            onAction: () => {
+                if (!isActiveProfile(profileId)) {
+                    showToast("行程已切換，無法復原");
+                    return;
+                }
+                showToast(this.commitEdit(validateYaml(before)) ? "已復原" : "儲存失敗，請稍後再試");
+            },
+        });
+        return null;
+    }
+
+    /** Write `data` over the active slot as a per-field edit — no backup — and show it. The slot's id, or null when storage refused. */
+    private commitEdit(data: TripData): string | null {
+        let written: Written;
+        try {
+            written = writeActiveTrip(data, { backup: false });
+        } catch (err) {
+            console.error("Failed to persist trip data:", err);
+            return null;
+        }
+        this.data = data;
+        // Drafted against the trip this replaces; saving it would quietly undo the edit.
+        settingsDraft.yaml = null;
+        this.notePendingPublish(written.profileId);
+        return written.profileId;
     }
 
     /**
