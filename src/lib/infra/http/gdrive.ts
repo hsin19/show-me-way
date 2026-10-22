@@ -275,6 +275,16 @@ export type GoogleAuthPrompt = "" | "consent" | "select_account";
 /** The prompts whose whole purpose is to re-ask, so a cached token would defeat them. */
 const CACHE_BYPASSING_PROMPTS: GoogleAuthPrompt[] = ["consent", "select_account"];
 
+/**
+ * How long a `popup_closed` waits for the token before it counts. GIS polls the popup's
+ * `closed` every 500 ms and leaves the request open when it reports it, so a popup that
+ * posts its token and closes itself can be seen closed before the message is handled —
+ * on an iOS home-screen app, which resumes with both queued, this happens in practice.
+ * The token still arrives, after the error, and rejecting at once showed 連線失敗 over a
+ * sign-in that had succeeded.
+ */
+const POPUP_CLOSED_GRACE_MS = 2000;
+
 /** Request OAuth access token using Google Identity Services */
 export async function requestGoogleAccessToken(
     clientId: string,
@@ -334,7 +344,12 @@ export async function requestGoogleAccessToken(
                     resolve({ token: resp.access_token, expiresIn });
                 },
                 error_callback: (err: unknown) => {
-                    reject(new Error(`Google 登入發生錯誤: ${String(err)}`));
+                    const error = new Error(`Google 登入發生錯誤: ${String(err)}`);
+                    if ((err as { type?: unknown; } | null)?.type === "popup_closed") {
+                        setTimeout(() => reject(error), POPUP_CLOSED_GRACE_MS);
+                        return;
+                    }
+                    reject(error);
                 },
             });
 

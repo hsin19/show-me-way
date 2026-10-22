@@ -71,20 +71,30 @@ const GIS_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
  * requestGoogleAccessToken（含 scope 檢查）都真的被執行到。裝上之前，happy-dom 對外部 script
  * 當場觸發 error，跟被 fixture 擋掉的請求一樣。只有使用者主動按下的流程才會走到它；背景刷新
  * 一律停在快取 token。`popups` 是 token 被要了幾次 —— 真的 GIS 每要一次就彈一次視窗。
+ *
+ * `popupClosed` 重現 GIS 的 `popup_closed`：`before-token` 是 iOS 上看到的競態，視窗先被
+ * 判定關閉、token 稍後照樣送到；`instead-of-token` 是使用者真的把視窗關掉。
  */
-function installGisStub(): { popups: () => number; } {
+function installGisStub(options: { popupClosed?: "before-token" | "instead-of-token"; } = {}): { popups: () => number; } {
     let popups = 0;
     const google = {
         accounts: {
             oauth2: {
-                initTokenClient: (config: { callback: (resp: object) => void; }) => ({
+                initTokenClient: (config: { callback: (resp: object) => void; error_callback?: (err: unknown) => void; }) => ({
                     requestAccessToken: () => {
                         popups++;
-                        config.callback({
-                            access_token: "gis-token",
-                            expires_in: 3600,
-                            scope: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email",
-                        });
+                        const grant = () =>
+                            config.callback({
+                                access_token: "gis-token",
+                                expires_in: 3600,
+                                scope: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email",
+                            });
+                        if (!options.popupClosed) {
+                            grant();
+                            return;
+                        }
+                        config.error_callback?.(Object.assign(new Error("Popup window closed"), { type: "popup_closed" }));
+                        if (options.popupClosed === "before-token") setTimeout(grant, 50);
                     },
                 }),
             },
@@ -626,6 +636,37 @@ test("切換行程抽屜：token 過期時顯示重新連線，連上後雲端�
 
     await screen.findByRole("button", { name: /另一趟旅行.*載入/ });
     expect(gis.popups()).toBe(1);
+});
+
+test("重新連線：GIS 先報視窗關閉、token 隨後才到，仍算連上", async () => {
+    const page = createPage();
+    installFakeDrive(page, [{ id: CLOUD_FILE_ID, name: "另一趟旅行", content: yamlNamed("另一趟旅行") }]);
+    seedConnected({ expiredToken: true });
+    installGisStub({ popupClosed: "before-token" });
+    await gotoLoaded(page);
+    const { user } = page;
+
+    await user.click(screen.getByRole("button", { name: "切換行程選單" }));
+    await user.click(await screen.findByRole("button", { name: "雲端連線中斷，點此重新連線" }));
+
+    await screen.findByRole("button", { name: /另一趟旅行.*載入/ });
+    expect(screen.queryByText(/連線失敗/)).toBeNull();
+});
+
+test("重新連線：視窗真的被關掉，等不到 token 就報連線失敗", async () => {
+    const page = createPage();
+    installFakeDrive(page);
+    seedConnected({ expiredToken: true });
+    installGisStub({ popupClosed: "instead-of-token" });
+    await gotoLoaded(page);
+    const { user } = page;
+
+    await user.click(screen.getByRole("button", { name: "切換行程選單" }));
+    await user.click(await screen.findByRole("button", { name: "雲端連線中斷，點此重新連線" }));
+
+    await screen.findByText(/連線失敗.*Popup window closed/, {}, { timeout: 4000 });
+    // 沒卡在「連線中…」：按鈕放回來，可以再按一次。
+    await screen.findByRole("button", { name: "雲端連線中斷，點此重新連線" });
 });
 
 test("切換行程抽屜：一個月前的雲端行程摺起來，載入後再開又摺回去", async () => {
