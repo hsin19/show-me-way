@@ -8,11 +8,12 @@ import {
 import CheckCircle from "@lucide/svelte/icons/check-circle";
 import Download from "@lucide/svelte/icons/download";
 import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import X from "@lucide/svelte/icons/x";
 import { flip } from "svelte/animate";
 import { fly } from "svelte/transition";
 
-const ICONS = { success: CheckCircle, update: RefreshCw, download: Download };
+const ICONS = { success: CheckCircle, update: RefreshCw, download: Download, error: TriangleAlert };
 
 // `fly` and `flip` are JS transitions, so app.css's prefers-reduced-motion rule
 // does not reach them. Asked per transition, not once at init, so flipping the OS
@@ -47,7 +48,7 @@ const moveMs = () => (prefersReducedMotion() ? 0 : MOVE_MS);
             animate:flip={{ duration: moveMs() }}
             in:fly={{ y: 12, duration: moveMs() }}
             out:fly={{ y: 12, duration: moveMs() }}
-            class="max-w-full bg-accent text-accent-contrast font-bold text-xs py-2.5 px-5 rounded-full shadow-lg shadow-lift flex items-center gap-1.5"
+            class="max-w-full {item.kind === 'error' ? 'bg-danger text-danger-contrast' : 'bg-accent text-accent-contrast'} font-bold text-xs py-2.5 px-5 rounded-full shadow-lg shadow-lift flex items-center gap-1.5"
         >
             <Icon size={14} class="stroke-[3] shrink-0" aria-hidden="true" />
             {item.message}

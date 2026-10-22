@@ -63,7 +63,10 @@ import {
     SvelteSet,
 } from "svelte/reactivity";
 import { shareLinks } from "./share-link.svelte";
-import { showToast } from "./toast.svelte";
+import {
+    showErrorToast,
+    showToast,
+} from "./toast.svelte";
 
 /** Both sides changed since the last sync — something the user has to decide before this trip can sync again. */
 interface SyncConflict {
@@ -541,7 +544,7 @@ class GDriveSyncState {
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             console.error("Google connect failed:", err);
-            showToast(`連線失敗: ${msg}`);
+            showErrorToast(`連線失敗: ${msg}`);
             return false;
         } finally {
             this.isConnecting = false;
@@ -799,7 +802,7 @@ class GDriveSyncState {
                 }
             },
             msg => {
-                showToast(`同步失敗: ${msg}`);
+                showErrorToast(`同步失敗: ${msg}`);
                 return null;
             },
         );
@@ -823,7 +826,7 @@ class GDriveSyncState {
                 return { yaml, md5: remoteFile?.md5Checksum, shareLink: remoteFile?.shareLink };
             },
             msg => {
-                showToast(`下載雲端行程失敗: ${msg}`);
+                showErrorToast(`下載雲端行程失敗: ${msg}`);
                 return null;
             },
         );
@@ -847,7 +850,7 @@ class GDriveSyncState {
                 return true;
             },
             msg => {
-                showToast(`刪除失敗: ${msg}`);
+                showErrorToast(`刪除失敗: ${msg}`);
                 return false;
             },
         );

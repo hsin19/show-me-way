@@ -11,7 +11,7 @@ import {
 } from "$lib/domain/trip-edit";
 import { formatDayDate } from "$lib/domain/utils";
 import { SvelteMap } from "svelte/reactivity";
-import { showToast } from "./toast.svelte";
+import { showErrorToast } from "./toast.svelte";
 import { tripStore } from "./trip.svelte";
 
 // The itinerary's edit mode: a copy of the whole trip, taken when it opens, that the cards
@@ -56,7 +56,7 @@ class TripEditStore {
         }
         // A pull or another tab's save landed meanwhile; saving the copy would quietly undo it.
         if (serializeToYaml(data) !== this.base) {
-            showToast("行程在編輯期間有更新，請按 ✕ 取消後再改一次");
+            showErrorToast("行程在編輯期間有更新，請按 ✕ 取消後再改一次");
             return;
         }
         tidyDraft(draft);
@@ -76,14 +76,14 @@ class TripEditStore {
             for (const event of day.timeline) flag(event, eventIssue(event), `${formatDayDate(day.date)}「${event.title || "未命名事件"}」`);
         }
         if (firstError) {
-            showToast(firstError);
+            showErrorToast(firstError);
             return;
         }
 
         this.settleRetimed(draft, data);
         const error = tripStore.saveEditedTrip(draft);
         if (error) {
-            showToast(error);
+            showErrorToast(error);
             return;
         }
         this.close();

@@ -88,7 +88,7 @@ beforeEach(async () => {
     vi.resetModules();
     vi.stubGlobal("localStorage", createLocalStorageStub());
     // Silences the toast service without pulling its timers into these tests.
-    vi.doMock("./toast.svelte", () => ({ showToast: vi.fn() }));
+    vi.doMock("./toast.svelte", () => ({ showToast: vi.fn(), showErrorToast: vi.fn() }));
 
     gdrive = await import("$lib/infra/http/gdrive");
     // Signed in, with a token that has not expired, so no GIS popup is ever attempted.

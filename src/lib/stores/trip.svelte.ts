@@ -72,6 +72,7 @@ import {
     clearToastByKey,
     copyToClipboard,
     shareOrCopyToClipboard,
+    showErrorToast,
     showToast,
 } from "./toast.svelte";
 import { tripOrigins } from "./trip-origin.svelte";
@@ -237,7 +238,7 @@ export class TripStore {
             actionLabel: "復原",
             onAction: () => {
                 if (!isActiveProfile(profileIdAtDelete)) {
-                    showToast("行程已切換，無法復原");
+                    showErrorToast("行程已切換，無法復原");
                     return;
                 }
                 const current = getList();
@@ -279,7 +280,7 @@ export class TripStore {
             return true;
         } catch (err) {
             console.error("Failed to persist trip data:", err);
-            showToast("儲存失敗，請稍後再試");
+            showErrorToast("儲存失敗，請稍後再試");
             return false;
         }
     }
@@ -297,11 +298,11 @@ export class TripStore {
                 // The address bar holds the only copy of the decryption key on this
                 // device, so a retryable failure must leave the hash alone. Clearing
                 // it here would destroy the link the user just scanned.
-                showToast(err.message);
+                showErrorToast(err.message);
                 return;
             }
             console.error("Failed to read shared itinerary:", err);
-            showToast(err instanceof ShareLinkError ? err.message : "分享連結內容無效，已略過");
+            showErrorToast(err instanceof ShareLinkError ? err.message : "分享連結內容無效，已略過");
             clearShareHash();
             return;
         } finally {
@@ -311,7 +312,7 @@ export class TripStore {
         const outcome = this.landSharedTrip(yaml, link);
         // Nothing stored the trip, so the address bar still holds the only copy of the key.
         if (outcome.kind === "failed") return;
-        if (outcome.kind === "invalid") showToast("分享連結內容無效，已略過");
+        if (outcome.kind === "invalid") showErrorToast("分享連結內容無效，已略過");
         clearShareHash();
     }
 
@@ -387,10 +388,11 @@ export class TripStore {
             actionLabel: "復原",
             onAction: () => {
                 if (!isActiveProfile(profileId)) {
-                    showToast("行程已切換，無法復原");
+                    showErrorToast("行程已切換，無法復原");
                     return;
                 }
-                showToast(this.commitEdit(validateYaml(before)) ? "已復原" : "儲存失敗，請稍後再試");
+                if (this.commitEdit(validateYaml(before))) showToast("已復原");
+                else showErrorToast("儲存失敗，請稍後再試");
             },
         });
         return null;
@@ -424,7 +426,7 @@ export class TripStore {
             parsed = validateYaml(yaml);
         } catch (err) {
             console.error("Failed to apply AI edit:", err);
-            showToast("AI 的修改內容無效，已略過");
+            showErrorToast("AI 的修改內容無效，已略過");
             return false;
         }
         const previousYaml = this.storedYaml();
@@ -442,7 +444,7 @@ export class TripStore {
                 actionLabel: "復原",
                 onAction: () => {
                     if (!isActiveProfile(profileIdAtEdit)) {
-                        showToast("行程已切換，無法復原");
+                        showErrorToast("行程已切換，無法復原");
                         return;
                     }
                     let restored: TripData;
@@ -450,7 +452,7 @@ export class TripStore {
                         restored = validateYaml(previousYaml);
                     } catch (err) {
                         console.error("Failed to undo AI edit:", err);
-                        showToast("復原失敗，可到行程管理還原備份");
+                        showErrorToast("復原失敗，可到行程管理還原備份");
                         return;
                     }
                     if (!this.replaceActiveTrip(restored)) return;
@@ -470,7 +472,7 @@ export class TripStore {
     async shareCurrentTrip() {
         if (!this.data || this.isSharing) return;
         if (!isShareSupported()) {
-            showToast("此瀏覽器不支援連結壓縮，無法產生分享連結");
+            showErrorToast("此瀏覽器不支援連結壓縮，無法產生分享連結");
             return;
         }
         this.isSharing = true;
@@ -481,7 +483,7 @@ export class TripStore {
             const profileId = ensureActiveProfileId();
             const outcome = await shareLinks.publish(profileId, yaml);
             if (outcome.kind === "unreachable") {
-                showToast("目前無法更新分享連結，請檢查網路後再試一次（原本的連結仍然有效）");
+                showErrorToast("目前無法更新分享連結，請檢查網路後再試一次（原本的連結仍然有效）");
                 return;
             }
             // Onto the Drive file's metadata, so this trip's other devices update the same
@@ -502,7 +504,7 @@ export class TripStore {
             await shareOrCopyToClipboard({ url: outcome.url }, outcome.url, copyMsg, outcome.kind === "inline" ? undefined : UPLOADED_NOTE);
         } catch (err) {
             console.error("Failed to build share link:", err);
-            showToast("無法產生分享連結，請稍後再試");
+            showErrorToast("無法產生分享連結，請稍後再試");
         } finally {
             this.isSharing = false;
         }
@@ -518,7 +520,8 @@ export class TripStore {
             // Clears the Drive properties too, so the other devices stop offering a link
             // hop has already dropped.
             if (outcome === "revoked") void gdriveSync.pushShareLink(profileId);
-            showToast(outcome === "revoked" ? "已撤銷分享連結，原本的連結與 QR code 不再有效" : "目前無法連上短連結服務，請檢查網路後再試一次");
+            if (outcome === "revoked") showToast("已撤銷分享連結，原本的連結與 QR code 不再有效");
+            else showErrorToast("目前無法連上短連結服務，請檢查網路後再試一次");
         } finally {
             this.isSharing = false;
         }
@@ -626,6 +629,7 @@ export class TripStore {
         if (gdriveSync.signInReadiness !== "ready") return false;
         showToast({
             message: "Google 雲端登入已過期，無法檢查行程更新",
+            kind: "error",
             actionLabel: "重新連線",
             onAction: () => void this.reconnectAndCheck(openTripManagement),
             showDismiss: true,
@@ -880,7 +884,7 @@ export class TripStore {
             const yaml = serializeToYaml(this.data);
             const outcome = await shareLinks.publish(profileId, yaml);
             if (outcome.kind === "unreachable") {
-                showToast("目前無法更新分享連結，請稍後再試一次（原本的連結仍然有效）");
+                showErrorToast("目前無法更新分享連結，請稍後再試一次（原本的連結仍然有效）");
                 return;
             }
             this.linkBaselines.set(profileId, yamlFingerprint(yaml));
@@ -888,7 +892,7 @@ export class TripStore {
             else if (outcome.deadLinkId) void gdriveSync.dropDeadShareLink(profileId, outcome.deadLinkId);
             if (outcome.kind === "inline") {
                 // The link hop refused could not be replaced, so nothing holds this version.
-                showToast("原本的分享連結已失效，暫時無法建立新連結，請稍後再按「分享行程」");
+                showErrorToast("原本的分享連結已失效，暫時無法建立新連結，請稍後再按「分享行程」");
             } else if (outcome.kind === "recreated") {
                 // A recreated link is a different URL and the one already handed out is dead,
                 // so the new one has to be reachable from the notice that says so.
@@ -903,7 +907,7 @@ export class TripStore {
             }
         } catch (err) {
             console.error("Failed to republish the share link:", err);
-            showToast("無法更新分享連結，請稍後再試");
+            showErrorToast("無法更新分享連結，請稍後再試");
         } finally {
             this.isSharing = false;
         }
@@ -922,7 +926,7 @@ export class TripStore {
             template = validateYaml(await fetchDefaultYamlText());
         } catch (err) {
             console.error("Failed to prepare new profile:", err);
-            showToast("無法建立新行程，請稍後再試");
+            showErrorToast("無法建立新行程，請稍後再試");
             return;
         }
         // A trip of its own whatever id the template carries: the bundled one has none, but
@@ -933,7 +937,7 @@ export class TripStore {
             addTrip(template);
         } catch (err) {
             console.error("Failed to create profile:", err);
-            showToast("建立新行程失敗，請稍後再試");
+            showErrorToast("建立新行程失敗，請稍後再試");
             return;
         }
         this.dropOffers();
@@ -948,7 +952,7 @@ export class TripStore {
             switchToProfile(id);
         } catch (err) {
             console.error("Failed to switch profile:", err);
-            showToast(err instanceof Error ? err.message : "切換行程失敗，請稍後再試");
+            showErrorToast(err instanceof Error ? err.message : "切換行程失敗，請稍後再試");
             this.profiles = listProfiles();
             return;
         }
@@ -995,7 +999,7 @@ export class TripStore {
         if (outcome.kind === "invalid") {
             console.error("Cloud YAML validation failed:", outcome.error);
             settingsDraft.yaml = pulled.yaml;
-            showToast("此雲端行程格式有誤，已載入編輯器，請修正後再儲存");
+            showErrorToast("此雲端行程格式有誤，已載入編輯器，請修正後再儲存");
             return { kind: "invalid", yaml: pulled.yaml, error: outcome.error };
         }
         if (outcome.kind === "declined") return { kind: "aborted" };
@@ -1027,7 +1031,7 @@ export class TripStore {
 
     private guardActive(profileId: string): boolean {
         if (isActiveProfile(profileId)) return true;
-        showToast("行程已切換，此操作已取消");
+        showErrorToast("行程已切換，此操作已取消");
         return false;
     }
 
@@ -1041,7 +1045,7 @@ export class TripStore {
             return writeActiveTrip(data, { backup: true });
         } catch (err) {
             console.error("Failed to persist YAML:", err);
-            showToast("儲存失敗，請稍後再試");
+            showErrorToast("儲存失敗，請稍後再試");
             return null;
         }
     }
@@ -1135,7 +1139,7 @@ export class TripStore {
             outcome = placeTrip(yaml, ask);
         } catch (err) {
             console.error("Failed to place trip:", err);
-            showToast("儲存失敗，請稍後再試");
+            showErrorToast("儲存失敗，請稍後再試");
             return { kind: "failed" };
         }
         if (outcome.kind === "declined" || outcome.kind === "invalid") return outcome;
@@ -1199,7 +1203,7 @@ export class TripStore {
         if (outcome.kind === "landed") res.commit?.();
         else if (outcome.kind === "invalid") {
             settingsDraft.yaml = outcome.yaml;
-            showToast("下載的雲端行程格式有誤，已載入編輯器，請修正後再儲存");
+            showErrorToast("下載的雲端行程格式有誤，已載入編輯器，請修正後再儲存");
         }
         return outcome;
     }
@@ -1226,7 +1230,7 @@ export class TripStore {
             forked = validateYaml(localYaml);
         } catch (err) {
             console.error("Failed to branch the local copy:", err);
-            showToast("保留本機版本失敗：內容無法解析");
+            showErrorToast("保留本機版本失敗：內容無法解析");
             return;
         }
         forked.trip.id = genTripId();
@@ -1235,7 +1239,7 @@ export class TripStore {
             addTrip(forked);
         } catch (err) {
             console.error("Failed to branch the local copy:", err);
-            showToast("保留本機版本失敗，請稍後再試");
+            showErrorToast("保留本機版本失敗，請稍後再試");
             return;
         }
         this.dropOffers();
@@ -1256,14 +1260,14 @@ export class TripStore {
     async restoreBackup(profileId: string, savedAt: string): Promise<LandOutcome | null> {
         const yaml = getYamlBackup(savedAt);
         if (!yaml) {
-            showToast("找不到此備份");
+            showErrorToast("找不到此備份");
             return null;
         }
         if (!this.guardActive(profileId)) return { kind: "aborted" };
         const outcome = this.place(yaml, () => true);
         if (outcome.kind === "invalid") {
             settingsDraft.yaml = yaml;
-            showToast("此備份內容無效，已載入編輯器，請修正後再儲存");
+            showErrorToast("此備份內容無效，已載入編輯器，請修正後再儲存");
             return { kind: "invalid", yaml, error: outcome.error };
         }
         if (outcome.kind === "declined") return { kind: "aborted" };
@@ -1279,7 +1283,7 @@ export class TripStore {
         // A share or sync still in flight records its result on this slot when it lands, which
         // would tie the template straight back to the old trip's link or Drive file.
         if (this.isSharing || gdriveSync.isSyncing) {
-            showToast("正在同步或分享，完成後再回復預設");
+            showErrorToast("正在同步或分享，完成後再回復預設");
             return false;
         }
         try {
@@ -1287,7 +1291,7 @@ export class TripStore {
             appStorage.remove(USER_YAML_KEY);
         } catch (err) {
             console.error("Failed to reset trip data:", err);
-            showToast("重設失敗，請稍後再試");
+            showErrorToast("重設失敗，請稍後再試");
             return false;
         }
         // The slot stays and the template lands in it, so the old trip's ties have to go:

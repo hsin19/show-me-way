@@ -20,6 +20,7 @@ import { settingsDraft } from "$lib/stores/settings-draft.svelte";
 import { shareLinks } from "$lib/stores/share-link.svelte";
 import {
     copyToClipboard,
+    showErrorToast,
     showToast,
 } from "$lib/stores/toast.svelte";
 import {
@@ -225,7 +226,7 @@ async function landDraft(): Promise<boolean> {
     // An empty slot shows the template without having stored it, so it is saved like any draft.
     if (yamlInput === yamlSnapshot && appStorage.get(USER_YAML_KEY) !== null) return true;
     const outcome = await tripStore.saveFromEditor(activeTripId, yamlInput);
-    if (outcome.kind === "invalid") showToast("請先修正編輯器中的 YAML 格式錯誤");
+    if (outcome.kind === "invalid") showErrorToast("請先修正編輯器中的 YAML 格式錯誤");
     if (!applyLanding(outcome)) return false;
     if (isActiveProfile(activeTripId)) return true;
     onDone();

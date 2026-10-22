@@ -7,8 +7,8 @@
 // cannot cut an undo window short on the clock — though a burst past MAX_VISIBLE
 // still evicts the oldest, so an undo can be crowded out by three of them.
 
-/** Picks the leading glyph. `update` is the PWA new-version notice. */
-type ToastKind = "success" | "update" | "download";
+/** Picks the leading glyph, and for `error` the colour. `update` is the PWA new-version notice. */
+type ToastKind = "success" | "update" | "download" | "error";
 
 export type ToastInput = string | {
     message: string;
@@ -88,6 +88,11 @@ export function dismissToast(id: number): void {
     found.onDismiss?.();
 }
 
+/** A failure, said as one: the default glyph is a check mark, which would read as the opposite. */
+export function showErrorToast(message: string): void {
+    showToast({ message, kind: "error" });
+}
+
 /** Show a toast: a plain message, or an undo variant with a longer window. */
 export function showToast(input: ToastInput): void {
     const opts = typeof input === "string" ? { message: input } : input;
@@ -159,7 +164,7 @@ export function copyToClipboard(text: string, successMsg = "已複製"): void {
             document.execCommand("copy");
             showToast(successMsg);
         } catch {
-            showToast("複製失敗，請手動複製");
+            showErrorToast("複製失敗，請手動複製");
         }
         document.body.removeChild(textarea);
     });
