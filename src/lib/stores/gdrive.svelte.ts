@@ -22,6 +22,7 @@
 //   gone decides `push`, and a button labelled 比對 may not re-create a deleted file.
 
 import { googleClientId } from "$lib/config";
+import type { Attachment } from "$lib/domain/trip";
 import { yamlFingerprint } from "$lib/domain/utils";
 import {
     clearCachedAccessToken,
@@ -42,10 +43,11 @@ import {
     saveGdriveUser,
     saveTripSyncMap,
     signInNeedsPopup,
-    trashCloudTrip,
+    trashDriveFile,
     type TripSyncMap,
     type TripSyncRecord,
     updateCloudShareLink,
+    uploadAttachment,
 } from "$lib/infra/http/gdrive";
 import {
     listLocalTrips,
@@ -832,6 +834,37 @@ class GDriveSyncState {
         );
     }
 
+    /**
+     * Uploads `file` into `trip`'s Drive folder as an attachment of `date` — edit mode's
+     * 上傳附件, as `trip:sync attach` does — and hands back what the YAML keeps of it, or null
+     * after saying why not. Only on a token already in hand: choosing the file has spent the
+     * tap a sign-in popup would need, so the button signs in first when there is none.
+     */
+    async attachFile(trip: { id: string; name: string; start: string; }, date: string, file: File, label: string): Promise<Attachment | null> {
+        try {
+            const token = await this.getValidToken("cache-only");
+            const uploaded = await uploadAttachment(token, trip, { date, sourceName: file.name, content: file, label });
+            showToast(`已上傳「${uploaded.fileName}」，按 ✓ 才會加進行程`);
+            return { label: uploaded.label, fileId: uploaded.fileId };
+        } catch (err) {
+            showErrorToast(`上傳失敗: ${err instanceof Error ? err.message : String(err)}`);
+            return null;
+        }
+    }
+
+    /**
+     * Trashes attachments uploaded during an edit that ended without them. Says so when it
+     * cannot, since the files would otherwise stay in the trip's folder unseen.
+     */
+    async trashAttachments(fileIds: readonly string[]): Promise<void> {
+        try {
+            const token = await this.getValidToken("cache-only");
+            await Promise.all(fileIds.map(fileId => trashDriveFile(token, fileId)));
+        } catch (err) {
+            showErrorToast(`剛上傳的附件沒能從 Drive 刪掉，可以到行程的 Drive 資料夾手動刪除（${err instanceof Error ? err.message : String(err)}）`);
+        }
+    }
+
     async deleteTrip(fileId: string): Promise<boolean> {
         return this.withBusyLock(
             () => {
@@ -840,7 +873,7 @@ class GDriveSyncState {
             },
             async () => {
                 const token = await this.getValidToken();
-                await trashCloudTrip(token, fileId);
+                await trashDriveFile(token, fileId);
                 // Any trip still bound to it would PATCH a file that no longer exists.
                 Object.entries(this.trips)
                     .filter(([, record]) => record.fileId === fileId)

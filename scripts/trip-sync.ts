@@ -83,9 +83,9 @@ import { parseArgs } from "node:util";
  * edit. Like the app it transfers only on an explicit checkout, pull, push or attach. The
  * `$lib` imports resolve through `resolve-hooks.ts`, which the script preloads.
  *
- * `attach` is the one upload the app has no counterpart for yet. It puts the file in the
- * trip's Drive folder and prints the entry for the YAML instead of writing it: which event
- * it belongs to is the editor's call, and the working copy may be mid-edit.
+ * `attach` uploads into the trip's Drive folder as edit mode's 上傳附件 does, but prints the
+ * entry for the YAML instead of writing it: which event it belongs to is the editor's call,
+ * and the working copy may be mid-edit.
  *
  * A push first rewrites the working copy into the canonical form the app stores — the
  * original goes to a backup — so this machine, Drive and every phone hold the same bytes.

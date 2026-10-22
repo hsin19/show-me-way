@@ -4,6 +4,7 @@ import {
     type TripData,
 } from "$lib/domain/trip";
 import {
+    attachmentIds,
     eventIssue,
     hotelIssue,
     resizeDays,
@@ -16,6 +17,7 @@ import {
     isCalendarDate,
 } from "$lib/domain/utils";
 import { SvelteMap } from "svelte/reactivity";
+import { gdriveSync } from "./gdrive.svelte";
 import { showErrorToast } from "./toast.svelte";
 import { tripStore } from "./trip.svelte";
 
@@ -36,6 +38,8 @@ class TripEditStore {
     errors = new SvelteMap<object, string>();
     /** The trip as it stood when edit mode opened, to tell an edit from a change made elsewhere meanwhile. */
     private base = "";
+    /** Files uploaded to Drive during this edit: the ones the trip does not link to when it ends are trashed. */
+    private uploads: string[] = [];
 
     /** Whether the draft says something the trip does not, which leaving without saving would lose. */
     get dirty(): boolean {
@@ -50,6 +54,7 @@ class TripEditStore {
         if (!data) return;
         this.base = serializeToYaml(data);
         this.draft = JSON.parse(JSON.stringify(data)) as TripData;
+        this.uploads = [];
         this.errors.clear();
         this.active = true;
     }
@@ -94,7 +99,12 @@ class TripEditStore {
             showErrorToast(error);
             return;
         }
-        this.close();
+        const linked = attachmentIds(draft);
+        this.close(this.uploads.filter(fileId => !linked.has(fileId)));
+    }
+
+    noteUpload(fileId: string): void {
+        this.uploads.push(fileId);
     }
 
     /**
@@ -121,8 +131,9 @@ class TripEditStore {
 
     /** Leaves edit mode without saving, after asking when that would lose an edit. */
     discard(): void {
-        if (this.dirty && !confirm("要放棄這次的修改嗎？")) return;
-        this.close();
+        const question = this.uploads.length > 0 ? "要放棄這次的修改嗎？這次上傳的附件也會從 Drive 刪掉。" : "要放棄這次的修改嗎？";
+        if (this.dirty && !confirm(question)) return;
+        this.close(this.uploads);
     }
 
     /** Events added, or whose start changed, go where their time says; the rest keep the order they were given. */
@@ -134,7 +145,10 @@ class TripEditStore {
         }
     }
 
-    private close(): void {
+    /** Leaves edit mode, trashing `unused` — this edit's uploads the trip ended up not linking to. */
+    private close(unused: readonly string[] = []): void {
+        if (unused.length > 0) void gdriveSync.trashAttachments(unused);
+        this.uploads = [];
         this.active = false;
         this.draft = null;
         this.errors.clear();

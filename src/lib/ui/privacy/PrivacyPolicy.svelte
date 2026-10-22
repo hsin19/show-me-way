@@ -80,7 +80,7 @@ const hopHost = new URL(hopBaseUrl()).host;
             <p>當您選擇使用「Google Drive 雲端同步」功能時，本應用程式會請求以下必要的 Google 權限：</p>
             <ul>
                 <li>
-                    <code>https://www.googleapis.com/auth/drive.file</code>：僅用於在您自己的 Google Drive 建立與管理名為 <code>ShowMeWay</code> 的專屬資料夾（每趟行程一個子資料夾，存放行程檔案與附件），以備份及同步您的行程檔案。<strong>本應用程式無法且絕不會存取您雲端硬碟中的其他非本應用程式建立的檔案。</strong>
+                    <code>https://www.googleapis.com/auth/drive.file</code>：僅用於在您自己的 Google Drive 建立與管理名為 <code>ShowMeWay</code> 的專屬資料夾（每趟行程一個子資料夾，存放行程檔案與附件），以備份及同步您的行程檔案，並存放您在 App 中主動選擇上傳的附件。<strong>本應用程式無法且絕不會存取您雲端硬碟中的其他非本應用程式建立的檔案。</strong>
                 </li>
                 <li>
                     <code>https://www.googleapis.com/auth/userinfo.email</code> 與 <code>https://www.googleapis.com/auth/userinfo.profile</code>：僅用於在應用程式介面中顯示您目前登入的 Google 帳號名稱與頭像，以方便您確認同步狀態。

@@ -12,8 +12,10 @@ import {
     expect,
     test,
 } from "vitest";
+import { installFakeDrive } from "./fake-drive";
 import {
     type AppPage,
+    createPage,
     firstDayChip,
     launchApp,
     navTab,
@@ -388,6 +390,74 @@ test("總覽的起訖日期：縮短掉有事件的天要先確認，結束早�
   hotels:
 ${HOTEL}days:
 ${SECOND_DAY()}`));
+});
+
+/** Edit mode on day 1, signed in to Drive with a token in hand, against a fake Drive. */
+async function editModeOnDrive() {
+    const page = createPage({ yaml: ORIGINAL });
+    // 已連線、手上有 token：選完檔案那一下已經用掉點擊，不能再跳登入視窗。
+    window.localStorage.setItem("showmeway_gdrive_user", JSON.stringify({ email: "tester@example.com", name: "測試者" }));
+    window.localStorage.setItem("showmeway_gdrive_token", JSON.stringify({ token: "app-test-token", expiresAt: Date.now() + 3600_000 }));
+    const drive = installFakeDrive(page);
+    await page.goto("/");
+    await waitFor(firstDayChip);
+    await page.user.click(firstDayChip());
+    await screen.findByRole("heading", { name: "第一天" });
+    await startEditing(page);
+    return { page, drive };
+}
+
+/** Picks `fileName` for 早餐 and uploads it under `name`, or under the file's own name. */
+async function uploadTo(page: AppPage, fileName: string, name?: string) {
+    await page.user.upload(within(card("早餐")).getByLabelText("選擇附件檔案"), new File(["%PDF-1.4"], fileName, { type: "application/pdf" }));
+    if (name !== undefined) await page.fill(within(card("早餐")).getByLabelText("上傳檔名"), name);
+    await page.user.click(within(card("早餐")).getByRole("button", { name: "上傳" }));
+    await waitFor(() => expect(status().textContent).toContain("已上傳"));
+}
+
+test("編輯中可以把車票上傳到這趟的 Drive 資料夾：先取名，檔名是日期加名稱，按完成後掛在那個事件上", async () => {
+    const { page, drive } = await editModeOnDrive();
+
+    await page.user.upload(within(card("早餐")).getByLabelText("選擇附件檔案"), new File(["%PDF-1.4"], "IMG_0123.pdf", { type: "application/pdf" }));
+    // 名稱先填原檔名，上傳前改；送出去之前 Drive 上什麼都沒有。
+    expect(within(card("早餐")).getByLabelText<HTMLInputElement>("上傳檔名").value).toBe("IMG_0123");
+    expect(drive.attachments()).toEqual([]);
+    await uploadTo(page, "IMG_0123.pdf", "車票 去程");
+
+    const tripFolder = drive.folders().find(folder => folder.tripId === "t-edit");
+    expect(drive.attachments().map(({ name, parents, size }) => ({ name, parents, size }))).toEqual([{ name: "990301 車票 去程.pdf", parents: [tripFolder?.id], size: 8 }]);
+    expect(within(card("早餐")).getByLabelText<HTMLInputElement>("附件名稱").value).toBe("車票 去程");
+
+    await saved(page);
+    expect(stored()).toBe(TRIP(`${BREAKFAST("09:00")}        attachments:
+          - label: 車票 去程
+            fileId: ${drive.attachments()[0]!.id}
+${LUNCH}${FLIGHT("19:00", "2099-03-01T21:00")}`));
+    expect(drive.attachments()[0]!.trashed).toBeUndefined();
+});
+
+test("上傳了卻沒留在行程上的附件會從 Drive 丟進垃圾桶：放棄編輯，或存檔前刪掉", async () => {
+    const { page, drive } = await editModeOnDrive();
+
+    await uploadTo(page, "車票.pdf");
+    page.answerDialogs(true);
+    await page.user.click(screen.getByRole("button", { name: "取消" }));
+    expect(page.dialogs).toEqual(["要放棄這次的修改嗎？這次上傳的附件也會從 Drive 刪掉。"]);
+    await waitFor(() => expect(drive.attachments()[0]!.trashed).toBe(true));
+    expect(stored()).toBe(ORIGINAL);
+
+    await startEditing(page);
+    await uploadTo(page, "訂位.pdf");
+    await page.user.click(within(card("早餐")).getByRole("button", { name: "刪除這個附件" }));
+    await saved(page);
+    await waitFor(() => expect(drive.attachments()[1]!.trashed).toBe(true));
+    expect(stored()).toBe(ORIGINAL);
+});
+
+test("沒連線 Google 時，上傳附件的按鈕先帶去連線", async () => {
+    const page = await editMode();
+    expect(within(card("早餐")).getByRole("button", { name: "連線 Google 後上傳" })).toBeTruthy();
+    expect(page.dialogs).toEqual([]);
 });
 
 test("只有編輯模式才有輸入框，住宿節點不能改；草稿切分頁回來還在，取消前會先問", async () => {

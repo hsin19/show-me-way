@@ -183,6 +183,12 @@ export function moveEventToDay(from: DayItinerary, index: number, to: DayItinera
     settleEvent(to.timeline, to.timeline.length - 1, to.date);
 }
 
+/** Every Drive file `trip` links to: its events', its hotels' and its own attachments. */
+export function attachmentIds(trip: TripData): Set<string> {
+    const entries = [...trip.days.flatMap(day => day.timeline), ...trip.trip.hotels];
+    return new Set([...entries.flatMap(entry => entry.attachments ?? []), ...(trip.trip.attachments ?? [])].map(attachment => attachment.fileId));
+}
+
 function isBlank(value: unknown): boolean {
     if (typeof value === "string") return !value.trim();
     if (Array.isArray(value)) return value.every(isBlank);

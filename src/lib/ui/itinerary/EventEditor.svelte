@@ -23,6 +23,7 @@ import Plus from "@lucide/svelte/icons/plus";
 import Trash2 from "@lucide/svelte/icons/trash-2";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import X from "@lucide/svelte/icons/x";
+import AttachmentUpload from "./AttachmentUpload.svelte";
 
 // One timeline entry in edit mode — an event, or a hotel, which has the same fields — laid
 // out as its card is, every word an input over the draft it is bound to. Fields an entry
@@ -74,7 +75,7 @@ function addField(add: () => void) {
 const showLocalName = $derived(entry.localName !== undefined || opened.includes("localName"));
 const showMapLink = $derived(entry.mapLink !== undefined || opened.includes("mapLink"));
 
-function addTo<K extends "bullets" | "stops" | "links" | "alternatives">(key: K, item: NonNullable<TimelineEvent[K]>[number]) {
+function addTo<K extends "bullets" | "stops" | "links" | "alternatives" | "attachments">(key: K, item: NonNullable<TimelineEvent[K]>[number]) {
     // Pushed through the entry, not into what `??=` hands back: that is the bare array, not the reactive one.
     entry[key] ??= [];
     (entry[key] as unknown[]).push(item);
@@ -310,5 +311,7 @@ const chip = "min-h-[44px] px-3 inline-flex items-center gap-1 rounded-xl border
         {:else}
             <button type="button" onclick={() => (adding = true)} class={chip}><Plus size={12} aria-hidden="true" />新增欄位</button>
         {/if}
+        <!-- Beside 新增欄位 rather than behind it: it stays put through the upload, and a ticket is the field most often added. -->
+        <AttachmentUpload date={dayDate ?? dateOf(entry.start)} onUploaded={attachment => addTo("attachments", attachment)} class={chip} />
     </div>
 </div>

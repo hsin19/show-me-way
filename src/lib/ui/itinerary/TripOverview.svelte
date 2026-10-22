@@ -2,6 +2,7 @@
 import { getLanguageConfig } from "$lib/domain/language";
 import { isOvernightStay } from "$lib/domain/timeline";
 import type {
+    Attachment,
     DayItinerary,
     HotelInfo,
     TripData,
@@ -31,6 +32,7 @@ import Plus from "@lucide/svelte/icons/plus";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import X from "@lucide/svelte/icons/x";
 import AttachmentChip from "./AttachmentChip.svelte";
+import AttachmentUpload from "./AttachmentUpload.svelte";
 import CardActions from "./CardActions.svelte";
 import CardActionsToggle from "./CardActionsToggle.svelte";
 import EventEditor from "./EventEditor.svelte";
@@ -112,6 +114,12 @@ const LANGS = [["", "未設定（英文）"], ["ja", "日文"], ["ko", "韓文"]
 // `lang` takes any string, so a code the list does not know is offered as itself rather than shown as unset.
 const langOptions = $derived(!draftTrip?.lang || LANGS.some(([code]) => code === draftTrip.lang) ? LANGS : [...LANGS, [draftTrip.lang, draftTrip.lang] as const]);
 const MAPS = [["", "Google 地圖（預設）"], ["google", "Google 地圖"], ["naver", "Naver 地圖"]] as const;
+
+function addTripAttachment(edited: TripData["trip"], attachment: Attachment) {
+    // Pushed through the trip, not into what `??=` hands back: that is the bare array, not the reactive one.
+    edited.attachments ??= [];
+    edited.attachments.push(attachment);
+}
 
 function setMap(edited: TripData["trip"], value: string) {
     if (value === "google" || value === "naver") edited.mapProvider = value;
@@ -199,25 +207,25 @@ function changeRange(input: HTMLInputElement, edge: "start" | "end") {
             </button>
         </div>
     </div>
-    {#if edited.attachments?.length}
-        <div class="mt-6">
-            <h3 class="text-[11px] font-bold text-text-muted mb-2 px-1">附件</h3>
-            {#each edited.attachments as attachment, i (attachment)}
-                <div class="flex items-center gap-1">
-                    <input aria-label="附件名稱" bind:value={attachment.label} autocomplete="off" class="{field} flex-1 min-w-0 min-h-[44px] text-xs text-text-secondary" />
-                    <button
-                        type="button"
-                        onclick={() => edited.attachments?.splice(i, 1)}
-                        aria-label="刪除這個附件"
-                        title="刪除這個附件"
-                        class="min-w-[44px] min-h-[44px] -mr-2 flex items-center justify-center rounded-xl text-text-muted hover:text-text-primary hover:bg-tint-2 transition cursor-pointer"
-                    >
-                        <X size={16} aria-hidden="true" />
-                    </button>
-                </div>
-            {/each}
-        </div>
-    {/if}
+    <!-- Shown even empty in edit mode: insurance and visas are uploaded from here. -->
+    <div class="mt-6">
+        <h3 class="text-[11px] font-bold text-text-muted mb-2 px-1">附件</h3>
+        {#each edited.attachments ?? [] as attachment, i (attachment)}
+            <div class="flex items-center gap-1">
+                <input aria-label="附件名稱" bind:value={attachment.label} autocomplete="off" class="{field} flex-1 min-w-0 min-h-[44px] text-xs text-text-secondary" />
+                <button
+                    type="button"
+                    onclick={() => edited.attachments?.splice(i, 1)}
+                    aria-label="刪除這個附件"
+                    title="刪除這個附件"
+                    class="min-w-[44px] min-h-[44px] -mr-2 flex items-center justify-center rounded-xl text-text-muted hover:text-text-primary hover:bg-tint-2 transition cursor-pointer"
+                >
+                    <X size={16} aria-hidden="true" />
+                </button>
+            </div>
+        {/each}
+        <AttachmentUpload date={days[0]?.date ?? ""} onUploaded={attachment => addTripAttachment(edited, attachment)} class="btn-secondary w-full border-dashed mt-2" />
+    </div>
 {/snippet}
 
 {#if draftTrip}

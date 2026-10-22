@@ -22,6 +22,15 @@ export interface FakeFile {
     parents?: string[];
 }
 
+/** 附件：分段上傳（resumable）進來的檔案，跟行程檔分開記，不算進 `counts().uploads` */
+interface FakeAttachment {
+    id: string;
+    name: string;
+    parents: string[];
+    size: number;
+    trashed?: boolean;
+}
+
 /** 每趟行程自己的資料夾：靠 appProperties.showmewayTripId 找，不是靠名稱 */
 interface FakeFolder {
     id: string;
@@ -41,6 +50,8 @@ export interface FakeDrive {
     props: (id: string) => Record<string, string>;
     /** ShowMeWay 底下的行程資料夾，包括替預先放好的檔案建的 */
     folders: () => FakeFolder[];
+    /** 上傳進來的附件 */
+    attachments: () => FakeAttachment[];
 }
 
 /**
@@ -69,6 +80,9 @@ export function installFakeDrive(page: AppPage, initial: FakeFile[] = []): FakeD
     }));
     let nextId = 1;
     let uploads = 0;
+    const attachments: FakeAttachment[] = [];
+    // 分段上傳：POST 開一個工作拿到上傳位址，再 PUT 內容到那個位址
+    const sessions = new Map<string, { name: string; parents: string[]; }>();
     let downloads = 0;
     let listings = 0;
 
@@ -117,6 +131,19 @@ export function installFakeDrive(page: AppPage, initial: FakeFile[] = []): FakeD
             return json({ email: "tester@example.com", name: "測試者" });
         }
 
+        if (url.pathname.startsWith("/upload/drive/v3/files") && url.searchParams.get("uploadType") === "resumable") {
+            const body = JSON.parse(await request.text()) as { name: string; parents?: string[]; };
+            const session = `session-${nextId++}`;
+            sessions.set(session, { name: body.name, parents: body.parents ?? [] });
+            return new Response(null, { status: 200, headers: { Location: `https://www.googleapis.com/upload/drive/v3/files?upload_id=${session}` } });
+        }
+        const session = sessions.get(url.searchParams.get("upload_id") ?? "");
+        if (session && method === "PUT") {
+            const attachment = { id: `attachment-${nextId++}`, ...session, size: (await request.arrayBuffer()).byteLength };
+            attachments.push(attachment);
+            return json({ id: attachment.id });
+        }
+
         if (url.pathname.startsWith("/upload/drive/v3/files")) {
             uploads++;
             const boundary = (request.headers.get("content-type") ?? "").split("boundary=")[1]!;
@@ -154,6 +181,12 @@ export function installFakeDrive(page: AppPage, initial: FakeFile[] = []): FakeD
         }
 
         const fileId = url.pathname.replace("/drive/v3/files/", "");
+        const attachment = attachments.find(a => a.id === fileId);
+        if (attachment && method === "PATCH") {
+            const body = JSON.parse((await request.text()) || "{}") as { trashed?: boolean; };
+            if (body.trashed) attachment.trashed = true;
+            return json({ id: attachment.id });
+        }
         const file = files.get(fileId);
         if (!file) return json({ error: { message: "not found" } }, 404);
         if (url.searchParams.get("alt") === "media") {
@@ -179,5 +212,6 @@ export function installFakeDrive(page: AppPage, initial: FakeFile[] = []): FakeD
         counts: () => ({ uploads, downloads, listings }),
         props: id => files.get(id)?.props ?? {},
         folders: () => [...folders.values()],
+        attachments: () => [...attachments],
     };
 }

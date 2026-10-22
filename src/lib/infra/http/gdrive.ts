@@ -771,11 +771,12 @@ export async function fetchCloudTrip(token: string, fileId: string): Promise<{ y
 }
 
 /**
- * Moves a trip file to Drive's trash rather than deleting it, so a mistaken delete stays
- * recoverable for the 30 days Drive keeps it, version history included. The trip's folder
- * stays: it may hold files the user put there, which `drive.file` cannot even see.
+ * Moves a file — a trip, or an attachment — to Drive's trash rather than deleting it, so a
+ * mistaken delete stays recoverable for the 30 days Drive keeps it, version history
+ * included. A trip's folder stays: it may hold files the user put there, which
+ * `drive.file` cannot even see.
  */
-export async function trashCloudTrip(token: string, fileId: string): Promise<void> {
+export async function trashDriveFile(token: string, fileId: string): Promise<void> {
     const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
         method: "PATCH",
         headers: {
