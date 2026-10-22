@@ -19,25 +19,27 @@ import {
     status,
 } from "./harness";
 
-// 編輯模式：日程卡上的「編輯」打開後，每張事件卡的時間、標題、說明、地址都直接是輸入框，
-// 改完按右下角的 ✓ 一次存回 showmeway_user_yaml，一個復原退回全部。寫回的 bytes 用 canonical
-// 形式比對整份：沒動到的欄位（早餐的多行 desc）要一個 byte 都不變，否則每次存檔都會被當成
-// 一次編輯。午餐用文字寫時間、晚班機用 start / end，兩種寫法可以互相切換。
+// 編輯模式：卡片標題旁的 ⋯ →「編輯行程」打開後，畫面換成整趟行程的草稿，每個字都直接是輸入框，
+// 事件可以插入、刪除、上下移動；改完按日期列右邊的 ✓ 一次存回 showmeway_user_yaml，一個復原退回
+// 全部。寫回的 bytes 用 canonical 形式比對整份：沒動到的欄位（早餐的多行 desc）要一個 byte 都不變，
+// 否則每次存檔都會被當成一次編輯。午餐用文字寫時間、晚班機用 start / end，兩種寫法可以互相切換。
 
 const canonical = (yaml: string) => serializeToYaml(validateYaml(yaml));
 
-const TRIP = (timeline: string) =>
+const HOTEL = `    - title: 測試飯店
+      start: '2099-03-01T15:00'
+      end: '2099-03-02T11:00'
+`;
+
+const TRIP = (timeline: string, { hotels = HOTEL, trip = "", day = "" } = {}) =>
     canonical(`trip:
   name: 編輯測試
   id: t-edit
-  hotels:
-    - title: 測試飯店
-      start: '2099-03-01T15:00'
-      end: '2099-03-02T11:00'
-days:
+${trip}  hotels:
+${hotels}days:
   - date: '2099-03-01'
     title: 第一天
-    timeline:
+${day}    timeline:
 ${timeline}`);
 
 const BREAKFAST = (time: string) =>
@@ -61,28 +63,20 @@ const ORIGINAL = TRIP(BREAKFAST("09:00") + LUNCH + FLIGHT("19:00", "2099-03-01T2
 const stored = () => window.localStorage.getItem("showmeway_user_yaml");
 
 /** Event titles in the order the open day shows them, outside edit mode. */
-const order = () => screen.getAllByText(/^(早餐|午餐|晚班機)$/).map(el => el.textContent);
+const order = () => screen.getAllByText(/^(早餐|午餐|晚班機|咖啡)$/).map(el => el.textContent);
 
 /** The same in edit mode, where every title is an input. */
 const titleInputs = () => screen.queryAllByLabelText<HTMLInputElement>("標題");
+const editing = () => titleInputs().map(el => el.value);
 
-/** An event's card in edit mode, found by what its title input holds. */
+/** An entry's editor in edit mode, found by what its title input holds. */
 function card(title: string): HTMLElement {
-    const input = titleInputs().find(el => el.value === title);
-    const panel = input?.closest<HTMLElement>(".panel");
+    const panel = titleInputs().find(el => el.value === title)?.closest<HTMLElement>(".panel");
     if (!panel) throw new Error(`no card editing ${title}`);
     return panel;
 }
 
 const finish = ({ user }: AppPage) => user.click(screen.getByRole("button", { name: "完成" }));
-
-async function openDay(): Promise<AppPage> {
-    const page = await launchApp(ORIGINAL);
-    await waitFor(firstDayChip);
-    await page.user.click(firstDayChip());
-    await screen.findByRole("heading", { name: "第一天" });
-    return page;
-}
 
 /** Edit mode sits in the row the open card's header ⋯ unfolds, beside share. */
 async function startEditing({ user }: AppPage): Promise<void> {
@@ -90,11 +84,24 @@ async function startEditing({ user }: AppPage): Promise<void> {
     await user.click(screen.getByRole("button", { name: "編輯行程" }));
 }
 
-async function editMode(): Promise<AppPage> {
-    const page = await openDay();
-    await startEditing(page);
-    await waitFor(() => expect(titleInputs().map(el => el.value)).toEqual(["早餐", "午餐", "晚班機"]));
+async function openDay(yaml = ORIGINAL): Promise<AppPage> {
+    const page = await launchApp(yaml);
+    await waitFor(firstDayChip);
+    await page.user.click(firstDayChip());
+    await screen.findByRole("heading", { name: "第一天" });
     return page;
+}
+
+async function editMode(yaml = ORIGINAL): Promise<AppPage> {
+    const page = await openDay(yaml);
+    await startEditing(page);
+    await waitFor(() => expect(titleInputs().length).toBeGreaterThan(0));
+    return page;
+}
+
+async function saved(page: AppPage): Promise<void> {
+    await finish(page);
+    await waitFor(() => expect(titleInputs()).toHaveLength(0));
 }
 
 test("改時間要等按完成才存、才依時間重排；沒動的欄位原樣保留，復原回到原本", async () => {
@@ -102,15 +109,14 @@ test("改時間要等按完成才存、才依時間重排；沒動的欄位原�
 
     await page.fill(within(card("早餐")).getByLabelText("時間"), "13:00");
     // 打字當下卡片不跳位置，也還沒寫回。
-    expect(titleInputs().map(el => el.value)).toEqual(["早餐", "午餐", "晚班機"]);
+    expect(editing()).toEqual(["早餐", "午餐", "晚班機"]);
     expect(stored()).toBe(ORIGINAL);
 
-    await finish(page);
-    await waitFor(() => expect(titleInputs()).toHaveLength(0));
+    await saved(page);
     expect(order()).toEqual(["午餐", "早餐", "晚班機"]);
     expect(stored()).toBe(TRIP(LUNCH + BREAKFAST("13:00") + FLIGHT("19:00", "2099-03-01T21:00")));
 
-    await waitFor(() => expect(status().textContent).toContain("已更新「早餐」"));
+    await waitFor(() => expect(status().textContent).toContain("已儲存修改"));
     await page.user.click(within(status()).getByRole("button", { name: "復原" }));
     await waitFor(() => expect(order()).toEqual(["早餐", "午餐", "晚班機"]));
     expect(stored()).toBe(ORIGINAL);
@@ -122,9 +128,8 @@ test("一次改好幾張卡，按一次完成就一起存，一個復原全部�
     await page.fill(within(card("早餐")).getByLabelText("說明"), "改過的早餐");
     await page.fill(within(card("午餐")).getByLabelText("地址"), "Via Roma 1");
     await page.fill(within(card("午餐")).getByLabelText("標題"), "午餐改名");
-    await finish(page);
+    await saved(page);
 
-    await waitFor(() => expect(status().textContent).toContain("已更新 2 個事件"));
     expect(stored()).toBe(TRIP(`      - time: '09:00'
         title: 早餐
         desc: 改過的早餐
@@ -133,11 +138,12 @@ test("一次改好幾張卡，按一次完成就一起存，一個復原全部�
         address: Via Roma 1
 ${FLIGHT("19:00", "2099-03-01T21:00")}`));
 
+    await waitFor(() => expect(status().textContent).toContain("已儲存修改"));
     await page.user.click(within(status()).getByRole("button", { name: "復原" }));
     await waitFor(() => expect(stored()).toBe(ORIGINAL));
 });
 
-test("時間可以在文字和起訖時間之間切換，切過去會帶入原本寫的時間", async () => {
+test("時間可以在起訖時間和文字之間切換，切過去會帶入原本寫的時間", async () => {
     const page = await editMode();
 
     // 起訖時間排第一個：鼓勵用 App 讀得懂的寫法。
@@ -149,8 +155,7 @@ test("時間可以在文字和起訖時間之間切換，切過去會帶入原�
     await page.user.click(within(card("晚班機")).getByRole("button", { name: "文字" }));
     expect(within(card("晚班機")).getByLabelText<HTMLInputElement>("時間").value).toBe("19:00 - 21:00");
 
-    await finish(page);
-    await waitFor(() => expect(titleInputs()).toHaveLength(0));
+    await saved(page);
     expect(stored()).toBe(TRIP(`${BREAKFAST("09:00")}      - start: '2099-03-01T12:00'
         end: '2099-03-01T13:30'
         title: 午餐
@@ -162,22 +167,138 @@ test("時間可以在文字和起訖時間之間切換，切過去會帶入原�
 test("存不了的不放人走：卡片上說原因、toast 指出是哪一張，改好再按完成才存", async () => {
     const page = await editMode();
 
-    await page.fill(within(card("晚班機")).getByLabelText("結束"), "18:00");
     await page.fill(within(card("早餐")).getByLabelText("標題"), "");
+    // 標題清空的那張只剩說明可以認，從說明往上找它的卡片。
+    const breakfast = screen.getByDisplayValue(/第一行/).closest<HTMLElement>(".panel")!;
+    await page.user.click(within(card("午餐")).getByRole("button", { name: "文字" }));
+    await page.fill(within(card("午餐")).getByLabelText("時間"), "");
     await finish(page);
 
-    await waitFor(() => expect(status().textContent).toContain("「早餐」：標題不能空白"));
-    expect(within(card("晚班機")).getByRole("alert").textContent).toContain("結束時間早於開始時間");
+    await waitFor(() => expect(status().textContent).toContain("「未命名事件」：標題不能空白"));
+    expect(within(breakfast).getByRole("alert").textContent).toContain("標題不能空白");
+    expect(within(card("午餐")).getByRole("alert").textContent).toContain("時間不能空白");
     expect(titleInputs()).toHaveLength(3);
     expect(stored()).toBe(ORIGINAL);
 
-    await page.fill(titleInputs()[0]!, "早餐");
-    await page.fill(within(card("晚班機")).getByLabelText("開始"), "20:30");
-    await page.fill(within(card("晚班機")).getByLabelText("結束"), "22:45");
-    await finish(page);
+    await page.fill(within(breakfast).getByLabelText("標題"), "早餐");
+    await page.fill(within(card("午餐")).getByLabelText("時間"), "12:00");
+    await saved(page);
+    expect(stored()).toBe(ORIGINAL);
+});
 
-    await waitFor(() => expect(titleInputs()).toHaveLength(0));
-    expect(stored()).toBe(TRIP(BREAKFAST("09:00") + LUNCH + FLIGHT("20:30", "2099-03-01T22:45")));
+test("起訖時間的結束早於開始時算到隔天，像紅眼班機", async () => {
+    const page = await editMode();
+
+    await page.fill(within(card("晚班機")).getByLabelText("開始"), "23:30");
+    await page.fill(within(card("晚班機")).getByLabelText("結束"), "06:10");
+    await saved(page);
+    expect(stored()).toBe(TRIP(BREAKFAST("09:00") + LUNCH + FLIGHT("23:30", "2099-03-02T06:10")));
+});
+
+test("事件可以插入、刪除、上下移動；手動排的順序存檔時保留，新加的照時間就位，沒填的不存", async () => {
+    const page = await editMode();
+
+    await page.user.click(within(card("晚班機")).getByRole("button", { name: "上移" }));
+    expect(editing()).toEqual(["早餐", "晚班機", "午餐"]);
+    // 最上面那張不能再上移，最下面那張不能再下移。
+    expect(within(card("早餐")).getByRole<HTMLButtonElement>("button", { name: "上移" }).disabled).toBe(true);
+    expect(within(card("午餐")).getByRole<HTMLButtonElement>("button", { name: "下移" }).disabled).toBe(true);
+
+    await page.user.click(within(card("午餐")).getByRole("button", { name: "刪除這個事件" }));
+    expect(editing()).toEqual(["早餐", "晚班機"]);
+
+    await page.user.click(within(card("早餐")).getByRole("button", { name: "在下方插入事件" }));
+    expect(editing()).toEqual(["早餐", "", "晚班機"]);
+    const inserted = titleInputs()[1]!.closest<HTMLElement>(".panel")!;
+    await page.fill(within(inserted).getByLabelText("標題"), "咖啡");
+    await page.fill(within(inserted).getByLabelText("開始"), "20:00");
+
+    // 加了卻什麼都沒填的，存檔時直接拿掉，不擋人。
+    await page.user.click(screen.getByRole("button", { name: "新增事件" }));
+    expect(editing()).toEqual(["早餐", "咖啡", "晚班機", ""]);
+
+    await saved(page);
+    // 晚班機是手動移的、時間沒變，留在原地；咖啡 20:00 排在晚班機 19:00 前面不對，就位到它後面。
+    expect(order()).toEqual(["早餐", "晚班機", "咖啡"]);
+    expect(stored()).toBe(TRIP(`${BREAKFAST("09:00")}${FLIGHT("19:00", "2099-03-01T21:00")}      - start: '2099-03-01T20:00'
+        title: 咖啡
+`));
+});
+
+test("事件的其他欄位：類型、當地名稱、條列、地點、連結都能加能改能刪", async () => {
+    const page = await editMode();
+    const lunch = () => card("午餐");
+
+    // 沒填的欄位收在「新增欄位」後面，選一個就收回去。
+    const add = async (name: string) => {
+        await page.user.click(within(lunch()).getByRole("button", { name: "新增欄位" }));
+        await page.user.click(within(lunch()).getByRole("button", { name }));
+    };
+
+    await page.user.selectOptions(within(lunch()).getByLabelText("類型"), "must-go");
+    await add("當地名稱");
+    await page.fill(within(lunch()).getByLabelText("當地名稱"), "Mercato Centrale");
+    await add("條列");
+    await page.fill(within(lunch()).getByLabelText("條列"), "記得帶現金");
+    await add("連結");
+    await page.fill(within(lunch()).getByLabelText("連結文字"), "官網");
+    await page.fill(within(lunch()).getByLabelText("連結網址"), "https://example.com");
+    // 加了又刪的地點、只加不填的條列，都不會留下空殼。
+    await add("地點");
+    await page.user.click(within(lunch()).getByRole("button", { name: "刪除這個地點" }));
+    await add("條列");
+
+    await saved(page);
+    expect(stored()).toBe(TRIP(`${BREAKFAST("09:00")}      - time: '12:00'
+        title: 午餐
+        type: must-go
+        bullets:
+          - 記得帶現金
+        localName: Mercato Centrale
+        links:
+          - label: 官網
+            url: https://example.com
+${FLIGHT("19:00", "2099-03-01T21:00")}`));
+});
+
+test("這一天的標題、節奏、天氣城市可以改，標題不能空白", async () => {
+    const page = await editMode();
+
+    await page.fill(screen.getByLabelText("今日節奏"), "慢慢走");
+    await page.fill(screen.getByLabelText("天氣城市"), "Florence");
+    await page.fill(screen.getByLabelText("這天的標題"), "");
+    await finish(page);
+    await waitFor(() => expect(status().textContent).toContain("這天的標題不能空白"));
+
+    await page.fill(screen.getByLabelText("這天的標題"), "佛羅倫斯");
+    await saved(page);
+    expect(stored()).toBe(TRIP(BREAKFAST("09:00") + LUNCH + FLIGHT("19:00", "2099-03-01T21:00"), { day: "    pace: 慢慢走\n    city: Florence\n" }).replace("title: 第一天", "title: 佛羅倫斯"));
+});
+
+test("總覽：行程名稱、城市、語言、地圖與住宿都能改，住宿可以新增和刪除", async () => {
+    const page = await launchApp(ORIGINAL);
+    await screen.findByRole("heading", { level: 2, name: "編輯測試" });
+    await startEditing(page);
+
+    await page.fill(await screen.findByLabelText("行程名稱"), "佛羅倫斯小旅行");
+    await page.fill(screen.getByLabelText("天氣城市"), "Florence");
+    await page.user.selectOptions(screen.getByLabelText("當地語言"), "ja");
+    await page.user.selectOptions(screen.getByLabelText("地圖"), "naver");
+
+    await page.fill(within(card("測試飯店")).getByLabelText("退房時間"), "10:00");
+    await page.user.click(screen.getByRole("button", { name: "新增住宿" }));
+    await page.fill(within(card("")).getByLabelText("標題"), "第二間飯店");
+    // 新的住宿從上一間的退房日接著住。
+    expect(within(card("第二間飯店")).getByLabelText<HTMLInputElement>("入住日期").value).toBe("2099-03-02");
+    await page.user.click(within(card("測試飯店")).getByRole("button", { name: "刪除這個住宿" }));
+
+    await saved(page);
+    expect(stored()).toBe(
+        TRIP(BREAKFAST("09:00") + LUNCH + FLIGHT("19:00", "2099-03-01T21:00"), {
+            trip: "  lang: ja\n  mapProvider: naver\n  city: Florence\n",
+            hotels: "    - title: 第二間飯店\n      start: '2099-03-02'\n      end: '2099-03-03'\n",
+        }).replace("name: 編輯測試", "name: 佛羅倫斯小旅行"),
+    );
 });
 
 test("只有編輯模式才有輸入框，住宿節點不能改；草稿切分頁回來還在，取消前會先問", async () => {
@@ -225,12 +346,10 @@ test("總覽也能進編輯模式，切到某一天就能改；展開的那排�
     await page.user.click(screen.getByRole("button", { name: "更多" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "編輯行程" })).toBeNull());
 
-    // 總覽目前沒有能改的欄位，進了編輯模式就待在原地，✕ ✓ 照樣在。
     await startEditing(page);
-    expect(screen.getByRole("heading", { level: 2, name: "編輯測試" })).toBeTruthy();
+    expect(await screen.findByLabelText("行程名稱")).toBeTruthy();
     expect(screen.getByRole("button", { name: "完成" })).toBeTruthy();
 
     await page.user.click(firstDayChip());
-    await screen.findByRole("heading", { name: "第一天" });
-    await waitFor(() => expect(titleInputs().map(el => el.value)).toEqual(["早餐", "午餐", "晚班機"]));
+    await waitFor(() => expect(editing()).toEqual(["早餐", "午餐", "晚班機"]));
 });

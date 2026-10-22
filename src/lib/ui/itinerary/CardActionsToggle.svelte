@@ -1,5 +1,5 @@
 <script lang="ts">
-import { eventEdit } from "$lib/stores/event-edit.svelte";
+import { tripEdit } from "$lib/stores/trip-edit.svelte";
 import Ellipsis from "@lucide/svelte/icons/ellipsis";
 import Loader2 from "@lucide/svelte/icons/loader-2";
 
@@ -18,7 +18,7 @@ interface Props {
 let { open = $bindable(), sharing = false }: Props = $props();
 </script>
 
-{#if !eventEdit.active}
+{#if !tripEdit.active}
     <button
         type="button"
         onclick={() => (open = !open)}

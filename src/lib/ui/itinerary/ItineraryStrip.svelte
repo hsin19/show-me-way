@@ -13,7 +13,7 @@ import type {
 import { tripDayOf } from "$lib/domain/utils";
 import type { DailyWeather } from "$lib/infra/http/weather";
 import type { ProfileInfo } from "$lib/infra/storage/profiles";
-import { eventEdit } from "$lib/stores/event-edit.svelte";
+import { tripEdit } from "$lib/stores/trip-edit.svelte";
 import type { EnlargedCard } from "$lib/ui/shared/enlarge";
 import TabPager from "$lib/ui/shared/TabPager.svelte";
 import Check from "@lucide/svelte/icons/check";
@@ -111,7 +111,7 @@ function positionPanel(day: number, panel: HTMLElement) {
 {#snippet editControls()}
     <button
         type="button"
-        onclick={() => eventEdit.discard()}
+        onclick={() => tripEdit.discard()}
         aria-label="取消"
         title="取消"
         class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full text-text-secondary hover:bg-tint-2 transition active:scale-95 cursor-pointer"
@@ -120,7 +120,7 @@ function positionPanel(day: number, panel: HTMLElement) {
     </button>
     <button
         type="button"
-        onclick={() => eventEdit.finish()}
+        onclick={() => tripEdit.finish()}
         aria-label="完成"
         title="完成"
         class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-accent text-accent-contrast transition active:scale-95 cursor-pointer"
@@ -136,7 +136,7 @@ function positionPanel(day: number, panel: HTMLElement) {
     bind:current={currentDay}
     pinnedCount={1}
     onPanelReady={positionPanel}
-    trailing={eventEdit.active ? editControls : undefined}
+    trailing={tripEdit.active ? editControls : undefined}
 >
     {#snippet chip(day, select, active)}
         <DayChip {day} date={dayDates.get(day) ?? ""} {active} isToday={todayDay === day} onSelect={select} />

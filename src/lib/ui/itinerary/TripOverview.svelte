@@ -3,14 +3,21 @@ import { getLanguageConfig } from "$lib/domain/language";
 import { isOvernightStay } from "$lib/domain/timeline";
 import type {
     DayItinerary,
+    HotelInfo,
     TripData,
 } from "$lib/domain/trip";
+import {
+    moveItem,
+    newHotel,
+    setText,
+} from "$lib/domain/trip-edit";
 import {
     formatDateRange,
     splitDayDate,
 } from "$lib/domain/utils";
 import type { DailyWeather } from "$lib/infra/http/weather";
 import type { ProfileInfo } from "$lib/infra/storage/profiles";
+import { tripEdit } from "$lib/stores/trip-edit.svelte";
 import type { EnlargedCard } from "$lib/ui/shared/enlarge";
 import ProfileManager from "$lib/ui/tools/settings/ProfileManager.svelte";
 import BedDouble from "@lucide/svelte/icons/bed-double";
@@ -20,9 +27,13 @@ import ChevronDown from "@lucide/svelte/icons/chevron-down";
 import ChevronRight from "@lucide/svelte/icons/chevron-right";
 import Hourglass from "@lucide/svelte/icons/hourglass";
 import Maximize2 from "@lucide/svelte/icons/maximize-2";
+import Plus from "@lucide/svelte/icons/plus";
+import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+import X from "@lucide/svelte/icons/x";
 import AttachmentChip from "./AttachmentChip.svelte";
 import CardActions from "./CardActions.svelte";
 import CardActionsToggle from "./CardActionsToggle.svelte";
+import EventEditor from "./EventEditor.svelte";
 import HotelCards from "./HotelCards.svelte";
 import WeatherBadge from "./WeatherBadge.svelte";
 
@@ -93,60 +104,163 @@ let hotelList = $derived(trip.hotels ?? []);
 let tonightHotel = $derived(hotelList.find(h => isOvernightStay(h, todayIso)) ?? null);
 
 let langConfig = $derived(getLanguageConfig(trip.lang));
+
+// In edit mode the trip-level fields are the draft's, changed in place.
+const draftTrip = $derived(tripEdit.active ? tripEdit.draft?.trip : undefined);
+
+const LANGS = [["", "未設定（英文）"], ["ja", "日文"], ["ko", "韓文"], ["en", "英文"]] as const;
+// `lang` takes any string, so a code the list does not know is offered as itself rather than shown as unset.
+const langOptions = $derived(!draftTrip?.lang || LANGS.some(([code]) => code === draftTrip.lang) ? LANGS : [...LANGS, [draftTrip.lang, draftTrip.lang] as const]);
+const MAPS = [["", "Google 地圖（預設）"], ["google", "Google 地圖"], ["naver", "Naver 地圖"]] as const;
+
+function setMap(edited: TripData["trip"], value: string) {
+    if (value === "google" || value === "naver") edited.mapProvider = value;
+    else delete edited.mapProvider;
+}
+
+const field = "bg-transparent border-b border-dashed border-line-emphasis outline-none focus:border-solid focus:border-accent placeholder:text-text-muted placeholder:font-normal";
+const rowLabel = "shrink-0 w-14 text-[11px] font-bold text-text-muted";
+const addButton = "w-full min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rounded-xl bg-tint-1 border border-dashed border-card-border text-text-secondary hover:text-accent hover:bg-tint-2 transition cursor-pointer text-xs font-bold";
 </script>
 
-<div class="panel rounded-2xl p-6 mb-6">
-    <div class="flex justify-between items-start gap-2">
-        <h2 class="text-2xl font-extrabold text-text-primary tracking-tight min-w-0 break-words">
-            {trip.name}
-        </h2>
-        <!-- -mt-1.5 centres the 44px button on the title's first 32px line. -->
-        <div class="shrink-0 -mr-2 -mt-1.5">
-            <CardActionsToggle bind:open={actionsOpen} {sharing} />
+{#snippet editingHeader(edited: TripData["trip"])}
+    {@const tripError = tripEdit.errors.get(edited)}
+    <div class="panel rounded-2xl p-6 mb-6 ring-1 ring-accent/40">
+        <input aria-label="行程名稱" bind:value={edited.name} autocomplete="off" placeholder="行程名稱" class="{field} block w-full min-h-[44px] text-2xl font-extrabold text-text-primary tracking-tight" />
+        <div class="mt-2">
+            <label class="flex items-center gap-2 text-xs">
+                <span class={rowLabel}>天氣城市</span>
+                <input aria-label="天氣城市" bind:value={() => edited.city ?? "", v => setText(edited, "city", v)} autocomplete="off" placeholder="英文較準，例如 Tokyo" class="{field} flex-1 min-w-0 min-h-[44px] text-text-secondary" />
+            </label>
+            <label class="flex items-center gap-2 text-xs">
+                <span class={rowLabel}>當地語言</span>
+                <!-- value + onchange, not bind:value, as in EventEditor's type picker. -->
+                <span class="relative flex-1 min-w-0">
+                    <select aria-label="當地語言" value={edited.lang ?? ""} onchange={e => setText(edited, "lang", e.currentTarget.value)} class="{field} appearance-none w-full min-h-[44px] pr-5 text-text-secondary cursor-pointer">
+                        {#each langOptions as [code, label] (code)}
+                            <option value={code}>{label}</option>
+                        {/each}
+                    </select>
+                    <ChevronDown size={12} class="pointer-events-none absolute right-0.5 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden="true" />
+                </span>
+            </label>
+            <label class="flex items-center gap-2 text-xs">
+                <span class={rowLabel}>地圖</span>
+                <span class="relative flex-1 min-w-0">
+                    <select aria-label="地圖" value={edited.mapProvider ?? ""} onchange={e => setMap(edited, e.currentTarget.value)} class="{field} appearance-none w-full min-h-[44px] pr-5 text-text-secondary cursor-pointer">
+                        {#each MAPS as [value, label] (value)}
+                            <option {value}>{label}</option>
+                        {/each}
+                    </select>
+                    <ChevronDown size={12} class="pointer-events-none absolute right-0.5 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden="true" />
+                </span>
+            </label>
+        </div>
+        {#if tripError}
+            <p role="alert" class="mt-2 flex items-start gap-1.5 text-xs text-danger">
+                <TriangleAlert size={13} class="shrink-0 mt-0.5" aria-hidden="true" />{tripError}
+            </p>
+        {/if}
+        <p class="text-xs text-accent mt-3">點文字就能直接修改，改完按右上角 ✓ 儲存</p>
+    </div>
+{/snippet}
+
+{#snippet editingHotels(edited: TripData["trip"])}
+    <div class="mt-6">
+        <h3 class="text-[11px] font-bold text-text-muted mb-2 px-1">住宿</h3>
+        <div class="space-y-3">
+            {#each edited.hotels as hotel, i (hotel)}
+                <EventEditor
+                    bind:entry={() => hotel, v => (edited.hotels[i] = v as HotelInfo)}
+                    error={tripEdit.errors.get(hotel)}
+                    onMoveUp={i > 0 ? () => moveItem(edited.hotels, i, -1) : undefined}
+                    onMoveDown={i < edited.hotels.length - 1 ? () => moveItem(edited.hotels, i, 1) : undefined}
+                    onInsertBelow={() => edited.hotels.splice(i + 1, 0, newHotel(hotel.end.slice(0, 10) || trip.start))}
+                    onRemove={() => edited.hotels.splice(i, 1)}
+                />
+            {/each}
+            <button type="button" onclick={() => edited.hotels.push(newHotel(edited.hotels.at(-1)?.end.slice(0, 10) || trip.start))} class={addButton}>
+                <Plus size={14} aria-hidden="true" />新增住宿
+            </button>
         </div>
     </div>
-    {#if actionsOpen}
-        <CardActions shareLabel="分享行程" {onShare} {sharing} onDone={() => (actionsOpen = false)} class="mt-3 mb-2" />
+    {#if edited.attachments?.length}
+        <div class="mt-6">
+            <h3 class="text-[11px] font-bold text-text-muted mb-2 px-1">附件</h3>
+            {#each edited.attachments as attachment, i (attachment)}
+                <div class="flex items-center gap-1">
+                    <input aria-label="附件名稱" bind:value={attachment.label} autocomplete="off" class="{field} flex-1 min-w-0 min-h-[44px] text-xs text-text-secondary" />
+                    <button
+                        type="button"
+                        onclick={() => edited.attachments?.splice(i, 1)}
+                        aria-label="刪除這個附件"
+                        title="刪除這個附件"
+                        class="min-w-[44px] min-h-[44px] -mr-2 flex items-center justify-center rounded-xl text-text-muted hover:text-text-primary hover:bg-tint-2 transition cursor-pointer"
+                    >
+                        <X size={16} aria-hidden="true" />
+                    </button>
+                </div>
+            {/each}
+        </div>
     {/if}
-    <div class="mt-1 flex items-center justify-between gap-2">
-        <!-- `min-w-0` lets the date shrink and wrap rather than push the switcher off
+{/snippet}
+
+{#if draftTrip}
+    {@render editingHeader(draftTrip)}
+{:else}
+    <div class="panel rounded-2xl p-6 mb-6">
+        <div class="flex justify-between items-start gap-2">
+            <h2 class="text-2xl font-extrabold text-text-primary tracking-tight min-w-0 break-words">
+                {trip.name}
+            </h2>
+            <!-- -mt-1.5 centres the 44px button on the title's first 32px line. -->
+            <div class="shrink-0 -mr-2 -mt-1.5">
+                <CardActionsToggle bind:open={actionsOpen} {sharing} />
+            </div>
+        </div>
+        {#if actionsOpen}
+            <CardActions shareLabel="分享行程" {onShare} {sharing} onDone={() => (actionsOpen = false)} class="mt-3 mb-2" />
+        {/if}
+        <div class="mt-1 flex items-center justify-between gap-2">
+            <!-- `min-w-0` lets the date shrink and wrap rather than push the switcher off
              the row on a narrow phone; the two nowrap halves make it break after the
              ・ instead of inside a date. -->
-        <p class="min-w-0 text-xs text-text-secondary font-medium tracking-wide flex items-center gap-1.5">
-            <CalendarRange size={14} class="shrink-0" aria-hidden="true" />
-            <span><span class="whitespace-nowrap">{formatDateRange(trip.start, trip.end)}・</span><span class="whitespace-nowrap">共 {days.length} 天</span></span>
-        </p>
+            <p class="min-w-0 text-xs text-text-secondary font-medium tracking-wide flex items-center gap-1.5">
+                <CalendarRange size={14} class="shrink-0" aria-hidden="true" />
+                <span><span class="whitespace-nowrap">{formatDateRange(trip.start, trip.end)}・</span><span class="whitespace-nowrap">共 {days.length} 天</span></span>
+            </p>
 
-        {#if onSwitchProfile && onCreateProfile}
-            <button
-                type="button"
-                onclick={toggleSwitcher}
-                class="inline-flex items-center gap-1.5 min-h-[44px] bg-tint-1 border border-card-border hover:border-accent/40 text-text-primary hover:text-accent text-xs font-bold px-3.5 py-2 rounded-full transition cursor-pointer active:scale-95 shrink-0"
-                aria-expanded={isSwitcherOpen}
-                aria-label="切換行程選單"
-            >
-                <span>切換行程</span>
-                <ChevronDown size={13} class="shrink-0 transition-transform duration-200 {isSwitcherOpen ? 'rotate-180 text-accent' : 'text-text-muted'}" aria-hidden="true" />
-            </button>
+            {#if onSwitchProfile && onCreateProfile}
+                <button
+                    type="button"
+                    onclick={toggleSwitcher}
+                    class="inline-flex items-center gap-1.5 min-h-[44px] bg-tint-1 border border-card-border hover:border-accent/40 text-text-primary hover:text-accent text-xs font-bold px-3.5 py-2 rounded-full transition cursor-pointer active:scale-95 shrink-0"
+                    aria-expanded={isSwitcherOpen}
+                    aria-label="切換行程選單"
+                >
+                    <span>切換行程</span>
+                    <ChevronDown size={13} class="shrink-0 transition-transform duration-200 {isSwitcherOpen ? 'rotate-180 text-accent' : 'text-text-muted'}" aria-hidden="true" />
+                </button>
+            {/if}
+        </div>
+        {#if isSwitcherOpen && onSwitchProfile && onCreateProfile}
+            <div class="mt-4 pt-3.5 border-t border-line-faint">
+                <ProfileManager
+                    activeTripName={trip.name}
+                    activeTripStartDate={trip.start}
+                    {profiles}
+                    expanded={true}
+                    onToggleExpand={toggleSwitcher}
+                    {onSwitchProfile}
+                    {onCreateProfile}
+                    onDeleteProfile={(id => onDeleteProfile?.(id))}
+                    onLoadCloudTrip={((fileId, fileName) => onLoadCloudTrip?.(fileId, fileName))}
+                    onDeleteCloudTrip={(fileId => onDeleteCloudTrip?.(fileId))}
+                />
+            </div>
         {/if}
     </div>
-    {#if isSwitcherOpen && onSwitchProfile && onCreateProfile}
-        <div class="mt-4 pt-3.5 border-t border-line-faint">
-            <ProfileManager
-                activeTripName={trip.name}
-                activeTripStartDate={trip.start}
-                {profiles}
-                expanded={true}
-                onToggleExpand={toggleSwitcher}
-                {onSwitchProfile}
-                {onCreateProfile}
-                onDeleteProfile={(id => onDeleteProfile?.(id))}
-                onLoadCloudTrip={((fileId, fileName) => onLoadCloudTrip?.(fileId, fileName))}
-                onDeleteCloudTrip={(fileId => onDeleteCloudTrip?.(fileId))}
-            />
-        </div>
-    {/if}
-</div>
+{/if}
 
 <!-- Helper cards chosen by trip phase — what matters before, during and after a
      trip is not the same thing. Before, the countdown and what is left to prepare;
@@ -246,14 +360,16 @@ let langConfig = $derived(getLanguageConfig(trip.lang));
 
 <!-- Hotels live here rather than in 工具: mid-trip this is the panel you are
      already on, so the driver card stays one tap away. -->
-{#if hotelList.length > 0}
+{#if draftTrip}
+    {@render editingHotels(draftTrip)}
+{:else if hotelList.length > 0}
     <div class="mt-6">
         <h3 class="text-[11px] font-bold text-text-muted mb-2 px-1">住宿</h3>
         <HotelCards hotels={hotelList} {todayIso} driverPrompt={langConfig.driverPrompt} mapProvider={trip.mapProvider} {onEnlarge} />
     </div>
 {/if}
 
-{#if trip.attachments && trip.attachments.length > 0}
+{#if !draftTrip && trip.attachments && trip.attachments.length > 0}
     <div class="mt-6">
         <h3 class="text-[11px] font-bold text-text-muted mb-2 px-1">附件</h3>
         <div class="flex flex-wrap gap-2">

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { eventEdit } from "$lib/stores/event-edit.svelte";
+import { tripEdit } from "$lib/stores/trip-edit.svelte";
 import Pencil from "@lucide/svelte/icons/pencil";
 import Share2 from "@lucide/svelte/icons/share-2";
 
@@ -29,7 +29,7 @@ const button = "min-h-[44px] flex items-center justify-center gap-1.5 px-3.5 rou
 
 <!-- Right-aligned, under the ⋯ that unfolded it, with share — the one used more — nearest it. -->
 <div class="flex flex-wrap justify-end gap-2 {className}">
-    <button type="button" onclick={() => choose(() => eventEdit.start())} class={button}>
+    <button type="button" onclick={() => choose(() => tripEdit.start())} class={button}>
         <Pencil size={14} class="shrink-0 text-accent" aria-hidden="true" />編輯行程
     </button>
     <button type="button" onclick={() => choose(onShare)} disabled={sharing} class={button}>

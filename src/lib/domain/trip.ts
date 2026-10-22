@@ -358,8 +358,8 @@ export function carryRuntimeIds(from: TripData, to: TripData): TripData {
     return to;
 }
 
-/** `_id` for an item created at runtime: unique for the session, and stripped again on save. */
-export function createChecklistItemId(prefix: "todo" | "pack"): string {
+/** `_id` for an entry created at runtime: unique for the session, and stripped again on save. */
+export function createRuntimeId(prefix: "ev" | "todo" | "pack"): string {
     return `${prefix}-${runtimeIdSeq++}`;
 }
 

@@ -6,7 +6,6 @@
 // replaced in place through `replaceActiveTrip` — backed up, kept on the slot's id — and UI
 // only mirrors the returned outcome.
 
-import { placeEditedEvent } from "$lib/domain/event-form";
 import {
     clearShareHash,
     isShareSupported,
@@ -19,11 +18,10 @@ import { buildDayReport } from "$lib/domain/timeline";
 import {
     asSameTrip,
     carryRuntimeIds,
-    createChecklistItemId,
+    createRuntimeId,
     type DayItinerary,
     genTripId,
     serializeToYaml,
-    type TimelineEvent,
     type TripData,
     validateYaml,
 } from "$lib/domain/trip";
@@ -328,7 +326,7 @@ export class TripStore {
     addChecklistItem(list: "todo" | "packing", text: string) {
         if (!this.data) return;
         this.data[list].push({
-            _id: createChecklistItemId(list === "todo" ? "todo" : "pack"),
+            _id: createRuntimeId(list === "todo" ? "todo" : "pack"),
             text,
             checked: false,
         });
@@ -363,25 +361,14 @@ export class TripStore {
     }
 
     /**
-     * Put each event in `changes` in place of the authored event its id names — edit mode's
-     * save — or delete it for `null`, and offer to undo them together. The trip goes back
-     * through `validateYaml` rather than being patched in place as a check-in is, so what
-     * derives from an event (the countdown's departure) follows the edit; every `_id` survives
-     * it. Null once it landed or when it changes nothing, otherwise the zh-TW reason it did not.
+     * Save `draft`, edit mode's copy of the whole trip, and offer to undo it. The trip goes
+     * back through `validateYaml` rather than being patched in place as a check-in is, so
+     * what derives from it (the countdown's departure) follows; every `_id` survives unless
+     * entries were added or removed. Null once it landed or when it changes nothing,
+     * otherwise the zh-TW reason it did not.
      */
-    editEvents(changes: readonly (readonly [id: string, next: TimelineEvent | null])[]): string | null {
+    saveEditedTrip(draft: TripData): string | null {
         if (!this.data) return "行程還沒載入完成";
-        const draft = JSON.parse(JSON.stringify(this.data)) as TripData;
-        const titles: string[] = [];
-        for (const [id, next] of changes) {
-            const day = draft.days.find(d => d.timeline.some(e => e._id === id));
-            if (!day) return "找不到要修改的事件，行程可能已經更新";
-            const index = day.timeline.findIndex(e => e._id === id);
-            titles.push(day.timeline[index]!.title);
-            if (next) placeEditedEvent(day.timeline, index, next, day.date);
-            else day.timeline.splice(index, 1);
-        }
-
         let edited: TripData;
         try {
             edited = carryRuntimeIds(draft, validateYaml(serializeToYaml(draft)));
@@ -395,11 +382,8 @@ export class TripStore {
         const profileId = this.commitEdit(edited);
         if (!profileId) return "儲存失敗，請稍後再試";
 
-        const title = titles[0]!;
-        const label = title.length > 10 ? `${title.slice(0, 10)}…` : title;
-        const removed = changes[0]?.[1] === null;
         showToast({
-            message: changes.length > 1 ? `已更新 ${changes.length} 個事件` : removed ? `已刪除「${label}」` : `已更新「${label}」`,
+            message: "已儲存修改",
             actionLabel: "復原",
             onAction: () => {
                 if (!isActiveProfile(profileId)) {
@@ -431,8 +415,8 @@ export class TripStore {
     /**
      * Land the trip the AI's edits produced (`applyItineraryEdits`, run on the trip as it
      * stood). Assigns `this.data` in place rather than through `load()`, whose loading screen
-     * would replace the AI tab under the user. Also the one path that regenerates every `_id`
-     * without remounting, so anything keyed by `_id` goes stale in place.
+     * would replace the AI tab under the user. Also a path that regenerates every `_id`
+     * without remounting, as `saveEditedTrip` can, so anything keyed by `_id` goes stale in place.
      */
     applyAiEdit(yaml: string): boolean {
         let parsed: TripData;
