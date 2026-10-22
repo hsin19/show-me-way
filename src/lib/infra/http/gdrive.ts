@@ -253,6 +253,18 @@ function loadGisScript(): Promise<void> {
     return attempt;
 }
 
+/**
+ * Starts loading GIS ahead of the tap that will need it. A popup may open only while the
+ * tap's user activation lasts, and `requestGoogleAccessToken` cannot open one before the
+ * SDK is in, so a tap that has to download it first can find its popup blocked
+ * (`popup_failed_to_open`). Google caches the SDK for 30 minutes and a token lasts an
+ * hour, so by the time a reconnect is due the download is usually back. Never rejects:
+ * a failed load is retried by the tap itself.
+ */
+export function preloadGoogleSignIn(): void {
+    loadGisScript().catch(() => {});
+}
+
 interface TokenResponse {
     access_token?: string;
     expires_in?: number;

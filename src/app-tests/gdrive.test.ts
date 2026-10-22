@@ -70,13 +70,15 @@ const GIS_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
  * load），initTokenClient 直接回一個含 drive.file scope 的 token，這樣 loadGisScript 與
  * requestGoogleAccessToken（含 scope 檢查）都真的被執行到。裝上之前，happy-dom 對外部 script
  * 當場觸發 error，跟被 fixture 擋掉的請求一樣。只有使用者主動按下的流程才會走到它；背景刷新
- * 一律停在快取 token。`popups` 是 token 被要了幾次 —— 真的 GIS 每要一次就彈一次視窗。
+ * 一律停在快取 token。`popups` 是 token 被要了幾次 —— 真的 GIS 每要一次就彈一次視窗；
+ * `sdkRequested` 是 app 有沒有注入過 GIS 的 script，不管有沒有要 token。
  *
  * `popupClosed` 重現 GIS 的 `popup_closed`：`before-token` 是 iOS 上看到的競態，視窗先被
  * 判定關閉、token 稍後照樣送到；`instead-of-token` 是使用者真的把視窗關掉。
  */
-function installGisStub(options: { popupClosed?: "before-token" | "instead-of-token"; } = {}): { popups: () => number; } {
+function installGisStub(options: { popupClosed?: "before-token" | "instead-of-token"; } = {}): { popups: () => number; sdkRequested: () => boolean; } {
     let popups = 0;
+    let sdkRequested = false;
     const google = {
         accounts: {
             oauth2: {
@@ -104,6 +106,7 @@ function installGisStub(options: { popupClosed?: "before-token" | "instead-of-to
     const append = head.appendChild.bind(head);
     const served = vi.spyOn(head, "appendChild").mockImplementation(<T extends Node>(node: T): T => {
         if (!(node instanceof HTMLScriptElement) || node.src !== GIS_SCRIPT_SRC) return append(node);
+        sdkRequested = true;
         Object.defineProperty(window, "google", { configurable: true, value: google });
         setTimeout(() => node.dispatchEvent(new Event("load")));
         return node;
@@ -113,7 +116,7 @@ function installGisStub(options: { popupClosed?: "before-token" | "instead-of-to
         served.mockRestore();
         Reflect.deleteProperty(window, "google");
     });
-    return { popups: () => popups };
+    return { popups: () => popups, sdkRequested: () => sdkRequested };
 }
 
 /** 開到 `/` 並等行程載入完：導覽列一開始就在，行程管理頁卻要等行程載入後才掛得上去。 */
@@ -625,11 +628,13 @@ test("切換行程抽屜：token 過期時顯示重新連線，連上後雲端�
     await gotoLoaded(page);
     const { user } = page;
 
-    // 背景刷新只用快取 token，過期就停在這一列 —— 不碰 GIS，也就不可能彈視窗。
+    // 背景刷新只用快取 token，過期就停在這一列 —— 不向 GIS 要 token，也就不可能彈視窗。
     await user.click(screen.getByRole("button", { name: "切換行程選單" }));
     const reconnect = await screen.findByRole("button", { name: "雲端連線中斷，點此重新連線" });
     expect(screen.queryByRole("button", { name: /另一趟旅行/ })).toBeNull();
     expect(gis.popups()).toBe(0);
+    // 但 SDK 已經先載了：按下去當下才下載的話，點擊的時效會耗在下載上，視窗開不出來。
+    expect(gis.sdkRequested()).toBe(true);
 
     // 使用者主動按下去才走 GIS。
     await user.click(reconnect);

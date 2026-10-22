@@ -36,6 +36,7 @@ import {
     listCloudTrips,
     loadGdriveUser,
     loadTripSyncMap,
+    preloadGoogleSignIn,
     requestGoogleAccessToken,
     saveGdriveUser,
     saveTripSyncMap,
@@ -422,6 +423,8 @@ class GDriveSyncState {
         if (cached) return cached;
 
         if (mode === "cache-only" || !this.isConnected) {
+            // What follows a background path stopping here is a tap on 重新連線.
+            if (this.isConnected) preloadGoogleSignIn();
             throw new Error("尚未登入 Google 或登入憑證已過期");
         }
 

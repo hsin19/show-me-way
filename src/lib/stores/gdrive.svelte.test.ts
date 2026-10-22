@@ -989,7 +989,7 @@ describe("refreshFiles", () => {
 
         await sync.refreshFiles();
 
-        // The whole point: no request, no GIS, and above all no popup outside a gesture.
+        // The whole point: no request, and above all no popup outside a gesture.
         expect(calls.length).toBe(0);
         expect(sync.cloudListState).toBe("failed");
     });
