@@ -629,7 +629,9 @@ export class TripStore {
         if (gdriveSync.signInReadiness !== "ready") return false;
         showToast({
             message: "Google 雲端登入已過期，無法檢查行程更新",
-            kind: "error",
+            // Not `error`: the token lapses every hour, so this is routine upkeep, and red
+            // on every morning's first open read as something having broken.
+            kind: "update",
             actionLabel: "重新連線",
             onAction: () => void this.reconnectAndCheck(openTripManagement),
             showDismiss: true,

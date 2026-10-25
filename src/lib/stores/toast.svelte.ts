@@ -7,7 +7,7 @@
 // cannot cut an undo window short on the clock — though a burst past MAX_VISIBLE
 // still evicts the oldest, so an undo can be crowded out by three of them.
 
-/** Picks the leading glyph, and for `error` the colour. `update` is the PWA new-version notice. */
+/** Picks the leading glyph, and for `error` the colour. `update` is something to refresh: the PWA's new version, Drive's lapsed sign-in. */
 type ToastKind = "success" | "update" | "download" | "error";
 
 export type ToastInput = string | {
