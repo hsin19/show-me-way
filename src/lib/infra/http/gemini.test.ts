@@ -98,6 +98,7 @@ describe("listGeminiModels", () => {
                 { name: "models/gemini-3.1-pro-preview", displayName: "Pro Preview", supportedGenerationMethods: ["generateContent"] },
                 { name: "models/gemini-3.5-live-translate-preview", displayName: "Translate", supportedGenerationMethods: ["generateContent"] },
                 { name: "models/gemini-flash-latest", displayName: "Latest", supportedGenerationMethods: ["generateContent"] },
+                { name: "models/gemini-3.5-transcribe", displayName: "Gemini 3.5 Transcribe", supportedGenerationMethods: ["generateContent"] },
             ],
         };
         vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(payload) })));
@@ -245,10 +246,26 @@ describe("pickDefaultModel", () => {
         expect(pickDefaultModel([])).toBeNull();
     });
 
-    it("prefers the first gemini model over a gemma that sorts ahead of it", () => {
+    it("prefers the newest plain flash over gemma, a newer flagship, pro and flash-lite that sort ahead of it", () => {
+        const list = [
+            model("gemma-4-31b-it"),
+            model("gemini-4-argon"),
+            model("gemini-3.5-pro"),
+            model("gemini-3.5-flash-lite"),
+            model("gemini-3.5-flash"),
+            model("gemini-2.5-flash"),
+        ];
+        expect(pickDefaultModel(list)).toBe("gemini-3.5-flash");
+    });
+
+    it("takes flash-lite over pro when no plain flash is offered", () => {
+        expect(pickDefaultModel([model("gemini-3.5-pro"), model("gemini-3.5-flash-lite")])).toBe("gemini-3.5-flash-lite");
+    });
+
+    it("falls back to the first gemini model over a gemma that sorts ahead of it when there is no flash", () => {
         // Descending id sort puts every gemma-* before every gemini-*.
-        const list = [model("gemma-4-31b-it"), model("gemini-3.5-pro"), model("gemini-3.5-flash")];
-        expect(pickDefaultModel(list)).toBe("gemini-3.5-pro");
+        const list = [model("gemma-4-31b-it"), model("gemini-4-argon"), model("gemini-3.5-pro")];
+        expect(pickDefaultModel(list)).toBe("gemini-4-argon");
     });
 
     it("falls back to the first entry when the key has no gemini models at all", () => {

@@ -293,7 +293,7 @@ interface RawModel {
 // Gemini and Gemma release names. The snapshot rule is anchored because a
 // pinned build is always a trailing `-001`, while an unanchored `-\d{3}` would
 // also swallow parameter counts like `gemma-3-270m-it`.
-const UNWANTED_MODEL_REGEX = /(?:preview|latest|exp|tts|image|banana|computer-use|lyria|robotics|-\d{3}$)/i;
+const UNWANTED_MODEL_REGEX = /(?:preview|latest|exp|tts|image|banana|computer-use|lyria|robotics|transcribe|-\d{3}$)/i;
 
 function parseModels(payload: unknown): GeminiModel[] {
     if (typeof payload !== "object" || payload === null) return [];
@@ -363,14 +363,26 @@ export function listGeminiModels(apiKey: string): Promise<GeminiModel[]> {
     return cachedModelsPromise;
 }
 
+const DEFAULT_MODEL_PREFERENCE = [/^gemini-.+-flash$/, /^gemini-.+-flash/, /^gemini-/];
+
 /**
  * The model to auto-select for a user with no stored preference. Not `list[0]`:
  * the descending id sort puts every `gemma-*` ahead of every `gemini-*` and
  * compares size suffixes as strings (`-9b` beats `-31b`), so the head of the list
  * is an arbitrary pick.
+ *
+ * The newest plain Flash first: the same sort puts `-pro` ahead of `-flash` and a
+ * newer generation's flagship (`gemini-4-argon`) ahead of both, which made a new key
+ * default to the dearest model when Flash already handles this app's chat and edits.
+ * Anchored at the end so `-flash-lite` does not win by sorting ahead of `-flash`, yet
+ * still ahead of Pro when it is the only Flash there is.
  */
 export function pickDefaultModel(models: GeminiModel[]): string | null {
-    return (models.find(m => m.id.startsWith("gemini-")) ?? models[0])?.id ?? null;
+    for (const pattern of DEFAULT_MODEL_PREFERENCE) {
+        const found = models.find(m => pattern.test(m.id));
+        if (found) return found.id;
+    }
+    return models[0]?.id ?? null;
 }
 
 // Google sheds load on a busy model with a 503 that usually clears within seconds. Waited
