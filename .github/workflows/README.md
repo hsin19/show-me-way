@@ -52,27 +52,32 @@ check against this ref" is available without going through either.
 
 ## Dependabot auto-merge → deploy
 
-`pr.yml` merges a green Dependabot PR using `secrets.AUTOMERGE_TOKEN` (a dedicated
-token, **not** the default `GITHUB_TOKEN`) so the resulting push to `main`
-triggers `deploy.yml`. A push made with `GITHUB_TOKEN` would not — GitHub never
-lets a `GITHUB_TOKEN` push start another workflow.
+`pr.yml`'s `auto-merge` job hands a Dependabot PR to the shared
+[`dependabot-automerge.yml`](https://github.com/hsin19/actions) once `check` is
+green. It squash-merges with `secrets.AUTOMERGE_TOKEN` (a dedicated token,
+**not** the default `GITHUB_TOKEN`) so the resulting push to `main` triggers
+`deploy.yml` — GitHub never lets a `GITHUB_TOKEN` push start another workflow.
+If `main` has moved since the check ran, it asks Dependabot to rebase instead,
+and the rebased PR goes through the gate again; that repo's README has the
+reasoning.
 
-> `AUTOMERGE_TOKEN` must live in **Dependabot** secrets (Settings → Secrets and
-> variables → Dependabot), not Actions secrets — Dependabot-triggered runs only
-> see the Dependabot secret store.
+> `AUTOMERGE_TOKEN` must live in **Dependabot** secrets
+> (Settings → Secrets and variables → Dependabot), not Actions secrets —
+> Dependabot-triggered runs only see the Dependabot secret store.
 
 `AUTOMERGE_TOKEN` is a fine-grained PAT scoped to this repository with
-`contents: read/write` and `pull requests: read/write` permissions (or a classic
-PAT with `repo` scope). The same PAT as InTheGreenYet's can be reused only if
-its repository access list includes this repo. Fine-grained PATs expire (max
-1 year) — an expired token makes auto-merge silently stop merging while CI
-stays green, so track the expiry date. A red Dependabot PR (typically
-peer-dependency skew) is left for a human; there is no auto-repair job.
+`contents: read/write` and `pull requests: read/write` permissions, created with
+**no expiration** — an expired token would make auto-merge silently stop merging
+while CI stays green. The same PAT as InTheGreenYet's can be reused only if its
+repository access list includes this repo.
 
-A green PR merges only if `main` has not moved since its check ran; otherwise the
-job comments `@dependabot rebase` and the rebased PR goes through the gate again. Merging anyway would land a tree no
-check saw — two bumps of one transitive package can merge as clean text into a
-broken lockfile.
+A red Dependabot PR (typically peer-dependency skew) is left for a human; there
+is no auto-repair job.
+
+The `pages-actions-manual` group in `dependabot.yml` is not auto-merged — the
+shared workflow skips every group whose name ends in `-manual`. Those actions
+only ever run in `deploy.yml` on a push to `main`, so a green PR proves nothing
+about them — they get a human look instead.
 
 ## Coverage → Codecov
 
