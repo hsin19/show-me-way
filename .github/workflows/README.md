@@ -33,6 +33,14 @@ instead of hiding inside a long step list. It builds its own `dist`, since a
 separate runner has none to reuse — which is why `E2E_SKIP_BUILD`, the local
 chain's shortcut, has no counterpart in CI.
 
+`e2e` runs inside the `mcr.microsoft.com/playwright` image, which ships the
+browsers and their system libraries, instead of running
+`playwright install --with-deps` on the bare runner — that apt fetch stalled on
+Ubuntu's mirrors often enough to time the job out with no test run. The image is
+built for a single Playwright release, so the small `playwright-image` job reads
+the `@playwright/test` version out of `pnpm-lock.yaml` and hands `e2e` the
+matching tag; a Dependabot bump of Playwright moves the image with it.
+
 `pr.yml` gates pull requests with `check.yml`; `deploy.yml`
 verifies and ships to GitHub Pages on every push to `main`. It calls `check.yml`
 first — so a commit pushed straight to `main`, never having been a PR, still gets
