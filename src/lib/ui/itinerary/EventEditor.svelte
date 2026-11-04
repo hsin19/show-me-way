@@ -23,7 +23,6 @@ import Plus from "@lucide/svelte/icons/plus";
 import Trash2 from "@lucide/svelte/icons/trash-2";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import X from "@lucide/svelte/icons/x";
-import { SvelteMap } from "svelte/reactivity";
 import AttachmentUpload from "./AttachmentUpload.svelte";
 
 // One timeline entry in edit mode — an event, or a hotel, which has the same fields — laid
@@ -70,38 +69,26 @@ const LINK_KINDS = {
 } as const;
 type LinkKind = keyof typeof LINK_KINDS;
 
-// The kind each row was added or typed as. A row added from ＋電話 has an empty url that cannot
-// say so — a bare `tel:` would outlive tidyDraft's sweep of blank rows as a link no chip ever
-// shows — and a `tel:…` typed into a 網址 row must not turn it into a 電話 row mid-word.
-const linkKinds = new SvelteMap<Link, LinkKind>();
-
+// A row's kind is its url's scheme, in the draft from the moment ＋電話 / ＋Email adds the row,
+// and not state of this card, which a tab switch or a move to another day rebuilds. So a `tel:`
+// pasted into a 網址 row makes it a 電話 row, and tidyDraft drops a scheme left on its own.
 function kindOf(link: Link): LinkKind {
-    return linkKinds.get(link) ?? (/^tel:/i.test(link.url) ? "tel" : /^mailto:/i.test(link.url) ? "mailto" : "url");
+    return /^tel:/i.test(link.url) ? "tel" : /^mailto:/i.test(link.url) ? "mailto" : "url";
 }
 
 function addLink(kind: LinkKind) {
-    addTo("links", { label: "", url: "" });
-    // Read back rather than keyed by the literal pushed: the {#each} hands out the list's proxy of it.
-    const added = entry.links?.at(-1);
-    if (added) linkKinds.set(added, kind);
+    addTo("links", { label: "", url: LINK_KINDS[kind].prefix });
 }
 
 /** What the input shows: the url without the scheme its kind writes. */
 function typedPart(link: Link): string {
-    const { prefix } = LINK_KINDS[kindOf(link)];
-    return link.url.toLowerCase().startsWith(prefix) ? link.url.slice(prefix.length) : link.url;
+    return link.url.slice(LINK_KINDS[kindOf(link)].prefix.length);
 }
 
 function writeLink(link: Link, typed: string) {
-    const kind = kindOf(link);
-    linkKinds.set(link, kind);
-    if (kind === "url") {
-        link.url = typed;
-        return;
-    }
+    const { prefix } = LINK_KINDS[kindOf(link)];
     // Whitespace anywhere voids the href (sanitizeLinkHref), and numbers are typed spaced out.
-    const compact = typed.replace(/\s+/g, "");
-    link.url = compact ? LINK_KINDS[kind].prefix + compact : "";
+    link.url = prefix ? prefix + typed.replace(/\s+/g, "") : typed;
 }
 
 const noun = $derived(dayDate ? "事件" : "住宿");
