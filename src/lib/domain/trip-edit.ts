@@ -198,11 +198,23 @@ function isBlank(value: unknown): boolean {
 
 const LISTS = ["bullets", "stops", "links", "attachments", "alternatives"] as const;
 
+type Link = NonNullable<TimelineEvent["links"]>[number];
+
+/**
+ * A 電話 or Email row holds its scheme from the moment it is added, since that is how the draft
+ * keeps the row's kind, so a bare `tel:` or `mailto:` is nothing typed. Read as blank, never
+ * cleared: a refused save leaves this same draft open, and a row whose label is filled must
+ * still be a 電話 row when the number is typed into it.
+ */
+function isBlankLink(link: Link): boolean {
+    return isBlank(link.label) && (isBlank(link.url) || /^(tel|mailto):$/i.test(link.url.trim()));
+}
+
 function tidyLists(entry: TimelineEvent | HotelInfo): void {
     for (const key of LISTS) {
         const list = entry[key] as unknown[] | undefined;
         if (!list) continue;
-        const kept = list.filter(item => !isBlank(item));
+        const kept = list.filter(item => !(key === "links" ? isBlankLink(item as Link) : isBlank(item)));
         if (kept.length === 0) delete entry[key];
         else if (kept.length < list.length) (entry as Record<string, unknown>)[key] = kept;
     }
@@ -210,7 +222,8 @@ function tidyLists(entry: TimelineEvent | HotelInfo): void {
 
 /** Nothing written in it but its place on the timeline: an event added and left empty. */
 function isUnwritten(entry: TimelineEvent | HotelInfo): boolean {
-    return isBlank({ ...entry, _id: undefined, type: undefined, status: undefined, start: clockOf(entry.start), end: clockOf(entry.end) });
+    const links = entry.links?.filter(link => !isBlankLink(link));
+    return isBlank({ ...entry, links, _id: undefined, type: undefined, status: undefined, start: clockOf(entry.start), end: clockOf(entry.end) });
 }
 
 /** Drops blank list rows and entries added but never written in, before `draft` is checked and saved. */

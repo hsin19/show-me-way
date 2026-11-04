@@ -216,9 +216,12 @@ test("事件可以插入、刪除、上下移動；手動排的順序存檔時�
     await page.fill(within(inserted).getByLabelText("標題"), "咖啡");
     await page.fill(within(inserted).getByLabelText("開始"), "20:00");
 
-    // 加了卻什麼都沒填的，存檔時直接拿掉，不擋人。
+    // 加了卻什麼都沒填的，存檔時直接拿掉，不擋人；只開了一列空的電話欄也算沒填。
     await page.user.click(screen.getByRole("button", { name: "新增事件" }));
     expect(editing()).toEqual(["早餐", "咖啡", "晚班機", ""]);
+    const blank = titleInputs()[3]!.closest<HTMLElement>(".panel")!;
+    await page.user.click(within(blank).getByRole("button", { name: "新增欄位" }));
+    await page.user.click(within(blank).getByRole("button", { name: "電話" }));
 
     await saved(page);
     // 晚班機是手動移的、時間沒變，留在原地；咖啡 20:00 排在晚班機 19:00 前面不對，就位到它後面。
@@ -291,6 +294,51 @@ test("電話、Email 各有自己的新增鈕，只打號碼或信箱，存成 t
             url: tel:+81312345678
           - label: 客服
             url: mailto:help@example.com
+${FLIGHT("19:00", "2099-03-01T21:00")}`));
+});
+
+test("電話欄還沒填號碼就切到工具再回來，回來還是電話欄，填了號碼照樣存成 tel:", async () => {
+    const page = await editMode();
+    const lunch = () => card("午餐");
+
+    await page.user.click(within(lunch()).getByRole("button", { name: "新增欄位" }));
+    await page.user.click(within(lunch()).getByRole("button", { name: "電話" }));
+    await page.fill(within(lunch()).getByLabelText("連結文字"), "訂位");
+    // 切走再回來，編輯卡整張重建，留下來的只有草稿。
+    await page.user.click(navTab("工具"));
+    await page.user.click(navTab("行程"));
+    await waitFor(() => expect(within(lunch()).getByLabelText<HTMLInputElement>("連結文字").value).toBe("訂位"));
+    await page.fill(within(lunch()).getByLabelText("連結電話"), "+81 3 1234 5678");
+
+    await saved(page);
+    expect(stored()).toBe(TRIP(`${BREAKFAST("09:00")}      - time: '12:00'
+        title: 午餐
+        links:
+          - label: 訂位
+            url: tel:+81312345678
+${FLIGHT("19:00", "2099-03-01T21:00")}`));
+});
+
+test("存檔被擋下時，只填了文字的電話欄還是電話欄，補上號碼再存照樣是 tel:", async () => {
+    const page = await editMode();
+    const lunch = () => card("午餐");
+
+    await page.user.click(within(lunch()).getByRole("button", { name: "新增欄位" }));
+    await page.user.click(within(lunch()).getByRole("button", { name: "電話" }));
+    await page.fill(within(lunch()).getByLabelText("連結文字"), "訂位");
+    await page.fill(within(card("早餐")).getByLabelText("標題"), "");
+    const breakfast = screen.getByDisplayValue(/第一行/).closest<HTMLElement>(".panel")!;
+    await finish(page);
+    await waitFor(() => expect(status().textContent).toContain("標題不能空白"));
+
+    await page.fill(within(lunch()).getByLabelText("連結電話"), "+81 3 1234 5678");
+    await page.fill(within(breakfast).getByLabelText("標題"), "早餐");
+    await saved(page);
+    expect(stored()).toBe(TRIP(`${BREAKFAST("09:00")}      - time: '12:00'
+        title: 午餐
+        links:
+          - label: 訂位
+            url: tel:+81312345678
 ${FLIGHT("19:00", "2099-03-01T21:00")}`));
 });
 
