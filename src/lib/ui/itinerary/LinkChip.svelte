@@ -4,6 +4,8 @@ import GoogleDriveIcon from "$lib/ui/shared/icons/GoogleDriveIcon.svelte";
 import GoogleMapsIcon from "$lib/ui/shared/icons/GoogleMapsIcon.svelte";
 import NaverIcon from "$lib/ui/shared/icons/NaverIcon.svelte";
 import Link from "@lucide/svelte/icons/link";
+import Mail from "@lucide/svelte/icons/mail";
+import Phone from "@lucide/svelte/icons/phone";
 
 interface Props {
     label: string;
@@ -15,27 +17,35 @@ let { label, url }: Props = $props();
 
 let href = $derived(sanitizeLinkHref(url));
 // One rule for every chip, `mapLink`, `links[]` and attachments alike, so the same href always gets the same icon.
-let mapKind = $derived.by(() => {
+let kind = $derived.by(() => {
     if (!href) return "other";
+    if (/^tel:/i.test(href)) return "phone";
+    if (/^mailto:/i.test(href)) return "mail";
     if (href.includes("naver")) return "naver";
     if (/maps\.app\.goo\.gl|google\.[^/]+\/maps|goo\.gl\/maps/.test(href)) return "google";
     if (/^https:\/\/drive\.google\.com\//.test(href)) return "drive";
     return "other";
 });
+// tel:, mailto:, sms: and geo: hand off to an app and leave the page where it is; a new tab would open blank first.
+let opensTab = $derived(href ? /^https?:/i.test(href) : false);
 </script>
 
 {#if href}
     <a
         {href}
-        target="_blank"
-        rel="noopener noreferrer"
+        target={opensTab ? "_blank" : undefined}
+        rel={opensTab ? "noopener noreferrer" : undefined}
         class="inline-flex items-center gap-1.5 min-h-[44px] bg-accent/10 text-accent text-xs font-bold px-3 py-1.5 rounded-lg transition duration-200 hover:bg-accent/20"
     >
-        {#if mapKind === "naver"}
+        {#if kind === "phone"}
+            <Phone size={12} class="shrink-0" aria-hidden="true" />
+        {:else if kind === "mail"}
+            <Mail size={12} class="shrink-0" aria-hidden="true" />
+        {:else if kind === "naver"}
             <NaverIcon size={13} class="shrink-0" aria-hidden="true" />
-        {:else if mapKind === "google"}
+        {:else if kind === "google"}
             <GoogleMapsIcon size={13} class="shrink-0" aria-hidden="true" />
-        {:else if mapKind === "drive"}
+        {:else if kind === "drive"}
             <GoogleDriveIcon size={13} class="shrink-0" aria-hidden="true" />
         {:else}
             <Link size={12} class="shrink-0" aria-hidden="true" />

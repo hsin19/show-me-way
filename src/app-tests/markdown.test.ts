@@ -99,7 +99,7 @@ test("links 與 mapLink 的 javascript: 目標不會進到 DOM", async () => {
     expect(screen.getByRole("link", { name: "Map" }).getAttribute("href")).toMatch(/^https:\/\/www\.google\.com\/maps\/search/);
 });
 
-test("links 的 tel: 仍可用（改用白名單後不能把電話 chip 弄不見）", async () => {
+test("links 的 tel: / mailto: 仍可用，chip 換成電話、信封圖示，也不開新分頁", async () => {
     await openDayOne(FIXTURE_YAML.replace(
         "        desc: 第一天的測試事件",
         [
@@ -107,11 +107,21 @@ test("links 的 tel: 仍可用（改用白名單後不能把電話 chip 弄不�
             "        links:",
             "          - label: 訂位電話",
             "            url: 'tel:+81312345678'",
+            "          - label: 客服信箱",
+            "            url: 'mailto:help@example.com'",
         ].join("\n"),
     ));
 
+    // 改用白名單後，不能把電話、信箱的 chip 弄不見。
     const tel = await screen.findByRole("link", { name: "訂位電話" });
     expect(tel.getAttribute("href")).toBe("tel:+81312345678");
+    expect(tel.querySelector("svg.lucide-phone")).not.toBeNull();
+    const mail = screen.getByRole("link", { name: "客服信箱" });
+    expect(mail.getAttribute("href")).toBe("mailto:help@example.com");
+    expect(mail.querySelector("svg.lucide-mail")).not.toBeNull();
+    // 撥號、寄信交給系統的 App，開新分頁只會先跳出一頁空白。
+    expect(tel.hasAttribute("target")).toBe(false);
+    expect(mail.hasAttribute("target")).toBe(false);
 });
 
 test("附件連到 Drive 的檢視頁，fileId 怎麼寫都只落在網址路徑裡", async () => {
@@ -129,6 +139,7 @@ test("附件連到 Drive 的檢視頁，fileId 怎麼寫都只落在網址路徑
 
     const ticket = await screen.findByRole("link", { name: "電子票" });
     expect(ticket.getAttribute("href")).toBe("https://drive.google.com/file/d/1juB6WFuxH-cCvKaMGW_M4CBRs-cVyA1n/view");
+    expect(ticket.getAttribute("target")).toBe("_blank");
     expect(screen.getByRole("link", { name: "怪檔" }).getAttribute("href")).toBe("https://drive.google.com/file/d/x%2F..%2F..%2F%3Fq%3D1%23h/view");
 });
 

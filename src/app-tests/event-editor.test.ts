@@ -264,6 +264,54 @@ test("事件的其他欄位：類型、當地名稱、條列、地點、連結�
 ${FLIGHT("19:00", "2099-03-01T21:00")}`));
 });
 
+test("電話、Email 各有自己的新增鈕，只打號碼或信箱，存成 tel: / mailto:", async () => {
+    const page = await editMode();
+    const lunch = () => card("午餐");
+    const add = async (name: string) => {
+        await page.user.click(within(lunch()).getByRole("button", { name: "新增欄位" }));
+        await page.user.click(within(lunch()).getByRole("button", { name }));
+    };
+
+    await add("電話");
+    await page.fill(within(lunch()).getByLabelText("連結文字"), "訂位");
+    // 號碼裡有空白，chip 就不會顯示，所以存的時候拿掉。
+    await page.fill(within(lunch()).getByLabelText("連結電話"), "+81 3 1234 5678");
+    await add("Email");
+    await page.fill(within(lunch()).getAllByLabelText("連結文字")[1]!, "客服");
+    await page.fill(within(lunch()).getByLabelText("連結 Email"), "help@example.com");
+    // 還沒填號碼的那列也是電話欄；就這樣存，不會留下一個只有 tel: 的空殼。
+    await add("電話");
+    expect(within(lunch()).getAllByLabelText("連結電話")).toHaveLength(2);
+
+    await saved(page);
+    expect(stored()).toBe(TRIP(`${BREAKFAST("09:00")}      - time: '12:00'
+        title: 午餐
+        links:
+          - label: 訂位
+            url: tel:+81312345678
+          - label: 客服
+            url: mailto:help@example.com
+${FLIGHT("19:00", "2099-03-01T21:00")}`));
+});
+
+test("已經存的 tel: 連結在編輯時是電話欄，只顯示號碼，改完還是 tel:", async () => {
+    const withPhone = (url: string) =>
+        TRIP(`${BREAKFAST("09:00")}      - time: '12:00'
+        title: 午餐
+        links:
+          - label: 訂位
+            url: '${url}'
+${FLIGHT("19:00", "2099-03-01T21:00")}`);
+    const page = await editMode(withPhone("tel:+81312345678"));
+
+    const phone = within(card("午餐")).getByLabelText<HTMLInputElement>("連結電話");
+    expect(phone.value).toBe("+81312345678");
+    await page.fill(phone, "+81 3 8765 4321");
+
+    await saved(page);
+    expect(stored()).toBe(withPhone("tel:+81387654321"));
+});
+
 test("這一天的標題、節奏、天氣城市可以改，標題不能空白", async () => {
     const page = await editMode();
 

@@ -23,6 +23,7 @@ import Plus from "@lucide/svelte/icons/plus";
 import Trash2 from "@lucide/svelte/icons/trash-2";
 import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 import X from "@lucide/svelte/icons/x";
+import { SvelteMap } from "svelte/reactivity";
 import AttachmentUpload from "./AttachmentUpload.svelte";
 
 // One timeline entry in edit mode — an event, or a hotel, which has the same fields — laid
@@ -59,6 +60,49 @@ function pickDay(select: HTMLSelectElement) {
 const TIME_MODES: [TimeMode, string][] = [["clock", "起訖時間"], ["text", "文字"]];
 const TYPES = [["standard", "一般"], ["booked", "預訂"], ["must-go", "必訪"], ["option", "備選"]] as const;
 const STAY = [["start", "入住"], ["end", "退房"]] as const;
+
+type Link = NonNullable<TimelineEvent["links"]>[number];
+// `prefix` is what a kind writes in front of what is typed; 網址 keeps the url as typed.
+const LINK_KINDS = {
+    url: { name: "網址", prefix: "", aria: "連結網址", inputmode: "url", hint: "https://…", labelHint: "例如 官網" },
+    tel: { name: "電話", prefix: "tel:", aria: "連結電話", inputmode: "tel", hint: "+81 3 1234 5678", labelHint: "例如 飯店電話" },
+    mailto: { name: "Email", prefix: "mailto:", aria: "連結 Email", inputmode: "email", hint: "name@example.com", labelHint: "例如 客服信箱" },
+} as const;
+type LinkKind = keyof typeof LINK_KINDS;
+
+// The kind each row was added or typed as. A row added from ＋電話 has an empty url that cannot
+// say so — a bare `tel:` would outlive tidyDraft's sweep of blank rows as a link no chip ever
+// shows — and a `tel:…` typed into a 網址 row must not turn it into a 電話 row mid-word.
+const linkKinds = new SvelteMap<Link, LinkKind>();
+
+function kindOf(link: Link): LinkKind {
+    return linkKinds.get(link) ?? (/^tel:/i.test(link.url) ? "tel" : /^mailto:/i.test(link.url) ? "mailto" : "url");
+}
+
+function addLink(kind: LinkKind) {
+    addTo("links", { label: "", url: "" });
+    // Read back rather than keyed by the literal pushed: the {#each} hands out the list's proxy of it.
+    const added = entry.links?.at(-1);
+    if (added) linkKinds.set(added, kind);
+}
+
+/** What the input shows: the url without the scheme its kind writes. */
+function typedPart(link: Link): string {
+    const { prefix } = LINK_KINDS[kindOf(link)];
+    return link.url.toLowerCase().startsWith(prefix) ? link.url.slice(prefix.length) : link.url;
+}
+
+function writeLink(link: Link, typed: string) {
+    const kind = kindOf(link);
+    linkKinds.set(link, kind);
+    if (kind === "url") {
+        link.url = typed;
+        return;
+    }
+    // Whitespace anywhere voids the href (sanitizeLinkHref), and numbers are typed spaced out.
+    const compact = typed.replace(/\s+/g, "");
+    link.url = compact ? LINK_KINDS[kind].prefix + compact : "";
+}
 
 const noun = $derived(dayDate ? "事件" : "住宿");
 
@@ -255,10 +299,11 @@ const chip = "min-h-[44px] px-3 inline-flex items-center gap-1 rounded-xl border
     {#if entry.links?.length}
         {@render section("連結")}
         {#each entry.links as link, i (link)}
+            {@const kind = LINK_KINDS[kindOf(link)]}
             <div class="flex items-start gap-1 py-1 border-b border-line last:border-b-0">
                 <div class="flex-1 min-w-0">
-                    <label class="flex items-center gap-2"><span class={subLabel}>文字</span><input aria-label="連結文字" bind:value={link.label} autocomplete="off" placeholder="例如 官網" class="{field} flex-1 min-w-0 min-h-[44px] text-xs text-text-primary" /></label>
-                    <label class="flex items-center gap-2"><span class={subLabel}>網址</span><input aria-label="連結網址" bind:value={link.url} autocomplete="off" inputmode="url" placeholder="https://…" class="{field} flex-1 min-w-0 min-h-[44px] text-xs text-text-secondary" /></label>
+                    <label class="flex items-center gap-2"><span class={subLabel}>文字</span><input aria-label="連結文字" bind:value={link.label} autocomplete="off" placeholder={kind.labelHint} class="{field} flex-1 min-w-0 min-h-[44px] text-xs text-text-primary" /></label>
+                    <label class="flex items-center gap-2"><span class={subLabel}>{kind.name}</span><input aria-label={kind.aria} bind:value={() => typedPart(link), v => writeLink(link, v)} autocomplete="off" inputmode={kind.inputmode} placeholder={kind.hint} class="{field} flex-1 min-w-0 min-h-[44px] text-xs text-text-secondary" /></label>
                 </div>
                 {@render removeButton("刪除這個連結", () => entry.links?.splice(i, 1))}
             </div>
@@ -306,7 +351,9 @@ const chip = "min-h-[44px] px-3 inline-flex items-center gap-1 rounded-xl border
             {/if}
             <button type="button" onclick={() => addField(() => addTo("bullets", ""))} class={chip}><Plus size={12} aria-hidden="true" />條列</button>
             <button type="button" onclick={() => addField(() => addTo("stops", { name: "" }))} class={chip}><Plus size={12} aria-hidden="true" />地點</button>
-            <button type="button" onclick={() => addField(() => addTo("links", { label: "", url: "" }))} class={chip}><Plus size={12} aria-hidden="true" />連結</button>
+            <button type="button" onclick={() => addField(() => addLink("url"))} class={chip}><Plus size={12} aria-hidden="true" />連結</button>
+            <button type="button" onclick={() => addField(() => addLink("tel"))} class={chip}><Plus size={12} aria-hidden="true" />電話</button>
+            <button type="button" onclick={() => addField(() => addLink("mailto"))} class={chip}><Plus size={12} aria-hidden="true" />Email</button>
             <button type="button" onclick={() => addField(() => addTo("alternatives", { title: "" }))} class={chip}><Plus size={12} aria-hidden="true" />備案地點</button>
         {:else}
             <button type="button" onclick={() => (adding = true)} class={chip}><Plus size={12} aria-hidden="true" />新增欄位</button>
