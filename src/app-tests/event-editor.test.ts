@@ -319,6 +319,29 @@ test("電話欄還沒填號碼就切到工具再回來，回來還是電話欄�
 ${FLIGHT("19:00", "2099-03-01T21:00")}`));
 });
 
+test("存檔被擋下時，只填了文字的電話欄還是電話欄，補上號碼再存照樣是 tel:", async () => {
+    const page = await editMode();
+    const lunch = () => card("午餐");
+
+    await page.user.click(within(lunch()).getByRole("button", { name: "新增欄位" }));
+    await page.user.click(within(lunch()).getByRole("button", { name: "電話" }));
+    await page.fill(within(lunch()).getByLabelText("連結文字"), "訂位");
+    await page.fill(within(card("早餐")).getByLabelText("標題"), "");
+    const breakfast = screen.getByDisplayValue(/第一行/).closest<HTMLElement>(".panel")!;
+    await finish(page);
+    await waitFor(() => expect(status().textContent).toContain("標題不能空白"));
+
+    await page.fill(within(lunch()).getByLabelText("連結電話"), "+81 3 1234 5678");
+    await page.fill(within(breakfast).getByLabelText("標題"), "早餐");
+    await saved(page);
+    expect(stored()).toBe(TRIP(`${BREAKFAST("09:00")}      - time: '12:00'
+        title: 午餐
+        links:
+          - label: 訂位
+            url: tel:+81312345678
+${FLIGHT("19:00", "2099-03-01T21:00")}`));
+});
+
 test("已經存的 tel: 連結在編輯時是電話欄，只顯示號碼，改完還是 tel:", async () => {
     const withPhone = (url: string) =>
         TRIP(`${BREAKFAST("09:00")}      - time: '12:00'
