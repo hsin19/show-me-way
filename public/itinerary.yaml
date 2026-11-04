@@ -17,6 +17,10 @@ trip:
       links:
         - label: 訂房確認信
           url: https://www.example.com/booking
+        - label: 飯店電話
+          url: tel:+81-3-0123-4567
+        - label: 飯店信箱
+          url: mailto:frontdesk@example.com
       attachments:
         - label: 訂房確認 PDF
           fileId: example-booking-pdf
@@ -25,6 +29,9 @@ trip:
       title: 灣岸景觀飯店
       localName: お台場ベイビューホテル
       address: 東京都港區台場 2-2-2
+      links:
+        - label: 飯店電話
+          url: tel:+81-3-0987-6543
   attachments:
     - label: 旅平險英文證明
       fileId: example-insurance-pdf
@@ -74,6 +81,9 @@ days:
         localName: チームラボプラネッツ TOKYO
         address: 東京都江東区豊洲 6-1-16
         mapLink: https://maps.app.goo.gl/example-teamlab
+        links:
+          - label: 預約客服信箱
+            url: mailto:support@example.com
       - time: 12:30 - 13:30
         title: 午餐
         type: standard
