@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "packageManager": "pnpm@11.5.1",
+  "packageManager": "pnpm@12.23.0",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -50,7 +50,7 @@
     "@testing-library/dom": "^10.4.2",
     "@testing-library/user-event": "^14.6.9",
     "@tsconfig/svelte": "^5.0.8",
-    "@types/node": "^24.19.2",
+    "@types/node": "^26.6.6",
     "@valibot/to-json-schema": "^1.8.0",
     "@vite-pwa/assets-generator": "^2.0.0",
     "@vitest/coverage-v8": "^5.1.0",
